@@ -1,13 +1,16 @@
 
-#[macro_use] extern crate conrod;
+#[macro_use]
+extern crate conrod;
 extern crate piston_window;
 extern crate image;
+extern crate num;
 
 use conrod::{Canvas, Theme, Widget};
 use conrod::{Image, Positionable, Sizeable};
 use piston_window::{EventLoop, OpenGL, PistonWindow, UpdateEvent, WindowSettings};
-use piston_window::{ImageSize, G2dTexture, Texture};
-use image::ImageBuffer;
+use piston_window::{ImageSize, G2dTexture, Texture, Size};
+use image::{ImageBuffer, Pixel};
+use num::complex::Complex;
 
 fn main() {
     println!("Hello, world!");
@@ -70,10 +73,29 @@ fn main() {
 
 // Load the Rust logo from our assets folder.
 fn rust_logo(window: &mut PistonWindow) -> G2dTexture {
+    use piston_window::Window;
+
+    let size = window.draw_size();
     let factory = &mut window.factory;
-    let imbuf = ImageBuffer::new(400,300);
+    let px_func = |x: u32, y: u32| px_func(x, y, size);
+    let imbuf = ImageBuffer::from_fn(size.width, size.height, px_func);
     let settings = piston_window::TextureSettings::new();
     Texture::from_image(factory, &imbuf, &settings).unwrap()
+}
+
+fn px_func(x: u32, y: u32, size: Size) -> image::Rgba<u8> {
+    let iterations = 1000;
+    let mut i: u8 = 0;
+    let cx = (x as f32 - size.width as f32/2.0) / (size.width as f32 / 4.0);
+    let cy = (y as f32 - size.height as f32/2.0) / (size.height as f32 / 4.0);
+    let c = Complex::new(cx, cy);
+    let mut z = c;
+    while i <= iterations && z.norm() < 1000.0 {
+        z = z*z + c;
+        i = i+1;
+    }
+    let transparency = (iterations+1-i) * (u8::max_value()/(iterations+1));
+    image::Rgba::<u8>::from_channels(127, 127, 127, transparency)
 }
 
 // Generate a unique `WidgetId` for each widget.
@@ -85,3 +107,4 @@ widget_ids! {
     // image
     RUST_LOGO
 }
+
