@@ -4,21 +4,25 @@ extern crate conrod;
 extern crate piston_window;
 extern crate image;
 extern crate num;
+extern crate gfx_core;
 
-use conrod::{Widget, widget};
-use conrod::{Positionable, Sizeable};
+use conrod::{Widget, UiCell, Positionable, Sizeable, UiBuilder};
+use conrod::widget::{Canvas, Image};
+use conrod::image::Map;
+use conrod::backend::piston_window::{GlyphCache, convert_event, draw};
 use piston_window::{EventLoop, PistonWindow, UpdateEvent, WindowSettings};
 use piston_window::{ImageSize, G2dTexture, Texture, Size, Window, OpenGL};
-use piston_window::Event;
+use piston_window::{Event, TextureSettings};
 use image::{ImageBuffer, Pixel};
 use num::complex::Complex;
+use gfx_core::Resources;
 
 fn main() {
     const WIDTH: u32 = 800;
     const HEIGHT: u32 = 600;
 
     // Change this to OpenGL::V2_1 if not working.
-    let opengl = OpenGL::V3_2;
+    let opengl = OpenGL::V3_3;
 
     // Construct the window.
     let mut window: PistonWindow =
@@ -27,17 +31,15 @@ fn main() {
     window.set_ups(60);
 
     // construct our `Ui`.
-    let mut ui = conrod::UiBuilder::new().build();
+    let mut ui = UiBuilder::new().build();
 
     // Create a texture to use for efficiently caching text on the GPU.
-    let mut text_texture_cache =
-        conrod::backend::piston_window::GlyphCache::new(&mut window, WIDTH, HEIGHT);
+    let mut text_texture_cache = GlyphCache::new(&mut window, WIDTH, HEIGHT);
 
     // Instantiate the generated list of widget identifiers.
     let ids = &mut Ids::new(ui.widget_id_generator());
 
     // The image map describing each of our widget->image mappings (in our case, none).
-    //let image_map = conrod::image::Map::new();
     let mut image_map = image_map! {
         (ids.rust_logo, rust_logo(&mut window)),
     };
@@ -47,7 +49,7 @@ fn main() {
     while let Some(event) = window.next() {
 
         // Convert the piston event to a conrod event.
-        if let Some(e) = conrod::backend::piston_window::convert_event(event.clone(), &window) {
+        if let Some(e) = convert_event(event.clone(), &window) {
             ui.handle_event(e);
         }
 
@@ -61,26 +63,30 @@ fn main() {
         }
 
         event.update(|_| {
-          let ref mut uicell = ui.set_widgets();
-          // Construct our main `Canvas` tree.
-          widget::Canvas::new().set(ids.master, uicell);
-
-          let (w, h) = image_map.get(&ids.rust_logo).unwrap().get_size();
-
-          // Instantiate the `Image` at its full size in the middle of the window.
-          widget::Image::new().w_h(w as f64, h as f64).middle().set(ids.rust_logo, uicell);
+          let uicell = ui.set_widgets();
+          set_widgets(uicell, ids, &image_map);
         });
 
         window.draw_2d(&event, |c, g| {
             if let Some(primitives) = ui.draw_if_changed() {
                 fn texture_from_image<T>(img: &T) -> &T { img };
-                conrod::backend::piston_window::draw(c, g, primitives,
-                                                     &mut text_texture_cache,
-                                                     &image_map,
-                                                     texture_from_image);
+                draw(c, g, primitives,
+                     &mut text_texture_cache,
+                     &image_map,
+                     texture_from_image);
             }
         });
     }
+}
+
+fn set_widgets<T>(ref mut uicell: UiCell, ids: &mut Ids, image_map: &Map<Texture<T>>) where T: Resources {
+      // Construct our main `Canvas` tree.
+      Canvas::new().set(ids.master, uicell);
+
+      let (w, h) = image_map.get(&ids.rust_logo).unwrap().get_size();
+
+      // Instantiate the `Image` at its full size in the middle of the window.
+      Image::new().w_h(w as f64, h as f64).middle().set(ids.rust_logo, uicell);
 }
 
 // Load the Rust logo from our assets folder.
@@ -90,7 +96,7 @@ fn rust_logo(window: &mut PistonWindow) -> G2dTexture {
     let factory = &mut window.factory;
     let px_func = |x: u32, y: u32| px_func(x, y, size);
     let imbuf = ImageBuffer::from_fn(size.width, size.height, px_func);
-    let settings = piston_window::TextureSettings::new();
+    let settings = TextureSettings::new();
     println!("mandelbrot - done");
     Texture::from_image(factory, &imbuf, &settings).unwrap()
 }
