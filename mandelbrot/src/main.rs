@@ -90,7 +90,7 @@ fn rust_logo(window: &mut PistonWindow) -> G2dTexture {
 }
 
 fn px_func(x: u32, y: u32, size: Size) -> image::Rgba<u8> {
-    let iterations = 1000;
+    let iterations = 20;
     let mut i: u32 = 0;
     let cx = (x as f32 - size.width as f32/2.0) / (size.width as f32 / 4.0);
     let cy = (y as f32 - size.height as f32/2.0) / (size.height as f32 / 4.0);
@@ -100,15 +100,10 @@ fn px_func(x: u32, y: u32, size: Size) -> image::Rgba<u8> {
         z = z*z + c;
         i = i+1;
     }
-    let transparency: f32 = (iterations-i) as f32 * ((u8::max_value() as f32)/(iterations as f32));
-    let transformed_transparency = transform_transparency(transparency);
-    if y < 400 {
-        println!("x: {}, y: {}, i: {}, transparency: {}, transparency as u8: {}, transformed_transparency: {}", x, y, i, transparency, transparency as u8, transformed_transparency);
-    }
-    image::Rgba::<u8>::from_channels(127, 127, 127, transformed_transparency)
+    let (r,g,b,a) = taken_iterations_to_rgba(i, iterations);
+    image::Rgba::<u8>::from_channels(r, g, b, a)
 }
 
-/*
 fn taken_iterations_to_rgba(i: u32, max_iterations: u32) -> (u8, u8, u8, u8) {
     // i > max_iterations                                -> (  0,   0, 0, 255)
     // i < max_iterations && i >= max_iterations*2/3     -> (  r,   0, 0, 255)
@@ -121,19 +116,19 @@ fn taken_iterations_to_rgba(i: u32, max_iterations: u32) -> (u8, u8, u8, u8) {
     if i < max_iterations && i > red_border {
         let upper_bound = max_iterations - red_border;
         let reduced_i = i - red_border;
-        r = ((reduced_i as f32 / upper_bound as f32) * 254.0) as u8;
-        r = 255 - r;
+        let inv_r = ((reduced_i as f32 / upper_bound as f32) * 254.0) as u8;
+        r = 255 - inv_r;
     }
     if i <= red_border {
-        i = 255;
+        r = 255;
     }
 
     let mut g = 0;
     if i < red_border && i >= green_border {
         let upper_bound = red_border - green_border;
         let reduced_i = i - green_border;
-        g = ((reduced_i as f32 / upper_bound as f32) * 254.0) as u8;
-        g = 255 - g;
+        let inv_g = ((reduced_i as f32 / upper_bound as f32) * 254.0) as u8;
+        g = 255 - inv_g;
     }
     if i <= green_border {
         g = 255;
@@ -141,30 +136,16 @@ fn taken_iterations_to_rgba(i: u32, max_iterations: u32) -> (u8, u8, u8, u8) {
 
     let mut b = 0;
     if i < green_border {
+        let inv_b = ((i as f32 / green_border as f32) * 254.0) as u8;
+        b = 255 - inv_b;
     }
 
-    let mut a = 255;
+    let a = 255;
     (r,g,b,a)
-}
-*/
-
-fn transform_transparency(transparency: f32) -> u8 {
-    //   0 .. 199 -> 0
-    // 200 .. 255 -> 1 .. 255
-
-    let border = 240.0;
-    if transparency < border {
-        return 0
-    }
-
-    let upper_bound = u8::max_value() as f32 - border;
-    let reduced_transparency = transparency - border;
-    ((reduced_transparency / upper_bound) * 254.0 + 1.0) as u8
 }
 
 // Generate a unique `WidgetId` for each widget.
 widget_ids! {
-
     struct Ids {
     // Canvas IDs.
     master,
