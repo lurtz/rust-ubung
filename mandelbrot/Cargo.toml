@@ -4,7 +4,7 @@ version = "0.1.0"
 authors = ["Lutz <dgf@iera.de>"]
 
 [dependencies]
-piston_window = "0.51"
-conrod = "0.38.1"
-image = "0.10.1"
-num = "0.1.34"
+piston_window = "0.52"
+conrod = "0.44.1"
+image = "0.10.3"
+num = "0.1.36"
