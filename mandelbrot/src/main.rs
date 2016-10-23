@@ -7,14 +7,13 @@ extern crate num;
 
 use conrod::{Widget, widget};
 use conrod::{Positionable, Sizeable};
-use piston_window::{EventLoop, OpenGL, PistonWindow, UpdateEvent, WindowSettings};
-use piston_window::{ImageSize, G2dTexture, Texture, Size};
+use piston_window::{EventLoop, PistonWindow, UpdateEvent, WindowSettings};
+use piston_window::{ImageSize, G2dTexture, Texture, Size, Window, OpenGL};
+use piston_window::Event;
 use image::{ImageBuffer, Pixel};
 use num::complex::Complex;
 
 fn main() {
-    println!("Hello, world!");
-
     const WIDTH: u32 = 800;
     const HEIGHT: u32 = 600;
 
@@ -39,10 +38,10 @@ fn main() {
 
     // The image map describing each of our widget->image mappings (in our case, none).
     //let image_map = conrod::image::Map::new();
-    let image_map = image_map! {
+    let mut image_map = image_map! {
         (ids.rust_logo, rust_logo(&mut window)),
     };
-
+    let mut old_size = window.draw_size();
 
     // Poll events from the window.
     while let Some(event) = window.next() {
@@ -52,6 +51,14 @@ fn main() {
             ui.handle_event(e);
         }
 
+        if let Event::Idle(_) = event {
+            // redraw after resizing is finished
+            let new_size = window.draw_size();
+            if old_size != new_size {
+                image_map.insert(ids.rust_logo, rust_logo(&mut window));
+            }
+            old_size = new_size;
+        }
 
         event.update(|_| {
           let ref mut uicell = ui.set_widgets();
@@ -74,18 +81,17 @@ fn main() {
             }
         });
     }
-
 }
 
 // Load the Rust logo from our assets folder.
 fn rust_logo(window: &mut PistonWindow) -> G2dTexture {
-    use piston_window::Window;
-
+    println!("mandelbrot - start");
     let size = window.draw_size();
     let factory = &mut window.factory;
     let px_func = |x: u32, y: u32| px_func(x, y, size);
     let imbuf = ImageBuffer::from_fn(size.width, size.height, px_func);
     let settings = piston_window::TextureSettings::new();
+    println!("mandelbrot - done");
     Texture::from_image(factory, &imbuf, &settings).unwrap()
 }
 
