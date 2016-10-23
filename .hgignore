@@ -1,0 +1,9 @@
+target/debug
+target/release
+\.git
+\.swp
+\.swo
+\.rs~
+\.toml~
+\.py~
+.hgignore~
