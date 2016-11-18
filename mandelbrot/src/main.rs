@@ -6,6 +6,8 @@ extern crate image;
 extern crate num;
 extern crate gfx_core;
 
+mod image_with_mouse_interaction;
+
 use conrod::{Widget, UiCell, Positionable, Sizeable, UiBuilder};
 use conrod::widget::{Canvas, Image};
 use conrod::image::Map;
@@ -16,6 +18,7 @@ use piston_window::{Event, TextureSettings};
 use image::{ImageBuffer, Pixel};
 use num::complex::Complex;
 use gfx_core::Resources;
+use image_with_mouse_interaction::ImageWithMouseInteraction;
 
 fn main() {
     const WIDTH: u32 = 800;
@@ -87,6 +90,9 @@ fn set_widgets<T>(ref mut uicell: UiCell, ids: &mut Ids, image_map: &Map<Texture
 
       // Instantiate the `Image` at its full size in the middle of the window.
       Image::new().w_h(w as f64, h as f64).middle().set(ids.rust_logo, uicell);
+
+      ImageWithMouseInteraction::new().color(conrod::color::DARK_RED).set(ids.image_mouse, uicell);
+      ImageWithMouseInteraction::new().color(conrod::color::rgb(0.2, 0.5, 0.8));
 }
 
 // Load the Rust logo from our assets folder.
@@ -164,6 +170,8 @@ widget_ids! {
 
     // image
     rust_logo,
+
+    image_mouse,
     }
 }
 
