@@ -13,44 +13,28 @@ fn value_to_string_has_only_positive_nonzero_numbers() {
     }
 }
 
-fn convert(i: u32, init: String, values: &[(u32, &str)]) -> String {
+fn roman_impl(i: u32) -> Option<(u32, String)> {
+    for item in VALUE_TO_STRING.iter() {
+        if i >= item.0 {
+            return Some((i - item.0, String::from(item.1)))
+        }
+    }
+
+    None
+}
+
+fn convert(i: u32, init: String, values: fn(u32) -> Option<(u32, String)>) -> String {
     let mut ii = i;
     let mut result = init;
-    let mut matched = true;
-    while ii > 0 && matched {
-        matched = false;
-        for item in values.iter() {
-            if ii >= item.0 {
-                result += item.1;
-                ii -= item.0;
-                matched = true;
-                break;
-            }
-        }
+    while let Some((new_i, appendix)) = values(ii) {
+        ii = new_i;
+        result += appendix.as_str();
     }
     result
 }
 
-#[test]
-fn convert_terminates_always() {
-    let bla = vec![(1000, "1km"), (50, "fsd")];
-    assert_eq!("fdsa", convert(4, String::from("fdsa"), &bla));
-}
-
-#[test]
-fn convert_returns_init_with_empty_slices() {
-    let bla : Vec<(u32, &str)> = Vec::new();
-    assert_eq!("fdsa", convert(4, String::from("fdsa"), &bla));
-}
-
-#[test]
-fn convert_processes_values_in_order() {
-    let bla = vec![(1000, "1km"), (5000, "fsd"), (3, "")];
-    assert_eq!("fdsa1km1km1km1km1km", convert(5000, String::from("fdsa"), &bla));
-}
-
 fn to_roman(ii: u32) -> String {
-    return convert(ii, String::from(""), &VALUE_TO_STRING);
+    return convert(ii, String::from(""), roman_impl);
 }
 
 #[test]
@@ -88,6 +72,45 @@ fn test_to_roman() {
     assert_eq!("CMXCIX", to_roman(999));
     assert_eq!("M", to_roman(1000));
     assert_eq!("MI", to_roman(1001));
+}
+
+fn dist_impl(i: u32) -> Option<(u32, String)> {
+    if i >= 1000000 {
+        let new_i = i/1000000;
+        return Some((i % 1000000, new_i.to_string() + "km "))
+    }
+    if i >= 1000 {
+        let new_i = i/1000;
+        return Some((i % 1000, new_i.to_string() + "m "))
+    }
+    if i >= 10 {
+        let new_i = i/10;
+        return Some((i % 10, new_i.to_string() + "cm "))
+    }
+    if i > 0 {
+        return Some((0, i.to_string() + "mm "))
+    }
+    None
+}
+
+fn with_distance_units(i: u32) -> String {
+    let result = convert(i, String::from(""), dist_impl);
+    if result.len() == 0 {
+        String::from("0m")
+    } else {
+        let strlen = result.len();
+        String::from(&result[..strlen-1])
+    }
+}
+
+#[test]
+fn test_with_distance_units() {
+    assert_eq!("0m", with_distance_units(0));
+    assert_eq!("1mm", with_distance_units(1));
+    assert_eq!("1cm", with_distance_units(10));
+    assert_eq!("1m", with_distance_units(1000));
+    assert_eq!("1km", with_distance_units(1000000));
+    assert_eq!("20km 345m 32cm 7mm", with_distance_units(20345327));
 }
 
 fn main() {
