@@ -1,4 +1,14 @@
 
+fn convert(i: u32, init: String, values: fn(u32) -> Option<(u32, String)>) -> String {
+    let mut ii = i;
+    let mut result = init;
+    while let Some((new_i, appendix)) = values(ii) {
+        ii = new_i;
+        result += appendix.as_str();
+    }
+    result
+}
+
 static VALUE_TO_STRING : [(u32, &'static str); 17] = [
     (10000, "ↂ"), (9000, "ↁↂ"), (5000, "ↁ"), (4000, "Mↁ"),
      (1000, "M"),  (900, "CM"),  (500, "D"),  (400, "CD"),
@@ -13,28 +23,45 @@ fn value_to_string_has_only_positive_nonzero_numbers() {
     }
 }
 
-fn roman_impl(i: u32) -> Option<(u32, String)> {
-    for item in VALUE_TO_STRING.iter() {
+fn gen_impl<OP0, OP1>(i: u32, values: &[(u32, &str)], ops: (OP0, OP1)) -> Option<(u32, String)> where OP0: Fn(u32, u32) -> u32, OP1: Fn(u32, u32, String) -> String {
+    for item in values.iter() {
         if i >= item.0 {
-            return Some((i - item.0, String::from(item.1)))
+            let next_i = ops.0(i, item.0);
+            let string_i = ops.1(i, item.0, String::from(item.1));
+            return Some((next_i, string_i))
         }
     }
-
     None
 }
 
-fn convert(i: u32, init: String, values: fn(u32) -> Option<(u32, String)>) -> String {
-    let mut ii = i;
-    let mut result = init;
-    while let Some((new_i, appendix)) = values(ii) {
-        ii = new_i;
-        result += appendix.as_str();
-    }
-    result
+fn roman_impl(i: u32) -> Option<(u32, String)> {
+    let ops = (|i: u32, itemval: u32| i - itemval,
+               |_: u32, _: u32, stringval: String| stringval);
+    gen_impl(i, &VALUE_TO_STRING, ops)
 }
 
 fn to_roman(ii: u32) -> String {
     return convert(ii, String::from(""), roman_impl);
+}
+
+static DIST_TO_STRING : [(u32, &'static str); 4] = [
+    (1000000, "km"), (1000, "m"), (10, "cm"), (1, "mm")
+];
+
+fn dist_impl(i: u32) -> Option<(u32, String)> {
+    let ops = (|i: u32, itemval: u32| i % itemval,
+               |i: u32, itemval: u32, stringval: String| (i / itemval).to_string() + stringval.as_str() + " ");
+    gen_impl(i, &DIST_TO_STRING, ops)
+}
+
+fn with_distance_units(i: u32) -> String {
+    let result = convert(i, String::from(""), dist_impl);
+    if result.len() == 0 {
+        String::from("0m")
+    } else {
+        let strlen = result.len();
+        String::from(&result[..strlen-1])
+    }
 }
 
 #[test]
@@ -72,35 +99,6 @@ fn test_to_roman() {
     assert_eq!("CMXCIX", to_roman(999));
     assert_eq!("M", to_roman(1000));
     assert_eq!("MI", to_roman(1001));
-}
-
-fn dist_impl(i: u32) -> Option<(u32, String)> {
-    if i >= 1000000 {
-        let new_i = i/1000000;
-        return Some((i % 1000000, new_i.to_string() + "km "))
-    }
-    if i >= 1000 {
-        let new_i = i/1000;
-        return Some((i % 1000, new_i.to_string() + "m "))
-    }
-    if i >= 10 {
-        let new_i = i/10;
-        return Some((i % 10, new_i.to_string() + "cm "))
-    }
-    if i > 0 {
-        return Some((0, i.to_string() + "mm "))
-    }
-    None
-}
-
-fn with_distance_units(i: u32) -> String {
-    let result = convert(i, String::from(""), dist_impl);
-    if result.len() == 0 {
-        String::from("0m")
-    } else {
-        let strlen = result.len();
-        String::from(&result[..strlen-1])
-    }
 }
 
 #[test]
