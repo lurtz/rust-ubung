@@ -16,9 +16,16 @@ static VALUE_TO_STRING : [(u32, &'static str); 17] = [
        (10, "X"),    (9, "IX"),    (5, "V"),    (4, "IV"),
         (1, "I")];
 
+static DIST_TO_STRING : [(u32, &'static str); 4] = [
+    (1000000, "km"), (1000, "m"), (10, "cm"), (1, "mm")
+];
+
 #[test]
-fn value_to_string_has_only_positive_nonzero_numbers() {
+fn positive_nonzero_numbers() {
     for item in VALUE_TO_STRING.iter() {
+        assert_ne!(0, item.0);
+    }
+    for item in DIST_TO_STRING.iter() {
         assert_ne!(0, item.0);
     }
 }
@@ -43,10 +50,6 @@ fn roman_impl(i: u32) -> Option<(u32, String)> {
 fn to_roman(ii: u32) -> String {
     return convert(ii, String::from(""), roman_impl);
 }
-
-static DIST_TO_STRING : [(u32, &'static str); 4] = [
-    (1000000, "km"), (1000, "m"), (10, "cm"), (1, "mm")
-];
 
 fn dist_impl(i: u32) -> Option<(u32, String)> {
     let ops = (|i: u32, itemval: u32| i % itemval,
