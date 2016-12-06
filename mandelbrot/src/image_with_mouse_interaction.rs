@@ -20,11 +20,13 @@ widget_style!{
 }
 
 widget_ids! {
+    #[derive(Debug)]
     struct Ids {
         image,
     }
 }
 
+#[derive(Debug)]
 pub struct State {
     ids: Ids,
 }
@@ -65,6 +67,12 @@ impl Widget for ImageWithMouseInteraction {
     }
 
     fn update(self, args: widget::UpdateArgs<Self>) -> Self::Event {
+        let widget::UpdateArgs { id, state, rect, mut ui, style, .. } = args;
+        println!("id = {:?}, state.ids = {:?}, rect = {:?}, style = {:?}", id, state.ids, rect, style);
+
+        let input = ui.widget_input(id);
+        println!("input = {:?}", input.clicks().left().next().map(|_| ()));
+
         None
     }
 
