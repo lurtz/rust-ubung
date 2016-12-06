@@ -1,10 +1,10 @@
 
-fn convert(i: u32, init: &str, values: fn(u32) -> Option<(u32, String)>) -> String {
+fn convert<VALUE, RESULT: ToString, INIT: ToString>(i: VALUE, init: INIT, values: fn(VALUE) -> Option<(VALUE, RESULT)>) -> String {
     let mut ii = i;
     let mut result = init.to_string();
     while let Some((new_i, appendix)) = values(ii) {
         ii = new_i;
-        result += appendix.as_str();
+        result += appendix.to_string().as_str();
     }
     result
 }
