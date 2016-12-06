@@ -1,7 +1,7 @@
 
-fn convert(i: u32, init: String, values: fn(u32) -> Option<(u32, String)>) -> String {
+fn convert(i: u32, init: &str, values: fn(u32) -> Option<(u32, String)>) -> String {
     let mut ii = i;
-    let mut result = init;
+    let mut result = init.to_string();
     while let Some((new_i, appendix)) = values(ii) {
         ii = new_i;
         result += appendix.as_str();
@@ -48,7 +48,7 @@ fn roman_impl(i: u32) -> Option<(u32, String)> {
 }
 
 fn to_roman(ii: u32) -> String {
-    return convert(ii, String::from(""), roman_impl);
+    return convert(ii, "", roman_impl);
 }
 
 fn dist_impl(i: u32) -> Option<(u32, String)> {
@@ -58,12 +58,11 @@ fn dist_impl(i: u32) -> Option<(u32, String)> {
 }
 
 fn with_distance_units(i: u32) -> String {
-    let result = convert(i, String::from(""), dist_impl);
+    let result = convert(i, "", dist_impl);
     if result.len() == 0 {
         String::from("0m")
     } else {
-        let strlen = result.len();
-        String::from(&result[..strlen-1])
+        String::from(result.trim_right())
     }
 }
 
