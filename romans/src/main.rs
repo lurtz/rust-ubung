@@ -1,10 +1,10 @@
 
-fn convert<VALUE, RESULT: ToString, INIT: ToString>(i: VALUE, init: INIT, values: fn(VALUE) -> Option<(VALUE, RESULT)>) -> String {
+fn convert<VALUE, RESULT>(i: VALUE, values: fn(VALUE) -> Option<(VALUE, RESULT)>) -> Vec<RESULT> {
     let mut ii = i;
-    let mut result = init.to_string();
+    let mut result = Vec::new();
     while let Some((new_i, appendix)) = values(ii) {
         ii = new_i;
-        result += appendix.to_string().as_str();
+        result.push(appendix);
     }
     result
 }
@@ -47,27 +47,48 @@ fn roman_impl(i: u32) -> Option<(u32, String)> {
     gen_impl(i, &VALUE_TO_STRING, ops)
 }
 
-fn to_roman(ii: u32) -> String {
-    return convert(ii, "", roman_impl);
+fn join<T>(init: &str, s: &str, data: Vec<T>) -> String where T: ToString {
+    let mut result = init.to_string();
+
+    if data.is_empty() {
+        return result
+    }
+
+    let last_index = data.len() - 1;
+
+    for item in &data[..last_index] {
+        result += item.to_string().as_str();
+        result += s;
+    }
+    if !data.is_empty() {
+        result += data[last_index].to_string().as_str();
+    }
+    result
+}
+
+fn to_roman(i: u32) -> String {
+    if i == 0 {
+        return String::from("ø")
+    }
+    join("", "", convert(i, roman_impl))
 }
 
 fn dist_impl(i: u32) -> Option<(u32, String)> {
     let ops = (|i: u32, itemval: u32| i % itemval,
-               |i: u32, itemval: u32, stringval: String| (i / itemval).to_string() + stringval.as_str() + " ");
+               |i: u32, itemval: u32, stringval: String| (i / itemval).to_string() + stringval.as_str());
     gen_impl(i, &DIST_TO_STRING, ops)
 }
 
 fn with_distance_units(i: u32) -> String {
-    let result = convert(i, "", dist_impl);
-    if result.len() == 0 {
-        String::from("0m")
-    } else {
-        String::from(result.trim_right())
+    if i == 0 {
+        return String::from("0m")
     }
+    join("", " ", convert(i, dist_impl))
 }
 
 #[test]
 fn test_to_roman() {
+    assert_eq!("ø", to_roman(0));
     assert_eq!("I", to_roman(1));
     assert_eq!("II", to_roman(2));
     assert_eq!("III", to_roman(3));
