@@ -47,30 +47,11 @@ fn roman_impl(i: u32) -> Option<(u32, String)> {
     gen_impl(i, &VALUE_TO_STRING, ops)
 }
 
-fn join<T>(init: &str, s: &str, data: Vec<T>) -> String where T: ToString {
-    let mut result = init.to_string();
-
-    if data.is_empty() {
-        return result
-    }
-
-    let last_index = data.len() - 1;
-
-    for item in &data[..last_index] {
-        result += item.to_string().as_str();
-        result += s;
-    }
-    if !data.is_empty() {
-        result += data[last_index].to_string().as_str();
-    }
-    result
-}
-
 fn to_roman(i: u32) -> String {
     if i == 0 {
         return String::from("ø")
     }
-    join("", "", convert(i, roman_impl))
+    convert(i, roman_impl).join("")
 }
 
 fn dist_impl(i: u32) -> Option<(u32, String)> {
@@ -83,7 +64,7 @@ fn with_distance_units(i: u32) -> String {
     if i == 0 {
         return String::from("0m")
     }
-    join("", " ", convert(i, dist_impl))
+    convert(i, dist_impl).join(" ")
 }
 
 #[test]
