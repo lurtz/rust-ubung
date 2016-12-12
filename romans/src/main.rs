@@ -22,9 +22,8 @@ static DIST_TO_STRING : [(u32, &'static str); 4] = [
 
 #[test]
 fn positive_nonzero_numbers() {
-    use std::iter::FromIterator;
-    let mut data = Vec::from_iter(VALUE_TO_STRING.iter());
-    data.extend(DIST_TO_STRING.iter());
+    let mut data = Vec::from(&VALUE_TO_STRING[..]);
+    data.extend(&DIST_TO_STRING);
     for item in data {
         assert_ne!(0, item.0);
     }
