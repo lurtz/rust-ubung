@@ -1,9 +1,8 @@
 
-fn convert<VALUE, RESULT>(i: VALUE, values: fn(VALUE) -> Option<(VALUE, RESULT)>) -> Vec<RESULT> {
-    let mut ii = i;
+fn convert<VALUE, RESULT>(mut i: VALUE, values: fn(VALUE) -> Option<(VALUE, RESULT)>) -> Vec<RESULT> {
     let mut result = Vec::new();
-    while let Some((new_i, appendix)) = values(ii) {
-        ii = new_i;
+    while let Some((new_i, appendix)) = values(i) {
+        i = new_i;
         result.push(appendix);
     }
     result
