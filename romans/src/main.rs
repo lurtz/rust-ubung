@@ -28,11 +28,11 @@ fn positive_nonzero_numbers() {
     }
 }
 
-fn gen_impl<OP0, OP1>(i: u32, values: &[(u32, &str)], ops: (OP0, OP1)) -> Option<(u32, String)> where OP0: Fn(u32, u32) -> u32, OP1: Fn(u32, u32, String) -> String {
+fn gen_impl<OP0, OP1, T, X>(i: T, values: &[(T, &str)], ops: (OP0, OP1)) -> Option<(T, X)> where OP0: Fn(&T, &T) -> T, OP1: Fn(&T, &T, &str) -> X, T: PartialOrd<T> {
     for item in values.iter() {
         if i >= item.0 {
-            let next_i = ops.0(i, item.0);
-            let string_i = ops.1(i, item.0, String::from(item.1));
+            let next_i = ops.0(&i, &item.0);
+            let string_i = ops.1(&i, &item.0, item.1);
             return Some((next_i, string_i))
         }
     }
@@ -40,8 +40,8 @@ fn gen_impl<OP0, OP1>(i: u32, values: &[(u32, &str)], ops: (OP0, OP1)) -> Option
 }
 
 fn roman_impl(i: u32) -> Option<(u32, String)> {
-    let ops = (|i: u32, itemval: u32| i - itemval,
-               |_: u32, _: u32, stringval: String| stringval);
+    let ops = (|i: &u32, itemval: &u32| i - itemval,
+               |_: &u32, _: &u32, stringval: &str| String::from(stringval));
     gen_impl(i, &VALUE_TO_STRING, ops)
 }
 
@@ -53,8 +53,8 @@ fn to_roman(i: u32) -> String {
 }
 
 fn dist_impl(i: u32) -> Option<(u32, String)> {
-    let ops = (|i: u32, itemval: u32| i % itemval,
-               |i: u32, itemval: u32, stringval: String| (i / itemval).to_string() + stringval.as_str());
+    let ops = (|i: &u32, itemval: &u32| i % itemval,
+               |i: &u32, itemval: &u32, stringval: &str| (i / itemval).to_string() + stringval);
     gen_impl(i, &DIST_TO_STRING, ops)
 }
 
