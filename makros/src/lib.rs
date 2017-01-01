@@ -1,5 +1,6 @@
 macro_rules! my_vec {
-    ( $( $x:expr ),* ) => {{ let mut v = Vec::new(); $(v.push($x);)* v }}
+    () => ( Vec::new() );
+    ( $( $x:expr ),* ) => {{ let mut v = Vec::new(); $(v.push($x);)* v }};
 }
 
 #[cfg(test)]
@@ -26,6 +27,12 @@ mod tests {
     fn empty_vector() {
         let x : Vec<u32> = my_vec![];
         assert_eq!(0, x.len());
+    }
+
+    fn one_element() {
+        let x = my_vec![5];
+        assert_eq!(1, x.len());
+        assert_eq!(5, x[0]);
     }
 
     #[test]
