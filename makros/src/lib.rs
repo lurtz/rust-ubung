@@ -3,6 +3,14 @@ macro_rules! my_vec {
     ( $( $x:expr ),+ ) => ({ let mut v = Vec::new(); $(v.push($x);)+ v });
 }
 
+fn skip_prefix<'a>(line: &'a str, prefix: & str) -> &'a str {
+    if line.starts_with(prefix) {
+        let pref_len : usize = prefix.len();
+        return &line[pref_len..];
+    }
+    line
+}
+
 #[cfg(test)]
 mod tests {
     #[test]
@@ -45,5 +53,15 @@ mod tests {
         assert_eq!(3, x[2]);
         assert_eq!(4, x[3]);
         assert_eq!(5, x[4]);
+    }
+
+    #[test]
+    fn scopes_und_so() {
+        let line = String::from("lang:en=Hello World!");
+        let lang = "en";
+
+        let p = format!("lang:{}=", lang);
+        let x = ::skip_prefix(line.as_str(), p.as_str());
+        assert_eq!("Hello World!", x);
     }
 }
