@@ -8,8 +8,8 @@ use std::time::Duration;
 use std::thread;
 use std::error::Error;
 use std::ops::Index;
-use std::string::ToString;
 use std::fmt::Display;
+use std::str::FromStr;
 
 #[cfg(test)]
 mod test {
@@ -24,24 +24,24 @@ fn do_it(denon_name: &str, denon_port: u16) -> Result<(), std::io::Error> {
 
     println!("{}", stream.peer_addr()?);
 
-    if process(&mut stream, &operations::power(), &"?")? {
+    if process(&mut stream, &power(), &"?")? {
         println!("power is on");
     } else {
         println!("power is off. turning on ...");
-        process(&mut stream, &operations::power(), &"ON")?;
+        process(&mut stream, &power(), &"ON")?;
         thread::sleep(Duration::from_secs(1));
     }
 
-    process(&mut stream, &operations::input(), &"?")?;
+    process(&mut stream, &input(), &"?")?;
 
     // read volume first, commands which do not cause status changes will
     // not produce output
-    let current_volume = process(&mut stream, &operations::volume(), &"?")?;
-    process(&mut stream, &operations::volume(), &(current_volume / 2))?;
+    let current_volume = process(&mut stream, &volume(), &"?")?;
+    process(&mut stream, &volume(), &(current_volume / 2))?;
 
     thread::sleep(Duration::from_secs(1));
 
-    process(&mut stream, &operations::volume(), &current_volume)?;
+    process(&mut stream, &volume(), &current_volume)?;
 
     Ok(())
 }
@@ -80,11 +80,8 @@ pub struct ControlElement<T> {
 }
 
 impl<T> ControlElement<T> {
-    fn new<F>(prefix: &'static str,
-              num_responses: u8,
-              result_parser: &'static F)
-              -> ControlElement<T>
-        where F: Fn(&str) -> T
+    fn new<F>(prefix: &'static str, num_responses: u8, result_parser: F) -> ControlElement<T>
+        where F: Fn(&str) -> T + 'static
     {
         ControlElement {
             prefix: prefix,
@@ -94,33 +91,17 @@ impl<T> ControlElement<T> {
     }
 }
 
-mod operations {
-    pub use ControlElement;
-    use std::str::FromStr;
 
-    pub fn volume() -> ControlElement<u32> {
-        ControlElement {
-            prefix: "MV",
-            num_responses: 2,
-            result_parser: Box::new(|x| u32::from_str(x).unwrap()),
-        }
-    }
+pub fn volume() -> ControlElement<u32> {
+    ControlElement::new("MV", 2, |x| u32::from_str(x).unwrap())
+}
 
-    pub fn power() -> ControlElement<bool> {
-        ControlElement {
-            prefix: "PW",
-            num_responses: 1,
-            result_parser: Box::new(|x| if "ON" == x { true } else { false }),
-        }
-    }
+pub fn power() -> ControlElement<bool> {
+    ControlElement::new("PW", 1, |x| if "ON" == x { true } else { false })
+}
 
-    pub fn input() -> ControlElement<String> {
-        ControlElement {
-            prefix: "SI",
-            num_responses: 2,
-            result_parser: Box::new(|x| String::from(x)),
-        }
-    }
+pub fn input() -> ControlElement<String> {
+    ControlElement::new("SI", 2, |x| String::from(x))
 }
 
 fn process<T, X>(stream: &mut T,
@@ -129,7 +110,7 @@ fn process<T, X>(stream: &mut T,
                  -> Result<X, std::io::Error>
     where T: Write + Read
 {
-    let volume_command_string = format!("{}{}\r", ce.prefix, value.to_string());
+    let volume_command_string = format!("{}{}\r", ce.prefix, value);
     write(stream, volume_command_string)?;
 
     let result = read(stream, ce.num_responses)?;
