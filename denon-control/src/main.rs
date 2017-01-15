@@ -8,7 +8,6 @@ use std::time::Duration;
 use std::thread;
 use std::error::Error;
 use std::ops::Index;
-use std::str::FromStr;
 use std::string::ToString;
 use std::fmt::Display;
 
@@ -25,24 +24,24 @@ fn do_it(denon_name: &str, denon_port: u16) -> Result<(), std::io::Error> {
 
     println!("{}", stream.peer_addr()?);
 
-    if power(&mut stream, "?")? {
+    if process(&mut stream, &operations::power(), &"?")? {
         println!("power is on");
     } else {
         println!("power is off. turning on ...");
-        power(&mut stream, "ON")?;
+        process(&mut stream, &operations::power(), &"ON")?;
         thread::sleep(Duration::from_secs(1));
     }
 
-    source_input(&mut stream, "?")?;
+    process(&mut stream, &operations::input(), &"?")?;
 
     // read volume first, commands which do not cause status changes will
     // not produce output
-    let current_volume = volume(&mut stream, &"?")?;
-    volume(&mut stream, &(current_volume / 2))?;
+    let current_volume = process(&mut stream, &operations::volume(), &"?")?;
+    process(&mut stream, &operations::volume(), &(current_volume / 2))?;
 
     thread::sleep(Duration::from_secs(1));
 
-    volume(&mut stream, &current_volume)?;
+    process(&mut stream, &operations::volume(), &current_volume)?;
 
     Ok(())
 }
@@ -74,24 +73,55 @@ fn read(stream: &mut Read, lines: u8) -> Result<Vec<String>, std::io::Error> {
     Ok(result)
 }
 
-struct ControlElement<T> {
+pub struct ControlElement<T> {
     prefix: &'static str,
     num_responses: u8,
     result_parser: Box<Fn(&str) -> T>,
 }
 
-// impl<T> ControlElement<T> {
-// fn new<F>(prefix: &'static str, num_responses: u8, result_parser: &F) -> ControlElement<T>
-// where F: Fn(&str) -> T
-// {
-// ControlElement {
-// prefix: prefix,
-// num_responses: num_responses,
-// result_parser: Box::new(result_parser),
-// }
-// }
-// }
-//
+impl<T> ControlElement<T> {
+    fn new<F>(prefix: &'static str,
+              num_responses: u8,
+              result_parser: &'static F)
+              -> ControlElement<T>
+        where F: Fn(&str) -> T
+    {
+        ControlElement {
+            prefix: prefix,
+            num_responses: num_responses,
+            result_parser: Box::new(result_parser),
+        }
+    }
+}
+
+mod operations {
+    pub use ControlElement;
+    use std::str::FromStr;
+
+    pub fn volume() -> ControlElement<u32> {
+        ControlElement {
+            prefix: "MV",
+            num_responses: 2,
+            result_parser: Box::new(|x| u32::from_str(x).unwrap()),
+        }
+    }
+
+    pub fn power() -> ControlElement<bool> {
+        ControlElement {
+            prefix: "PW",
+            num_responses: 1,
+            result_parser: Box::new(|x| if "ON" == x { true } else { false }),
+        }
+    }
+
+    pub fn input() -> ControlElement<String> {
+        ControlElement {
+            prefix: "SI",
+            num_responses: 2,
+            result_parser: Box::new(|x| String::from(x)),
+        }
+    }
+}
 
 fn process<T, X>(stream: &mut T,
                  ce: &ControlElement<X>,
@@ -113,44 +143,6 @@ fn process<T, X>(stream: &mut T,
     }
 
     Err(std::io::Error::from(std::io::ErrorKind::InvalidData))
-}
-
-// const VOLUME: ControlElement<u32> = ::ControlElement::new("MV", 2, &|x| u32::from_str(x).unwrap());
-
-fn volume<T>(stream: &mut T, value: &Display) -> Result<u32, std::io::Error>
-    where T: Write + Read
-{
-    let ce = ControlElement {
-        prefix: "MV",
-        num_responses: 2,
-        result_parser: Box::new(|x| u32::from_str(x).unwrap()),
-    };
-
-    process(stream, &ce, value)
-}
-
-fn power<T>(stream: &mut T, value: &str) -> Result<bool, std::io::Error>
-    where T: Write + Read
-{
-    let ce = ControlElement {
-        prefix: "PW",
-        num_responses: 1,
-        result_parser: Box::new(|x| if "ON" == x { true } else { false }),
-    };
-
-    process(stream, &ce, &value)
-}
-
-fn source_input<T>(stream: &mut T, value: &str) -> Result<String, std::io::Error>
-    where T: Write + Read
-{
-    let ce = ControlElement {
-        prefix: "SI",
-        num_responses: 2,
-        result_parser: Box::new(|x| String::from(x)),
-    };
-
-    process(stream, &ce, &value)
 }
 
 fn print_io_error(e: &std::io::Error) {
