@@ -10,6 +10,7 @@ use std::error::Error;
 use std::ops::Index;
 use std::str::FromStr;
 use std::string::ToString;
+use std::fmt::Display;
 
 #[cfg(test)]
 mod test {
@@ -79,60 +80,77 @@ struct ControlElement<T> {
     result_parser: Box<Fn(&str) -> T>,
 }
 
-fn bla() {
+// impl<T> ControlElement<T> {
+// fn new<F>(prefix: &'static str, num_responses: u8, result_parser: &F) -> ControlElement<T>
+// where F: Fn(&str) -> T
+// {
+// ControlElement {
+// prefix: prefix,
+// num_responses: num_responses,
+// result_parser: Box::new(result_parser),
+// }
+// }
+// }
+//
 
-    let parse_closure = |x: &str| u32::from_str(x).unwrap();
-    // let bla: &Fn(&str) -> u32 = &parse_closure;
-
-    let s = ControlElement {
-        prefix: "MV",
-        num_responses: 2,
-        result_parser: Box::new(parse_closure),
-    };
-}
-
-fn volume<T>(stream: &mut T, value: &ToString) -> Result<u32, std::io::Error>
+fn process<T, X>(stream: &mut T,
+                 ce: &ControlElement<X>,
+                 value: &Display)
+                 -> Result<X, std::io::Error>
     where T: Write + Read
 {
-    let volume_command_string = format!("MV{}\r", value.to_string());
+    let volume_command_string = format!("{}{}\r", ce.prefix, value.to_string());
     write(stream, volume_command_string)?;
 
-    let result = read(stream, 2)?;
-    let ref volume_string = result[0];
-    let actual_value: &str = volume_string.index(2..volume_string.len());
+    let result = read(stream, ce.num_responses)?;
 
-    let result = u32::from_str(actual_value).unwrap();
+    for volume_string in result {
+        if volume_string.starts_with(ce.prefix) {
+            let actual_value = volume_string.index(ce.prefix.len()..volume_string.len());
+            let result = (ce.result_parser)(actual_value);
+            return Ok(result);
+        }
+    }
 
-    Ok(result)
+    Err(std::io::Error::from(std::io::ErrorKind::InvalidData))
+}
+
+// const VOLUME: ControlElement<u32> = ::ControlElement::new("MV", 2, &|x| u32::from_str(x).unwrap());
+
+fn volume<T>(stream: &mut T, value: &Display) -> Result<u32, std::io::Error>
+    where T: Write + Read
+{
+    let ce = ControlElement {
+        prefix: "MV",
+        num_responses: 2,
+        result_parser: Box::new(|x| u32::from_str(x).unwrap()),
+    };
+
+    process(stream, &ce, value)
 }
 
 fn power<T>(stream: &mut T, value: &str) -> Result<bool, std::io::Error>
     where T: Write + Read
 {
-    let power_command_string = format!("PW{}\r", value);
-    write(stream, power_command_string)?;
+    let ce = ControlElement {
+        prefix: "PW",
+        num_responses: 1,
+        result_parser: Box::new(|x| if "ON" == x { true } else { false }),
+    };
 
-    let result = read(stream, 1)?;
-    let ref power_string = result[0];
-    let actual_value = power_string.index(2..power_string.len());
-
-    if "ON" == actual_value {
-        Ok(true)
-    } else {
-        Ok(false)
-    }
+    process(stream, &ce, &value)
 }
 
 fn source_input<T>(stream: &mut T, value: &str) -> Result<String, std::io::Error>
     where T: Write + Read
 {
-    let source_command_string = format!("SI{}\r", value);
-    write(stream, source_command_string)?;
+    let ce = ControlElement {
+        prefix: "SI",
+        num_responses: 2,
+        result_parser: Box::new(|x| String::from(x)),
+    };
 
-    let result = read(stream, 2)?;
-    let ref source_string = result[0];
-    let current_source = source_string.index(2..source_string.len());
-    Ok(String::from(current_source))
+    process(stream, &ce, &value)
 }
 
 fn print_io_error(e: &std::io::Error) {
