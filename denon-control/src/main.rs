@@ -9,6 +9,7 @@ use std::thread;
 use std::error::Error;
 use std::ops::Index;
 use std::str::FromStr;
+use std::string::ToString;
 
 #[cfg(test)]
 mod test {
@@ -23,14 +24,24 @@ fn do_it(denon_name: &str, denon_port: u16) -> Result<(), std::io::Error> {
 
     println!("{}", stream.peer_addr()?);
 
+    if power(&mut stream, "?")? {
+        println!("power is on");
+    } else {
+        println!("power is off. turning on ...");
+        power(&mut stream, "ON")?;
+        thread::sleep(Duration::from_secs(1));
+    }
+
+    source_input(&mut stream, "?")?;
+
     // read volume first, commands which do not cause status changes will
     // not produce output
-    let current_volume = get_volume(&mut stream)?;
-    set_volume(&mut stream, current_volume / 2)?;
+    let current_volume = volume(&mut stream, &"?")?;
+    volume(&mut stream, &(current_volume / 2))?;
 
     thread::sleep(Duration::from_secs(1));
 
-    set_volume(&mut stream, current_volume)?;
+    volume(&mut stream, &current_volume)?;
 
     Ok(())
 }
@@ -42,11 +53,10 @@ fn write(stream: &mut Write, input: String) -> Result<(), std::io::Error> {
     Ok(())
 }
 
-fn read(stream: &mut Read, lines: Option<u8>) -> Result<Vec<String>, std::io::Error> {
+fn read(stream: &mut Read, lines: u8) -> Result<Vec<String>, std::io::Error> {
     let mut string = String::new();
-    let limit = lines.unwrap_or(1);
 
-    for _ in 0..limit {
+    for _ in 0..lines {
         let mut buffer = [0; 100];
         let read_bytes = stream.read(&mut buffer)?;
 
@@ -63,27 +73,66 @@ fn read(stream: &mut Read, lines: Option<u8>) -> Result<Vec<String>, std::io::Er
     Ok(result)
 }
 
-fn get_volume<T>(stream: &mut T) -> Result<u32, std::io::Error>
+struct ControlElement<T> {
+    prefix: &'static str,
+    num_responses: u8,
+    result_parser: Box<Fn(&str) -> T>,
+}
+
+fn bla() {
+
+    let parse_closure = |x: &str| u32::from_str(x).unwrap();
+    // let bla: &Fn(&str) -> u32 = &parse_closure;
+
+    let s = ControlElement {
+        prefix: "MV",
+        num_responses: 2,
+        result_parser: Box::new(parse_closure),
+    };
+}
+
+fn volume<T>(stream: &mut T, value: &ToString) -> Result<u32, std::io::Error>
     where T: Write + Read
 {
-    let volume_command_string = String::from("MV?\r");
+    let volume_command_string = format!("MV{}\r", value.to_string());
     write(stream, volume_command_string)?;
 
-    let result = read(stream, Some(2))?;
+    let result = read(stream, 2)?;
     let ref volume_string = result[0];
-    let actual_value = volume_string.index(2..volume_string.len());
+    let actual_value: &str = volume_string.index(2..volume_string.len());
 
     let result = u32::from_str(actual_value).unwrap();
 
     Ok(result)
 }
 
-fn set_volume<T>(stream: &mut T, volume: u32) -> Result<Vec<String>, std::io::Error>
-    where T: Read + Write
+fn power<T>(stream: &mut T, value: &str) -> Result<bool, std::io::Error>
+    where T: Write + Read
 {
-    let volume_command_string = format!("MV{}\r", volume);
-    write(stream, volume_command_string)?;
-    read(stream, Some(2))
+    let power_command_string = format!("PW{}\r", value);
+    write(stream, power_command_string)?;
+
+    let result = read(stream, 1)?;
+    let ref power_string = result[0];
+    let actual_value = power_string.index(2..power_string.len());
+
+    if "ON" == actual_value {
+        Ok(true)
+    } else {
+        Ok(false)
+    }
+}
+
+fn source_input<T>(stream: &mut T, value: &str) -> Result<String, std::io::Error>
+    where T: Write + Read
+{
+    let source_command_string = format!("SI{}\r", value);
+    write(stream, source_command_string)?;
+
+    let result = read(stream, 2)?;
+    let ref source_string = result[0];
+    let current_source = source_string.index(2..source_string.len());
+    Ok(String::from(current_source))
 }
 
 fn print_io_error(e: &std::io::Error) {
