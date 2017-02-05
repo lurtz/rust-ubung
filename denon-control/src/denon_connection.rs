@@ -226,7 +226,7 @@ impl DenonConnection {
     }
 
     pub fn set(&self, op: Operation, state: State) {
-        self.requests.send((op.clone(), state)).unwrap();
+        let _ = self.requests.send((op.clone(), state));
     }
 }
 
