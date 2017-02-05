@@ -6,16 +6,42 @@ use std::net::TcpStream;
 use std::io::{Read, Write};
 use std::time::Duration;
 use std::thread;
-use std::error::Error;
 use std::ops::Index;
 use std::fmt::Display;
 use std::str::FromStr;
+
+mod denon_connection;
+
+use denon_connection::{DenonConnection, Operation, print_io_error, read, write};
 
 #[cfg(test)]
 mod test {
     #[test]
     fn bla() {
         assert_eq!(2, 2);
+    }
+}
+
+// status object shall get the current status of the avr 1912
+// easiest way would be a map<Key, Value> where Value is an enum of u32 and String
+// Key is derived of a mapping from the protocol strings to constants -> define each string once
+// the status object can be shared or the communication thread can be asked about a
+// status which queries the receiver if it is not set
+
+#[derive(Hash, Eq, PartialEq, Debug)]
+enum Operations {
+    MainVolume,
+    Power,
+    SourceInput,
+}
+
+impl Operations {
+    fn value(&self) -> &'static str {
+        match *self {
+            Operations::MainVolume => "MV",
+            Operations::Power => "PW",
+            Operations::SourceInput => "SI",
+        }
     }
 }
 
@@ -46,41 +72,18 @@ fn do_it(denon_name: &str, denon_port: u16) -> Result<(), std::io::Error> {
     Ok(())
 }
 
-fn write(stream: &mut Write, input: String) -> Result<(), std::io::Error> {
-    println!("sending: {}", input);
-    let volume_command = input.into_bytes();
-    stream.write(&volume_command[..])?;
-    Ok(())
-}
 
-fn read(stream: &mut Read, lines: u8) -> Result<Vec<String>, std::io::Error> {
-    let mut string = String::new();
-
-    for _ in 0..lines {
-        let mut buffer = [0; 100];
-        let read_bytes = stream.read(&mut buffer)?;
-
-        if let Ok(tmp) = std::str::from_utf8(&buffer[0..read_bytes]) {
-            string += tmp;
-        }
-    }
-
-    string.pop();
-
-    let string_iter = string.split('\r').map(|x| String::from(x));
-    let result = string_iter.collect();
-    println!("{:?}", result);
-    Ok(result)
-}
-
+// TODO add expected output
+// TODO parse responses from denon asyncronously because they must not really
+//      have to do to something with the command
 pub struct ControlElement<T> {
-    prefix: &'static str,
+    prefix: Operations,
     num_responses: u8,
     result_parser: Box<Fn(&str) -> T>,
 }
 
 impl<T> ControlElement<T> {
-    fn new<F>(prefix: &'static str, num_responses: u8, result_parser: F) -> ControlElement<T>
+    fn new<F>(prefix: Operations, num_responses: u8, result_parser: F) -> ControlElement<T>
         where F: Fn(&str) -> T + 'static
     {
         ControlElement {
@@ -91,17 +94,18 @@ impl<T> ControlElement<T> {
     }
 }
 
-
 pub fn volume() -> ControlElement<u32> {
-    ControlElement::new("MV", 2, |x| u32::from_str(x).unwrap())
+    ControlElement::new(Operations::MainVolume, 2, |x| u32::from_str(x).unwrap())
 }
 
 pub fn power() -> ControlElement<bool> {
-    ControlElement::new("PW", 1, |x| if "ON" == x { true } else { false })
+    ControlElement::new(Operations::Power,
+                        1,
+                        |x| if "ON" == x { true } else { false })
 }
 
 pub fn input() -> ControlElement<String> {
-    ControlElement::new("SI", 2, |x| String::from(x))
+    ControlElement::new(Operations::SourceInput, 2, |x| String::from(x))
 }
 
 fn process<T, X>(stream: &mut T,
@@ -110,14 +114,15 @@ fn process<T, X>(stream: &mut T,
                  -> Result<X, std::io::Error>
     where T: Write + Read
 {
-    let volume_command_string = format!("{}{}\r", ce.prefix, value);
+    let prefix = ce.prefix.value();
+    let volume_command_string = format!("{}{}\r", prefix, value);
     write(stream, volume_command_string)?;
 
     let result = read(stream, ce.num_responses)?;
 
     for volume_string in result {
-        if volume_string.starts_with(ce.prefix) {
-            let actual_value = volume_string.index(ce.prefix.len()..volume_string.len());
+        if volume_string.starts_with(prefix) {
+            let actual_value = volume_string.index(prefix.len()..volume_string.len());
             let result = (ce.result_parser)(actual_value);
             return Ok(result);
         }
@@ -126,28 +131,19 @@ fn process<T, X>(stream: &mut T,
     Err(std::io::Error::from(std::io::ErrorKind::InvalidData))
 }
 
-fn print_io_error(e: &std::io::Error) {
-    println!("got error: {}, cause = {:?}, description = {}, kind = {:?}",
-             e,
-             e.cause(),
-             e.description(),
-             e.kind());
-    if let Some(raw_os_error) = e.raw_os_error() {
-        println!("raw_os_error = {}", raw_os_error);
-    }
-    if let Some(inner) = e.get_ref() {
-        println!("inner = {}", inner);
-    }
-}
-
 fn main() {
     let denon_name = "0005cd221b08.lan";
     let denon_port = 23;
 
-    match do_it(denon_name, denon_port) {
-        Ok(_) => println!("success"),
-        Err(e) => {
-            print_io_error(&e);
-        }
-    }
+    //    match do_it(denon_name, denon_port) {
+    //        Ok(_) => println!("success"),
+    //        Err(e) => {
+    //            print_io_error(&e);
+    //        }
+    //    }
+
+    let dc = DenonConnection::new(denon_name, denon_port);
+    println!("{:?}", dc.get(Operation::Power));
+    println!("{:?}", dc.get(Operation::MainVolume));
+    thread::sleep(Duration::from_secs(30));
 }
