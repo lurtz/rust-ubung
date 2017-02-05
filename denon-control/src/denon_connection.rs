@@ -3,7 +3,6 @@ use std::time::Duration;
 use std::net::TcpStream;
 use std::sync::mpsc::{channel, Sender, Receiver};
 use std::sync::{Arc, Mutex};
-use std::thread::JoinHandle;
 use std::thread;
 use std::error::Error;
 use std::io::{Read, Write};
@@ -188,7 +187,6 @@ fn thread_func(denon_name: String,
 pub struct DenonConnection {
     state: Arc<Mutex<HashMap<Operation, State>>>,
     requests: Sender<(Operation, State)>,
-    current_thread: JoinHandle<()>,
 }
 
 impl DenonConnection {
@@ -197,19 +195,17 @@ impl DenonConnection {
         let state = Arc::new(Mutex::new(HashMap::new()));
         let cloned_state = state.clone();
         let (tx, rx) = channel();
-        let join_handle: JoinHandle<()> = thread::spawn(move || {
+        thread::spawn(move || {
             thread_func(denon_string, denon_port, cloned_state, rx);
         });
         let dc = DenonConnection {
             state: state,
             requests: tx,
-            current_thread: join_handle,
         };
         dc
     }
 
     pub fn get(&self, op: Operation) -> State {
-        // TODO heavily broken
         // should first check if the requested op is present in state
         // if it is not present it should send the request to the thread and wait until completion
         {
@@ -219,7 +215,7 @@ impl DenonConnection {
             }
         }
         self.set(op.clone(), State::String(String::from("?")));
-        for _ in 0..10 {
+        for _ in 0..50 {
             thread::sleep(Duration::from_millis(100));
             let locked_state = self.state.lock().unwrap();
             if let Some(state) = locked_state.get(&op) {
@@ -237,6 +233,5 @@ impl DenonConnection {
 impl Drop for DenonConnection {
     fn drop(&mut self) {
         self.set(Operation::Stop, State::Integer(0));
-        // self.current_thread.join();
     }
 }
