@@ -2,10 +2,10 @@
 // MV53
 // MVMAX 86
 
+mod denon_connection;
+
 use std::time::Duration;
 use std::thread;
-
-mod denon_connection;
 
 use denon_connection::{DenonConnection, Operation, State};
 
@@ -28,7 +28,14 @@ fn main() {
     let denon_port = 23;
 
     let dc = DenonConnection::new(denon_name, denon_port);
-    println!("{:?}", dc.get(Operation::Power));
+    let power_status = dc.get(Operation::Power);
+    println!("{:?}", power_status);
+    if let State::String(status) = power_status {
+        if status != "ON" {
+            dc.set(Operation::Power, State::String(String::from("ON")));
+            thread::sleep(Duration::from_secs(1));
+        }
+    }
     if let State::Integer(current_volume) = dc.get(Operation::MainVolume) {
         dc.set(Operation::MainVolume, State::Integer(current_volume / 2));
         println!("{:?}", dc.get(Operation::MainVolume));
@@ -38,5 +45,6 @@ fn main() {
     thread::sleep(Duration::from_secs(5));
     println!("{:?}", dc.get(Operation::MainVolume));
     println!("{:?}", dc.get(Operation::MaxVolume));
-    thread::sleep(Duration::from_secs(20));
+    dc.set(Operation::Stop, State::Integer(0));
+    thread::sleep(Duration::from_secs(5));
 }
