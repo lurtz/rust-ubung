@@ -98,7 +98,6 @@ pub fn read(stream: &mut Read, lines: u8) -> Result<Vec<String>, std::io::Error>
     for _ in 0..lines {
         let mut buffer = [0; 100];
         let read_bytes = stream.read(&mut buffer)?;
-
         if let Ok(tmp) = std::str::from_utf8(&buffer[0..read_bytes]) {
             string += tmp;
         }
@@ -150,14 +149,11 @@ fn thread_func_impl(denon_name: String,
 }
 
 fn parse_response(response: &Vec<String>) -> Vec<(Operation, State)> {
-    let mut result = Vec::new();
-    for item in response {
-        if let Some(parsed) = Operation::parse(item.as_str()) {
-            result.push(parsed);
-        }
-
-    }
-    result
+    return response.iter()
+        .map(|x| Operation::parse(x.as_str()))
+        .filter(|x| x.is_some())
+        .map(|x| x.unwrap())
+        .collect();
 }
 
 pub fn print_io_error(e: &std::io::Error) {
@@ -205,33 +201,38 @@ impl DenonConnection {
         dc
     }
 
-    pub fn get(&self, op: Operation) -> State {
+    pub fn get(&self,
+               op: Operation)
+               -> Result<State, std::sync::mpsc::SendError<(Operation, State)>> {
         // should first check if the requested op is present in state
         // if it is not present it should send the request to the thread and wait until completion
         {
             let locked_state = self.state.lock().unwrap();
             if let Some(state) = locked_state.get(&op) {
-                return state.clone();
+                return Ok(state.clone());
             }
         }
-        self.set(op.clone(), State::String(String::from("?")));
+        self.set(op.clone(), State::String(String::from("?")))?;
         for _ in 0..50 {
             thread::sleep(Duration::from_millis(100));
             let locked_state = self.state.lock().unwrap();
             if let Some(state) = locked_state.get(&op) {
-                return state.clone();
+                return Ok(state.clone());
             }
         }
-        State::Integer(0)
+        Ok(State::Integer(0))
     }
 
-    pub fn set(&self, op: Operation, state: State) {
-        let _ = self.requests.send((op.clone(), state));
+    pub fn set(&self,
+               op: Operation,
+               state: State)
+               -> Result<(), std::sync::mpsc::SendError<(Operation, State)>> {
+        self.requests.send((op.clone(), state))
     }
 }
 
 impl Drop for DenonConnection {
     fn drop(&mut self) {
-        self.set(Operation::Stop, State::Integer(0));
+        let _ = self.set(Operation::Stop, State::Integer(0));
     }
 }

@@ -30,21 +30,21 @@ fn main() {
     let dc = DenonConnection::new(denon_name, denon_port);
     let power_status = dc.get(Operation::Power);
     println!("{:?}", power_status);
-    if let State::String(status) = power_status {
+    if let Ok(State::String(status)) = power_status {
         if status != "ON" {
-            dc.set(Operation::Power, State::String(String::from("ON")));
+            dc.set(Operation::Power, State::String(String::from("ON"))).ok();
             thread::sleep(Duration::from_secs(1));
         }
     }
-    if let State::Integer(current_volume) = dc.get(Operation::MainVolume) {
-        dc.set(Operation::MainVolume, State::Integer(current_volume / 2));
+    if let Ok(State::Integer(current_volume)) = dc.get(Operation::MainVolume) {
+        dc.set(Operation::MainVolume, State::Integer(current_volume / 2)).ok();
         println!("{:?}", dc.get(Operation::MainVolume));
         thread::sleep(Duration::from_secs(5));
-        dc.set(Operation::MainVolume, State::Integer(current_volume));
+        dc.set(Operation::MainVolume, State::Integer(current_volume)).ok();
     }
     thread::sleep(Duration::from_secs(5));
     println!("{:?}", dc.get(Operation::MainVolume));
     println!("{:?}", dc.get(Operation::MaxVolume));
-    dc.set(Operation::Stop, State::Integer(0));
+    dc.set(Operation::Stop, State::Integer(0)).ok();
     thread::sleep(Duration::from_secs(5));
 }
