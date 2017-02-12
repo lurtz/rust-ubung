@@ -19,6 +19,15 @@ pub enum Operation {
     Stop,
 }
 
+macro_rules! parsehelper {
+	($trimmed:expr, $op:path, $func:path) => {
+		let x = $func($trimmed, $op);
+        if x.is_some() {
+            return x;
+        }
+	};
+}
+
 impl Operation {
     fn value(&self) -> &'static str {
         match *self {
@@ -30,36 +39,34 @@ impl Operation {
         }
     }
 
+    fn parse_int(trimmed: &str, op: Operation) -> Option<(Operation, State)> {
+        if trimmed.starts_with(op.value()) {
+            let to_skip = op.value().len();
+            let ref to_parse = trimmed[to_skip..].trim();
+            let mut value = to_parse.parse::<u32>().unwrap();
+            if value < 100 {
+                value = value * 10;
+            }
+            return Some((op, State::Integer(value)));
+        }
+        None
+    }
+
+    fn parse_string(trimmed: &str, op: Operation) -> Option<(Operation, State)> {
+        if trimmed.starts_with(op.value()) {
+            let to_skip = op.value().len();
+            let value = trimmed[to_skip..].to_string();
+            return Some((op, State::String(value)));
+        }
+        None
+    }
+
     fn parse(str: &str) -> Option<(Operation, State)> {
         let trimmed = str.trim().trim_matches('\r');
-        if trimmed.starts_with(Operation::MaxVolume.value()) {
-            let to_skip = Operation::MaxVolume.value().len();
-            let ref to_parse = trimmed[to_skip..].trim();
-            let mut value = to_parse.parse::<u32>().unwrap();
-            if value < 100 {
-                value = value * 10;
-            }
-            return Some((Operation::MaxVolume, State::Integer(value)));
-        }
-        if trimmed.starts_with(Operation::MainVolume.value()) {
-            let to_skip = Operation::MainVolume.value().len();
-            let ref to_parse = trimmed[to_skip..].trim();
-            let mut value = to_parse.parse::<u32>().unwrap();
-            if value < 100 {
-                value = value * 10;
-            }
-            return Some((Operation::MainVolume, State::Integer(value)));
-        }
-        if trimmed.starts_with(Operation::Power.value()) {
-            let to_skip = Operation::Power.value().len();
-            let value = trimmed[to_skip..].to_string();
-            return Some((Operation::Power, State::String(value)));
-        }
-        if trimmed.starts_with(Operation::SourceInput.value()) {
-            let to_skip = Operation::SourceInput.value().len();
-            let value = trimmed[to_skip..].to_string();
-            return Some((Operation::SourceInput, State::String(value)));
-        }
+        parsehelper!(trimmed, Operation::MaxVolume, Operation::parse_int);
+        parsehelper!(trimmed, Operation::MainVolume, Operation::parse_int);
+        parsehelper!(trimmed, Operation::Power, Operation::parse_string);
+        parsehelper!(trimmed, Operation::SourceInput, Operation::parse_string);
         None
     }
 }
