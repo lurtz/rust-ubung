@@ -3,11 +3,14 @@
 // MVMAX 86
 
 mod denon_connection;
+mod state;
+mod operation;
+mod parse;
 
 use std::time::Duration;
 use std::thread;
 
-use denon_connection::{DenonConnection, Operation, State};
+use denon_connection::{DenonConnection, State, Operation};
 
 #[cfg(test)]
 mod test {

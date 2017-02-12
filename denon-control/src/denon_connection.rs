@@ -1,3 +1,8 @@
+extern crate std;
+
+pub use parse::{State, Operation};
+use parse::parse;
+
 use std::collections::HashMap;
 use std::time::Duration;
 use std::net::TcpStream;
@@ -6,100 +11,15 @@ use std::sync::{Arc, Mutex};
 use std::thread;
 use std::error::Error;
 use std::io::{Read, Write};
-use std::fmt::{Display, Formatter};
 
-extern crate std;
-
-#[derive(Hash, Eq, PartialEq, Debug, Clone)]
-pub enum Operation {
-    MaxVolume,
-    MainVolume,
-    Power,
-    SourceInput,
-    Stop,
-}
-
-macro_rules! parsehelper {
-	($trimmed:expr, $op:path, $func:path) => {
-		let x = $func($trimmed, $op);
-        if x.is_some() {
-            return x;
-        }
-	};
-}
-
-impl Operation {
-    fn value(&self) -> &'static str {
-        match *self {
-            Operation::MaxVolume => "MVMAX",
-            Operation::MainVolume => "MV",
-            Operation::Power => "PW",
-            Operation::SourceInput => "SI",
-            Operation::Stop => "really stop now",
-        }
-    }
-
-    fn parse_int(trimmed: &str, op: Operation) -> Option<(Operation, State)> {
-        if trimmed.starts_with(op.value()) {
-            let to_skip = op.value().len();
-            let ref to_parse = trimmed[to_skip..].trim();
-            let mut value = to_parse.parse::<u32>().unwrap();
-            if value < 100 {
-                value = value * 10;
-            }
-            return Some((op, State::Integer(value)));
-        }
-        None
-    }
-
-    fn parse_string(trimmed: &str, op: Operation) -> Option<(Operation, State)> {
-        if trimmed.starts_with(op.value()) {
-            let to_skip = op.value().len();
-            let value = trimmed[to_skip..].to_string();
-            return Some((op, State::String(value)));
-        }
-        None
-    }
-
-    fn parse(str: &str) -> Option<(Operation, State)> {
-        let trimmed = str.trim().trim_matches('\r');
-        parsehelper!(trimmed, Operation::MaxVolume, Operation::parse_int);
-        parsehelper!(trimmed, Operation::MainVolume, Operation::parse_int);
-        parsehelper!(trimmed, Operation::Power, Operation::parse_string);
-        parsehelper!(trimmed, Operation::SourceInput, Operation::parse_string);
-        None
-    }
-}
-
-impl Display for Operation {
-    fn fmt(&self, format: &mut Formatter) -> Result<(), std::fmt::Error> {
-        write!(format, "{}", self.value())
-    }
-}
-
-#[derive(Debug,Clone)]
-pub enum State {
-    Integer(u32),
-    String(String),
-}
-
-impl Display for State {
-    fn fmt(&self, format: &mut Formatter) -> Result<(), std::fmt::Error> {
-        match self {
-            &State::Integer(i) => write!(format, "{}", i),
-            &State::String(ref s) => write!(format, "{}", s),
-        }
-    }
-}
-
-pub fn write(stream: &mut Write, input: String) -> Result<(), std::io::Error> {
+fn write(stream: &mut Write, input: String) -> Result<(), std::io::Error> {
     println!("sending: {}", input);
     let volume_command = input.into_bytes();
     stream.write(&volume_command[..])?;
     Ok(())
 }
 
-pub fn read(stream: &mut Read, lines: u8) -> Result<Vec<String>, std::io::Error> {
+fn read(stream: &mut Read, lines: u8) -> Result<Vec<String>, std::io::Error> {
     let mut string = String::new();
 
     for _ in 0..lines {
@@ -157,13 +77,13 @@ fn thread_func_impl(denon_name: String,
 
 fn parse_response(response: &Vec<String>) -> Vec<(Operation, State)> {
     return response.iter()
-        .map(|x| Operation::parse(x.as_str()))
+        .map(|x| parse(x.as_str()))
         .filter(|x| x.is_some())
         .map(|x| x.unwrap())
         .collect();
 }
 
-pub fn print_io_error(e: &std::io::Error) {
+fn print_io_error(e: &std::io::Error) {
     println!("got error: {}, cause = {:?}, description = {}, kind = {:?}",
              e,
              e.cause(),
