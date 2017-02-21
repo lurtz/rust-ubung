@@ -39,11 +39,12 @@ fn main() {
             thread::sleep(Duration::from_secs(1));
         }
     }
-    if let Ok(State::Integer(current_volume)) = dc.get(Operation::MainVolume) {
-        dc.set(Operation::MainVolume, State::Integer(current_volume / 2)).ok();
+    println!("current input: {:?}", dc.get(Operation::SourceInput));
+    if let Ok(State::MainVolume(current_volume)) = dc.get(Operation::MainVolume) {
+        dc.set(Operation::MainVolume, State::MainVolume(current_volume / 2)).ok();
         println!("{:?}", dc.get(Operation::MainVolume));
         thread::sleep(Duration::from_secs(5));
-        dc.set(Operation::MainVolume, State::Integer(current_volume)).ok();
+        dc.set(Operation::MainVolume, State::MainVolume(current_volume)).ok();
     }
     thread::sleep(Duration::from_secs(5));
     println!("{:?}", dc.get(Operation::MainVolume));
