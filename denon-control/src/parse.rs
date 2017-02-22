@@ -7,7 +7,7 @@ macro_rules! parsehelper {
 	($trimmed:expr, $op:path, $func:path) => {
 		if $trimmed.starts_with($op.value()) {
           let value = get_value($trimmed, &$op);
-  		  let x = $func(value, $op);
+  		  let x = ($op, $func(value));
   		  return Some(x);
 		}
 	};
@@ -27,31 +27,32 @@ fn parse_int(to_parse: &str) -> u32 {
     value
 }
 
-fn parse_main_volume(value: &str, op: Operation) -> (Operation, State) {
+fn parse_main_volume(value: &str) -> State {
     let value = parse_int(value);
-    return (op, State::MainVolume(value));
+    return State::MainVolume(value);
 }
 
-fn parse_max_volume(value: &str, op: Operation) -> (Operation, State) {
+fn parse_max_volume(value: &str) -> State {
     let value = parse_int(value);
-    return (op, State::MaxVolume(value));
+    return State::MaxVolume(value);
 }
 
-fn parse_power(value: &str, op: Operation) -> (Operation, State) {
+fn parse_power(value: &str) -> State {
     if "ON" == value {
-        return (op, State::Power(PowerState::ON));
+        return State::Power(PowerState::ON);
     } else {
-        return (op, State::Power(PowerState::STANDBY));
+        return State::Power(PowerState::STANDBY);
     }
 }
 
-fn parse_source_input(value: &str, op: Operation) -> (Operation, State) {
-    if "DVD" == value {
-        return (op, State::SourceInput(SourceInputState::DVD));
-    } else if "GAME2" == value {
-        return (op, State::SourceInput(SourceInputState::GAME2));
+fn parse_source_input(value: &str) -> State {
+    for sis in SourceInputState::iterator() {
+        if sis.to_string() == value {
+            return State::SourceInput(sis.clone());
+        }
     }
-    return (op, State::SourceInput(SourceInputState::NAPSTER));
+
+    return State::SourceInput(SourceInputState::UNKNOWN);
 }
 
 pub fn parse(str: &str) -> Option<(Operation, State)> {

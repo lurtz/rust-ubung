@@ -1,5 +1,6 @@
 extern crate std;
 use std::fmt::{Display, Formatter, Error};
+use std::slice::Iter;
 
 #[derive(Debug,Clone)]
 pub enum PowerState {
@@ -43,11 +44,43 @@ pub enum SourceInputState {
     IPD,
     IRP,
     FVP,
+    UNKNOWN,
 }
 
 impl Display for SourceInputState {
     fn fmt(&self, format: &mut Formatter) -> Result<(), Error> {
         write!(format, "{:?}", self)
+    }
+}
+
+impl SourceInputState {
+    pub fn iterator() -> Iter<'static, SourceInputState> {
+        static STATES: [SourceInputState; 25] = [SourceInputState::CD,
+                                                 SourceInputState::Tuner,
+                                                 SourceInputState::DVD,
+                                                 SourceInputState::BD,
+                                                 SourceInputState::TV,
+                                                 SourceInputState::SATCBL,
+                                                 SourceInputState::GAME,
+                                                 SourceInputState::GAME2,
+                                                 SourceInputState::VAUX,
+                                                 SourceInputState::DOCK,
+                                                 SourceInputState::IPOD,
+                                                 SourceInputState::NETUSB,
+                                                 SourceInputState::RHAPSODY,
+                                                 SourceInputState::NAPSTER,
+                                                 SourceInputState::PANDORA,
+                                                 SourceInputState::LASTFM,
+                                                 SourceInputState::FLICKR,
+                                                 SourceInputState::FAVORITES,
+                                                 SourceInputState::IRADIO,
+                                                 SourceInputState::SERVER,
+                                                 SourceInputState::USBIPOD,
+                                                 SourceInputState::USB,
+                                                 SourceInputState::IPD,
+                                                 SourceInputState::IRP,
+                                                 SourceInputState::FVP];
+        STATES.into_iter()
     }
 }
 
