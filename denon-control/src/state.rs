@@ -2,7 +2,7 @@ extern crate std;
 use std::fmt::{Display, Formatter, Error};
 use std::slice::Iter;
 
-#[derive(Debug,Clone)]
+#[derive(Debug,Clone,PartialEq)]
 pub enum PowerState {
     ON,
     STANDBY,
@@ -17,7 +17,7 @@ impl Display for PowerState {
     }
 }
 
-#[derive(Debug,Clone)]
+#[derive(Debug,Clone,PartialEq)]
 pub enum SourceInputState {
     CD,
     Tuner,
@@ -86,23 +86,23 @@ impl SourceInputState {
 
 #[derive(Debug,Clone)]
 pub enum State {
-    Integer(u32),
-    String(String),
     Power(PowerState),
     SourceInput(SourceInputState),
     MaxVolume(u32),
     MainVolume(u32),
+    Query,
+    Unknown,
 }
 
 impl Display for State {
     fn fmt(&self, format: &mut Formatter) -> Result<(), Error> {
         match self {
-            &State::Integer(i) => write!(format, "{}", i),
-            &State::String(ref s) => write!(format, "{}", s),
             &State::Power(ref p) => write!(format, "{}", p),
             &State::SourceInput(ref si) => write!(format, "{}", si),
             &State::MaxVolume(i) => write!(format, "{}", i),
             &State::MainVolume(i) => write!(format, "{}", i),
+            &State::Query => write!(format, "?"),
+            &State::Unknown => write!(format, "Unknown"),
         }
     }
 }

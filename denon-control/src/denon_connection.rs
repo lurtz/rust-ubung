@@ -139,7 +139,7 @@ impl DenonConnection {
                 return Ok(state.clone());
             }
         }
-        self.set(op.clone(), State::String(String::from("?")))?;
+        self.set(op.clone(), State::Query)?;
         for _ in 0..50 {
             thread::sleep(Duration::from_millis(100));
             let locked_state = self.state.lock().unwrap();
@@ -147,7 +147,7 @@ impl DenonConnection {
                 return Ok(state.clone());
             }
         }
-        Ok(State::Integer(0))
+        Ok(State::Unknown)
     }
 
     pub fn set(&self,
@@ -160,6 +160,6 @@ impl DenonConnection {
 
 impl Drop for DenonConnection {
     fn drop(&mut self) {
-        let _ = self.set(Operation::Stop, State::Integer(0));
+        let _ = self.set(Operation::Stop, State::Unknown);
     }
 }

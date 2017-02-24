@@ -11,6 +11,7 @@ use std::time::Duration;
 use std::thread;
 
 use denon_connection::{DenonConnection, State, Operation};
+use state::PowerState;
 
 #[cfg(test)]
 mod test {
@@ -33,9 +34,9 @@ fn main() {
     let dc = DenonConnection::new(denon_name, denon_port);
     let power_status = dc.get(Operation::Power);
     println!("{:?}", power_status);
-    if let Ok(State::String(status)) = power_status {
-        if status != "ON" {
-            dc.set(Operation::Power, State::String(String::from("ON"))).ok();
+    if let Ok(State::Power(status)) = power_status {
+        if status != PowerState::ON {
+            dc.set(Operation::Power, State::Power(PowerState::ON)).ok();
             thread::sleep(Duration::from_secs(1));
         }
     }
@@ -49,6 +50,6 @@ fn main() {
     thread::sleep(Duration::from_secs(5));
     println!("{:?}", dc.get(Operation::MainVolume));
     println!("{:?}", dc.get(Operation::MaxVolume));
-    dc.set(Operation::Stop, State::Integer(0)).ok();
+    dc.set(Operation::Stop, State::Unknown).ok();
     thread::sleep(Duration::from_secs(5));
 }
