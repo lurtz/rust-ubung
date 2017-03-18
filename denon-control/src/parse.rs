@@ -4,16 +4,16 @@ pub use state::SourceInputState;
 pub use operation::Operation;
 
 macro_rules! parsehelper {
-	($trimmed:expr, $op:path, $func:path) => {
+	($trimmed:expr, $op:expr, $func:path) => {
 		if $trimmed.starts_with($op.value()) {
           let value = get_value($trimmed, &$op);
-  		  let x = ($op, $func(value));
+  		  let x = $func(value);
   		  return Some(x);
 		}
 	};
 }
 
-fn get_value<'a>(trimmed: &'a str, op: &Operation) -> &'a str {
+fn get_value<'a>(trimmed: &'a str, op: &State) -> &'a str {
     let to_skip = op.value().len();
     let ref to_parse = trimmed[to_skip..].trim();
     return to_parse;
@@ -55,11 +55,14 @@ fn parse_source_input(value: &str) -> State {
     return State::SourceInput(SourceInputState::UNKNOWN);
 }
 
-pub fn parse(str: &str) -> Option<(Operation, State)> {
+pub fn parse(str: &str) -> Option<State> {
+    State::MaxVolume(0).value();
     let trimmed = str.trim().trim_matches('\r');
-    parsehelper!(trimmed, Operation::MaxVolume, parse_max_volume);
-    parsehelper!(trimmed, Operation::MainVolume, parse_main_volume);
-    parsehelper!(trimmed, Operation::Power, parse_power);
-    parsehelper!(trimmed, Operation::SourceInput, parse_source_input);
+    parsehelper!(trimmed, State::MaxVolume(0), parse_max_volume);
+    parsehelper!(trimmed, State::MainVolume(0), parse_main_volume);
+    parsehelper!(trimmed, State::Power(PowerState::ON), parse_power);
+    parsehelper!(trimmed,
+                 State::SourceInput(SourceInputState::BD),
+                 parse_source_input);
     None
 }

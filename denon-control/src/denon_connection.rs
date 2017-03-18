@@ -3,7 +3,7 @@ extern crate std;
 pub use parse::{State, Operation};
 use parse::parse;
 
-use std::collections::HashMap;
+use std::collections::HashSet;
 use std::time::Duration;
 use std::net::TcpStream;
 use std::sync::mpsc::{channel, Sender, Receiver};
@@ -40,7 +40,7 @@ fn read(stream: &mut Read, lines: u8) -> Result<Vec<String>, std::io::Error> {
 
 fn thread_func_impl(denon_name: String,
                     denon_port: u16,
-                    state: Arc<Mutex<HashMap<Operation, State>>>,
+                    state: Arc<Mutex<HashSet<State>>>,
                     requests: Receiver<(Operation, State)>)
                     -> Result<(), std::io::Error> {
     let mut stream = TcpStream::connect((denon_name.as_str(), denon_port))?;
@@ -51,7 +51,12 @@ fn thread_func_impl(denon_name: String,
             if Operation::Stop == request {
                 return Ok(());
             }
-            let command = format!("{}{}\r", request, value);
+            let command;
+            if Operation::Set == request {
+                command = format!("{}\r", value);
+            } else {
+                command = format!("{}?\r", value.value());
+            }
             write(&mut stream, command)?;
         }
 
@@ -61,7 +66,7 @@ fn thread_func_impl(denon_name: String,
                 let parsed_response = parse_response(&status_update);
                 let mut locked_state = state.lock().unwrap();
                 for item in parsed_response {
-                    locked_state.insert(item.0, item.1);
+                    locked_state.replace(item);
                 }
             }
             // check for timeout error -> continue on timeout error, else abort
@@ -75,7 +80,7 @@ fn thread_func_impl(denon_name: String,
     }
 }
 
-fn parse_response(response: &Vec<String>) -> Vec<(Operation, State)> {
+fn parse_response(response: &Vec<String>) -> Vec<State> {
     return response.iter()
         .map(|x| parse(x.as_str()))
         .filter(|x| x.is_some())
@@ -99,7 +104,7 @@ fn print_io_error(e: &std::io::Error) {
 
 fn thread_func(denon_name: String,
                denon_port: u16,
-               state: Arc<Mutex<HashMap<Operation, State>>>,
+               state: Arc<Mutex<HashSet<State>>>,
                requests: Receiver<(Operation, State)>) {
     match thread_func_impl(denon_name, denon_port, state, requests) {
         Ok(_) => println!("thread success"),
@@ -108,14 +113,14 @@ fn thread_func(denon_name: String,
 }
 
 pub struct DenonConnection {
-    state: Arc<Mutex<HashMap<Operation, State>>>,
+    state: Arc<Mutex<HashSet<State>>>,
     requests: Sender<(Operation, State)>,
 }
 
 impl DenonConnection {
     pub fn new(denon_name: &str, denon_port: u16) -> DenonConnection {
         let denon_string = String::from(denon_name);
-        let state = Arc::new(Mutex::new(HashMap::new()));
+        let state = Arc::new(Mutex::new(HashSet::new()));
         let cloned_state = state.clone();
         let (tx, rx) = channel();
         thread::spawn(move || {
@@ -128,9 +133,7 @@ impl DenonConnection {
         dc
     }
 
-    pub fn get(&self,
-               op: Operation)
-               -> Result<State, std::sync::mpsc::SendError<(Operation, State)>> {
+    pub fn get(&self, op: State) -> Result<State, std::sync::mpsc::SendError<(Operation, State)>> {
         // should first check if the requested op is present in state
         // if it is not present it should send the request to the thread and wait until completion
         {
@@ -139,7 +142,7 @@ impl DenonConnection {
                 return Ok(state.clone());
             }
         }
-        self.set(op.clone(), State::Query)?;
+        self.query(op.clone(), Operation::Query.clone())?;
         for _ in 0..50 {
             thread::sleep(Duration::from_millis(100));
             let locked_state = self.state.lock().unwrap();
@@ -150,16 +153,24 @@ impl DenonConnection {
         Ok(State::Unknown)
     }
 
-    pub fn set(&self,
-               op: Operation,
-               state: State)
-               -> Result<(), std::sync::mpsc::SendError<(Operation, State)>> {
+    fn query(&self,
+             state: State,
+             op: Operation)
+             -> Result<(), std::sync::mpsc::SendError<(Operation, State)>> {
         self.requests.send((op.clone(), state))
+    }
+
+    pub fn stop(&self) -> Result<(), std::sync::mpsc::SendError<(Operation, State)>> {
+        self.query(State::Unknown, Operation::Stop)
+    }
+
+    pub fn set(&self, state: State) -> Result<(), std::sync::mpsc::SendError<(Operation, State)>> {
+        self.query(state, Operation::Set)
     }
 }
 
 impl Drop for DenonConnection {
     fn drop(&mut self) {
-        let _ = self.set(Operation::Stop, State::Unknown);
+        let _ = self.stop();
     }
 }

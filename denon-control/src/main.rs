@@ -10,7 +10,7 @@ mod parse;
 use std::time::Duration;
 use std::thread;
 
-use denon_connection::{DenonConnection, State, Operation};
+use denon_connection::{DenonConnection, State};
 use state::PowerState;
 
 #[cfg(test)]
@@ -32,24 +32,24 @@ fn main() {
     let denon_port = 23;
 
     let dc = DenonConnection::new(denon_name, denon_port);
-    let power_status = dc.get(Operation::Power);
+    let power_status = dc.get(State::power());
     println!("{:?}", power_status);
     if let Ok(State::Power(status)) = power_status {
         if status != PowerState::ON {
-            dc.set(Operation::Power, State::Power(PowerState::ON)).ok();
+            dc.set(State::Power(PowerState::ON)).ok();
             thread::sleep(Duration::from_secs(1));
         }
     }
-    println!("current input: {:?}", dc.get(Operation::SourceInput));
-    if let Ok(State::MainVolume(current_volume)) = dc.get(Operation::MainVolume) {
-        dc.set(Operation::MainVolume, State::MainVolume(current_volume / 2)).ok();
-        println!("{:?}", dc.get(Operation::MainVolume));
+    println!("current input: {:?}", dc.get(State::source_input()));
+    if let Ok(State::MainVolume(current_volume)) = dc.get(State::main_volume()) {
+        dc.set(State::MainVolume(current_volume / 2)).ok();
+        println!("{:?}", dc.get(State::main_volume()));
         thread::sleep(Duration::from_secs(5));
-        dc.set(Operation::MainVolume, State::MainVolume(current_volume)).ok();
+        dc.set(State::MainVolume(current_volume)).ok();
     }
     thread::sleep(Duration::from_secs(5));
-    println!("{:?}", dc.get(Operation::MainVolume));
-    println!("{:?}", dc.get(Operation::MaxVolume));
-    dc.set(Operation::Stop, State::Unknown).ok();
+    println!("{:?}", dc.get(State::main_volume()));
+    println!("{:?}", dc.get(State::max_volume()));
+    dc.stop().ok();
     thread::sleep(Duration::from_secs(5));
 }

@@ -92,19 +92,45 @@ pub enum State {
     SourceInput(SourceInputState),
     MaxVolume(u32),
     MainVolume(u32),
-    Query,
     Unknown,
+}
+
+impl State {
+    pub fn value(&self) -> &'static str {
+        match *self {
+            State::Power(_) => return "PW",
+            State::SourceInput(_) => return "SI",
+            State::MaxVolume(_) => return "MVMAX",
+            State::MainVolume(_) => return "MV",
+            State::Unknown => return "Unknown",
+        }
+    }
+
+    pub fn power() -> State {
+        State::Power(PowerState::ON)
+    }
+
+    pub fn source_input() -> State {
+        State::SourceInput(SourceInputState::DVD)
+    }
+
+    pub fn max_volume() -> State {
+        State::MaxVolume(0)
+    }
+
+    pub fn main_volume() -> State {
+        State::MainVolume(0)
+    }
 }
 
 impl Display for State {
     fn fmt(&self, format: &mut Formatter) -> Result<(), Error> {
         match self {
-            &State::Power(ref p) => write!(format, "{}", p),
-            &State::SourceInput(ref si) => write!(format, "{}", si),
-            &State::MaxVolume(i) => write!(format, "{}", i),
-            &State::MainVolume(i) => write!(format, "{}", i),
-            &State::Query => write!(format, "?"),
-            &State::Unknown => write!(format, "Unknown"),
+            &State::Power(ref p) => write!(format, "{}{}", self.value(), p),
+            &State::SourceInput(ref si) => write!(format, "{}{}", self.value(), si),
+            &State::MaxVolume(i) => write!(format, "{}{}", self.value(), i),
+            &State::MainVolume(i) => write!(format, "{}{}", self.value(), i),
+            &State::Unknown => write!(format, "{}", self.value()),
         }
     }
 }
@@ -116,8 +142,7 @@ impl Hash for State {
             State::SourceInput(_) => 2.hash(state),
             State::MaxVolume(_) => 3.hash(state),
             State::MainVolume(_) => 4.hash(state),
-            State::Query => 5.hash(state),
-            State::Unknown => 6.hash(state),
+            State::Unknown => 5.hash(state),
         }
     }
 }
@@ -148,7 +173,6 @@ impl PartialEq for State {
         equal_helper!(self, other, State::SourceInput);
         equal_helper!(self, other, State::MaxVolume);
         equal_helper!(self, other, State::MainVolume);
-        equal_helper_no_args!(self, other, State::Query);
         equal_helper_no_args!(self, other, State::Unknown);
         return false;
     }
