@@ -12,10 +12,7 @@ pub enum PowerState {
 
 impl Display for PowerState {
     fn fmt(&self, format: &mut Formatter) -> Result<(), Error> {
-        match self {
-            &PowerState::ON => write!(format, "ON"),
-            &PowerState::STANDBY => write!(format, "STANDBY"),
-        }
+        write!(format, "{:?}", self)
     }
 }
 

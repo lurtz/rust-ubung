@@ -1,6 +1,6 @@
 extern crate std;
 
-#[derive(Hash, Eq, PartialEq, Debug, Clone)]
+#[derive(PartialEq)]
 pub enum Operation {
     Query,
     Set,

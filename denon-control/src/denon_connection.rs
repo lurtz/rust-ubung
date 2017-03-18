@@ -142,7 +142,7 @@ impl DenonConnection {
                 return Ok(state.clone());
             }
         }
-        self.query(op.clone(), Operation::Query.clone())?;
+        self.query(op.clone(), Operation::Query)?;
         for _ in 0..50 {
             thread::sleep(Duration::from_millis(100));
             let locked_state = self.state.lock().unwrap();
@@ -157,7 +157,7 @@ impl DenonConnection {
              state: State,
              op: Operation)
              -> Result<(), std::sync::mpsc::SendError<(Operation, State)>> {
-        self.requests.send((op.clone(), state))
+        self.requests.send((op, state))
     }
 
     pub fn stop(&self) -> Result<(), std::sync::mpsc::SendError<(Operation, State)>> {

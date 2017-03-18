@@ -56,13 +56,10 @@ fn parse_source_input(value: &str) -> State {
 }
 
 pub fn parse(str: &str) -> Option<State> {
-    State::MaxVolume(0).value();
     let trimmed = str.trim().trim_matches('\r');
-    parsehelper!(trimmed, State::MaxVolume(0), parse_max_volume);
-    parsehelper!(trimmed, State::MainVolume(0), parse_main_volume);
-    parsehelper!(trimmed, State::Power(PowerState::ON), parse_power);
-    parsehelper!(trimmed,
-                 State::SourceInput(SourceInputState::BD),
-                 parse_source_input);
+    parsehelper!(trimmed, State::max_volume(), parse_max_volume);
+    parsehelper!(trimmed, State::main_volume(), parse_main_volume);
+    parsehelper!(trimmed, State::power(), parse_power);
+    parsehelper!(trimmed, State::source_input(), parse_source_input);
     None
 }
