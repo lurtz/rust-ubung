@@ -1,6 +1,8 @@
 [package]
 name = "denon-control"
 version = "0.1.0"
-authors = ["Lutz <dgf@iera.de>"]
+authors = ["Lutz"]
 
 [dependencies]
+conrod = "0.51.1"
+piston_window = "0.63"
