@@ -4,5 +4,6 @@ version = "0.1.0"
 authors = ["Lutz"]
 
 [dependencies]
-conrod = "0.51.1"
-piston_window = "0.63"
+getopts = "0.2"
+#conrod = "0.51.1"
+#piston_window = "0.63"
