@@ -13,7 +13,7 @@ use std::error::Error;
 use std::io::{Read, Write};
 
 fn write(stream: &mut Write, input: String) -> Result<(), std::io::Error> {
-    println!("sending: {}", input);
+//    println!("sending: {}", input);
     let volume_command = input.into_bytes();
     stream.write(&volume_command[..])?;
     Ok(())
@@ -34,7 +34,7 @@ fn read(stream: &mut Read, lines: u8) -> Result<Vec<String>, std::io::Error> {
 
     let string_iter = string.split('\r').map(|x| String::from(x));
     let result = string_iter.collect();
-    println!("{:?}", result);
+//    println!("{:?}", result);
     Ok(result)
 }
 
@@ -62,7 +62,7 @@ fn thread_func_impl(denon_name: String,
 
         match read(&mut stream, 1) {
             Ok(status_update) => {
-                println!("received update {:?}", status_update);
+//                println!("received update {:?}", status_update);
                 let parsed_response = parse_response(&status_update);
                 let mut locked_state = state.lock().unwrap();
                 for item in parsed_response {

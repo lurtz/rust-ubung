@@ -2,6 +2,8 @@
 // MV53
 // MVMAX 86
 
+extern crate getopts;
+
 mod denon_connection;
 mod state;
 mod operation;
@@ -12,6 +14,10 @@ use std::thread;
 
 use denon_connection::{DenonConnection, State};
 use state::PowerState;
+use state::SourceInputState;
+
+use getopts::Options;
+use std::env;
 
 #[cfg(test)]
 mod test {
@@ -27,11 +33,41 @@ mod test {
 // the status object can be shared or the communication thread can be asked about a
 // status which queries the receiver if it is not set
 
-fn main() {
-    let denon_name = "0005cd221b08.lan";
-    let denon_port = 23;
+fn parse_args() -> getopts::Matches {
+    let mut ops = Options::new();
+    ops.optopt("a", "address", "Address of Denon AVR", "HOSTNAME");
+    ops.optopt("p", "power", "Power ON, STANDBY or OFF", "POWER_MODE");
+    ops.optopt("v", "volume", "set volume in range 30..50", "VOLUME");
+    ops.optopt("i", "input", "set source input: DVD, GAME2", "SOURCE_INPUT");
+    ops.optflag("t", "test", "run old test code");
+    ops.optflag("h", "help", "print help");
 
-    let dc = DenonConnection::new(denon_name, denon_port);
+    let args : Vec<String> = env::args().collect();
+    let arguments = match ops.parse(&args[1..]) {
+        Ok(m) => { m }
+        Err(f) => { panic!(f.to_string()) }
+    };
+
+    if arguments.opt_present("h") {
+        let brief = format!("Usage: {} [options]", args[0]);
+        print!("{}", ops.usage(&brief));
+        std::process::exit(0);
+    }
+
+    arguments
+}
+
+fn print_status(dc : &DenonConnection) {
+    println!("Current status of receiver:");
+    println!("\t{:?}", dc.get(State::power()));
+    println!("\t{:?}", dc.get(State::source_input()));
+    println!("\t{:?}", dc.get(State::main_volume()));
+    println!("\t{:?}", dc.get(State::max_volume()));
+}
+
+fn main_old(denon_name : &String, denon_port: u16) {
+    let dc = DenonConnection::new(denon_name.as_str(), denon_port);
+
     let power_status = dc.get(State::power());
     println!("{:?}", power_status);
     if let Ok(State::Power(status)) = power_status {
@@ -52,5 +88,52 @@ fn main() {
     println!("{:?}", dc.get(State::max_volume()));
     dc.stop().ok();
     thread::sleep(Duration::from_secs(5));
+}
+
+fn get_receiver_and_port(args : &getopts::Matches) -> (String, u16) {
+    let mut denon_name = String::from("0005cd221b08.lan");
+    if let Some(name) = args.opt_str("a") {
+        denon_name = name;
+    }
+    (denon_name, 23)
+}
+
+fn main() {
+    let args = parse_args();
+    let (denon_name, denon_port) = get_receiver_and_port(&args);
+    let dc = DenonConnection::new(denon_name.as_str(), denon_port);
+
+    print_status(&dc);
+
+    if args.opt_present("t") {
+        main_old(&denon_name, denon_port);
+        std::process::exit(0);
+    }
+
+    if let Some(p) = args.opt_str("p") {
+        for power in PowerState::iterator() {
+            if power.to_string() == p {
+                dc.set(State::Power(power.clone())).ok();
+            }
+        }
+    }
+
+    if let Some(i) = args.opt_str("i") {
+        for input in SourceInputState::iterator() {
+            if input.to_string() == i {
+                dc.set(State::SourceInput(input.clone())).ok();
+            }
+        }
+    }
+
+    if let Some(v) = args.opt_str("v") {
+        let vi : u32 = v.parse().unwrap();
+        dc.set(State::MainVolume(vi)).ok();
+    }
+
+    // need to check if thread in DenonConnection is stopped successfully to remove this
+    // or need to check if each operation received a response
+    thread::sleep(Duration::from_secs(1));
+    print_status(&dc);
 }
 

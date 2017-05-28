@@ -16,6 +16,14 @@ impl Display for PowerState {
     }
 }
 
+impl PowerState {
+    pub fn iterator() -> Iter<'static, PowerState> {
+        static STATES: [PowerState; 2] = [PowerState::ON,
+                                                 PowerState::STANDBY];
+        STATES.into_iter()
+    }
+}
+
 #[derive(Debug,Clone,PartialEq)]
 pub enum SourceInputState {
     CD,
