@@ -10,9 +10,6 @@ mod operation;
 mod parse;
 mod pulseaudio;
 
-use std::time::Duration;
-use std::thread;
-
 use denon_connection::{DenonConnection, State};
 use state::PowerState;
 use state::SourceInputState;
@@ -40,7 +37,6 @@ fn parse_args() -> getopts::Matches {
     ops.optopt("p", "power", "Power ON, STANDBY or OFF", "POWER_MODE");
     ops.optopt("v", "volume", "set volume in range 30..50", "VOLUME");
     ops.optopt("i", "input", "set source input: DVD, GAME2", "SOURCE_INPUT");
-    ops.optflag("t", "test", "run old test code");
     ops.optflag("l", "laptop", "move output to laptop");
     ops.optflag("r", "receiver", "move output to receiver and set volume");
     ops.optflag("s", "status", "print status of receiver");
@@ -69,31 +65,6 @@ fn print_status(dc : &DenonConnection) {
     println!("\t{:?}", dc.get(State::max_volume()));
 }
 
-fn main_old(denon_name : &String, denon_port: u16) {
-    let dc = DenonConnection::new(denon_name.as_str(), denon_port);
-
-    let power_status = dc.get(State::power());
-    println!("{:?}", power_status);
-    if let Ok(State::Power(status)) = power_status {
-        if status != PowerState::ON {
-            dc.set(State::Power(PowerState::ON)).ok();
-            thread::sleep(Duration::from_secs(1));
-        }
-    }
-    println!("current input: {:?}", dc.get(State::source_input()));
-    if let Ok(State::MainVolume(current_volume)) = dc.get(State::main_volume()) {
-        dc.set(State::MainVolume(current_volume / 2)).ok();
-        println!("{:?}", dc.get(State::main_volume()));
-        thread::sleep(Duration::from_secs(5));
-        dc.set(State::MainVolume(current_volume)).ok();
-    }
-    thread::sleep(Duration::from_secs(5));
-    println!("{:?}", dc.get(State::main_volume()));
-    println!("{:?}", dc.get(State::max_volume()));
-    dc.stop().ok();
-    thread::sleep(Duration::from_secs(5));
-}
-
 fn get_receiver_and_port(args : &getopts::Matches) -> (String, u16) {
     let mut denon_name = String::from("0005cd221b08.lan");
     if let Some(name) = args.opt_str("a") {
@@ -109,11 +80,6 @@ fn main() {
 
     if args.opt_present("s") {
         print_status(&dc);
-    }
-
-    if args.opt_present("t") {
-        main_old(&denon_name, denon_port);
-        std::process::exit(0);
     }
 
     if args.opt_present("l") {
