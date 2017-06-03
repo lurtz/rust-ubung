@@ -8,6 +8,7 @@ mod denon_connection;
 mod state;
 mod operation;
 mod parse;
+mod pulseaudio;
 
 use std::time::Duration;
 use std::thread;
@@ -40,6 +41,8 @@ fn parse_args() -> getopts::Matches {
     ops.optopt("v", "volume", "set volume in range 30..50", "VOLUME");
     ops.optopt("i", "input", "set source input: DVD, GAME2", "SOURCE_INPUT");
     ops.optflag("t", "test", "run old test code");
+    ops.optflag("l", "laptop", "move output to laptop");
+    ops.optflag("r", "receiver", "move output to receiver and set volume");
     ops.optflag("h", "help", "print help");
 
     let args : Vec<String> = env::args().collect();
@@ -108,6 +111,23 @@ fn main() {
     if args.opt_present("t") {
         main_old(&denon_name, denon_port);
         std::process::exit(0);
+    }
+
+    if args.opt_present("l") {
+        pulseaudio::switch_ouput(pulseaudio::INTERNAL);
+    }
+
+    if args.opt_present("r") {
+        if !args.opt_present("p") {
+            dc.set(State::Power(PowerState::ON)).ok();
+        }
+        if !args.opt_present("i") {
+            dc.set(State::SourceInput(SourceInputState::DVD)).ok();
+        }
+        if !args.opt_present("v") {
+            dc.set(State::MainVolume(50)).ok();
+        }
+        pulseaudio::switch_ouput(pulseaudio::CUBIETRUCK);
     }
 
     if let Some(p) = args.opt_str("p") {
