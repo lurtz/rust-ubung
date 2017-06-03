@@ -43,6 +43,7 @@ fn parse_args() -> getopts::Matches {
     ops.optflag("t", "test", "run old test code");
     ops.optflag("l", "laptop", "move output to laptop");
     ops.optflag("r", "receiver", "move output to receiver and set volume");
+    ops.optflag("s", "status", "print status of receiver");
     ops.optflag("h", "help", "print help");
 
     let args : Vec<String> = env::args().collect();
@@ -106,7 +107,9 @@ fn main() {
     let (denon_name, denon_port) = get_receiver_and_port(&args);
     let dc = DenonConnection::new(denon_name.as_str(), denon_port);
 
-    print_status(&dc);
+    if args.opt_present("s") {
+        print_status(&dc);
+    }
 
     if args.opt_present("t") {
         main_old(&denon_name, denon_port);
