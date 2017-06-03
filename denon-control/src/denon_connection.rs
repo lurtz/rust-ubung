@@ -41,7 +41,8 @@ fn read(stream: &mut Read, lines: u8) -> Result<Vec<String>, std::io::Error> {
 fn thread_func_impl(denon_name: String,
                     denon_port: u16,
                     state: Arc<Mutex<HashSet<State>>>,
-                    requests: Receiver<(Operation, State)>)
+                    requests: Receiver<(Operation, State)>,
+                    thread_end: Sender<()>)
                     -> Result<(), std::io::Error> {
     let mut stream = TcpStream::connect((denon_name.as_str(), denon_port))?;
     stream.set_read_timeout(Some(Duration::from_secs(1)))?;
@@ -49,6 +50,10 @@ fn thread_func_impl(denon_name: String,
     loop {
         if let Ok((request, value)) = requests.try_recv() {
             if Operation::Stop == request {
+                match thread_end.send(()) {
+                    Ok(()) => {}
+                    Err(e) => { println!("Received error while sending thread sopped signal: {}", e); }
+                }
                 return Ok(());
             }
             let command;
@@ -105,8 +110,9 @@ fn print_io_error(e: &std::io::Error) {
 fn thread_func(denon_name: String,
                denon_port: u16,
                state: Arc<Mutex<HashSet<State>>>,
-               requests: Receiver<(Operation, State)>) {
-    match thread_func_impl(denon_name, denon_port, state, requests) {
+               requests: Receiver<(Operation, State)>,
+               thread_end: Sender<()>) {
+    match thread_func_impl(denon_name, denon_port, state, requests, thread_end) {
         Ok(_) => println!("thread success"),
         Err(e) => print_io_error(&e),
     }
@@ -115,6 +121,7 @@ fn thread_func(denon_name: String,
 pub struct DenonConnection {
     state: Arc<Mutex<HashSet<State>>>,
     requests: Sender<(Operation, State)>,
+    thread_end_received: Receiver<()>,
 }
 
 impl DenonConnection {
@@ -123,12 +130,14 @@ impl DenonConnection {
         let state = Arc::new(Mutex::new(HashSet::new()));
         let cloned_state = state.clone();
         let (tx, rx) = channel();
-        thread::spawn(move || {
-            thread_func(denon_string, denon_port, cloned_state, rx);
+        let (tx_thread_end, rx_thread_end) = channel();
+        let _ = thread::spawn(move || {
+            thread_func(denon_string, denon_port, cloned_state, rx, tx_thread_end);
         });
         let dc = DenonConnection {
             state: state,
             requests: tx,
+            thread_end_received: rx_thread_end,
         };
         dc
     }
@@ -172,5 +181,6 @@ impl DenonConnection {
 impl Drop for DenonConnection {
     fn drop(&mut self) {
         let _ = self.stop();
+        let _ = self.thread_end_received.recv();
     }
 }
