@@ -130,10 +130,5 @@ fn main() {
         let vi : u32 = v.parse().unwrap();
         dc.set(State::MainVolume(vi)).ok();
     }
-
-    // need to check if thread in DenonConnection is stopped successfully to remove this
-    // or need to check if each operation received a response
-    thread::sleep(Duration::from_secs(1));
-    print_status(&dc);
 }
 
