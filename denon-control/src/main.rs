@@ -11,7 +11,7 @@ mod parse;
 mod pulseaudio;
 mod avahi;
 
-use denon_connection::{DenonConnection, State};
+use denon_connection::{DenonConnection, State, Operation};
 use state::PowerState;
 use state::SourceInputState;
 
@@ -58,12 +58,13 @@ fn parse_args() -> getopts::Matches {
     arguments
 }
 
-fn print_status(dc : &DenonConnection) {
+fn print_status(dc : &DenonConnection) -> Result<(), std::sync::mpsc::SendError<(Operation, State)>> {
     println!("Current status of receiver:");
-    println!("\t{:?}", dc.get(State::power()).expect("failed to get power status"));
-    println!("\t{:?}", dc.get(State::source_input()).expect("failed to get current input"));
-    println!("\t{:?}", dc.get(State::main_volume()).expect("failed to get current volume"));
-    println!("\t{:?}", dc.get(State::max_volume()).expect("failed to get maximum volume"));
+    println!("\t{:?}", dc.get(State::power())?);
+    println!("\t{:?}", dc.get(State::source_input())?);
+    println!("\t{:?}", dc.get(State::main_volume())?);
+    println!("\t{:?}", dc.get(State::max_volume())?);
+    Ok(())
 }
 
 fn get_receiver_and_port(args : &getopts::Matches) -> (String, u16) {
@@ -77,16 +78,11 @@ fn get_receiver_and_port(args : &getopts::Matches) -> (String, u16) {
     (denon_name, 23)
 }
 
-fn main() {
-    let args = parse_args();
-    let (denon_name, denon_port) = get_receiver_and_port(&args);
-    if denon_name.is_empty() {
-        std::process::exit(1);
-    }
+fn main2(args : getopts::Matches, denon_name : String, denon_port : u16 ) -> Result<(), std::sync::mpsc::SendError<(Operation, State)>> {
     let dc = DenonConnection::new(denon_name.as_str(), denon_port);
 
     if args.opt_present("s") {
-        print_status(&dc);
+        print_status(&dc)?;
     }
 
     if args.opt_present("l") {
@@ -95,13 +91,13 @@ fn main() {
 
     if args.opt_present("r") {
         if !args.opt_present("p") {
-            dc.set(State::Power(PowerState::ON)).ok();
+            dc.set(State::Power(PowerState::ON))?;
         }
         if !args.opt_present("i") {
-            dc.set(State::SourceInput(SourceInputState::DVD)).ok();
+            dc.set(State::SourceInput(SourceInputState::DVD))?;
         }
         if !args.opt_present("v") {
-            dc.set(State::MainVolume(50)).ok();
+            dc.set(State::MainVolume(50))?;
         }
         pulseaudio::switch_ouput(pulseaudio::CUBIETRUCK);
     }
@@ -109,7 +105,7 @@ fn main() {
     if let Some(p) = args.opt_str("p") {
         for power in PowerState::iterator() {
             if power.to_string() == p {
-                dc.set(State::Power(power.clone())).ok();
+                dc.set(State::Power(power.clone()))?;
             }
         }
     }
@@ -117,14 +113,27 @@ fn main() {
     if let Some(i) = args.opt_str("i") {
         for input in SourceInputState::iterator() {
             if input.to_string() == i {
-                dc.set(State::SourceInput(input.clone())).ok();
+                dc.set(State::SourceInput(input.clone()))?;
             }
         }
     }
 
     if let Some(v) = args.opt_str("v") {
         let vi : u32 = v.parse().unwrap();
-        dc.set(State::MainVolume(vi)).ok();
+        dc.set(State::MainVolume(vi))?;
+    }
+    Ok(())
+}
+
+fn main() {
+    let args = parse_args();
+    let (denon_name, denon_port) = get_receiver_and_port(&args);
+    if denon_name.is_empty() {
+        std::process::exit(1);
+    }
+    match main2(args, denon_name, denon_port) {
+        Ok(_) => println!("success"),
+        Err(e) => println!("got error: {}", e),
     }
 }
 
