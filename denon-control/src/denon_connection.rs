@@ -155,8 +155,8 @@ impl DenonConnection {
         // if it is not present it should send the request to the thread and wait until completion
         {
             let locked_state = self.state.lock().unwrap();
-            if let Some(state) = locked_state.get(&op) {
-                return Ok(state.clone());
+            if let Some(received_state) = locked_state.get(&op) {
+                return Ok(received_state.clone());
             }
         }
         self.query(op.clone(), Operation::Query)?;
