@@ -38,12 +38,10 @@ fn read(stream: &mut Read, lines: u8) -> Result<Vec<String>, std::io::Error> {
     Ok(result)
 }
 
-fn thread_func_impl(denon_name: String,
-                    denon_port: u16,
+fn thread_func_impl(mut stream: TcpStream,
                     state: Arc<Mutex<HashSet<State>>>,
                     requests: Receiver<(Operation, State)>)
                     -> Result<(), std::io::Error> {
-    let mut stream = TcpStream::connect((denon_name.as_str(), denon_port))?;
     stream.set_read_timeout(Some(Duration::from_secs(1)))?;
 
     loop {
@@ -107,10 +105,21 @@ fn thread_func(denon_name: String,
                state: Arc<Mutex<HashSet<State>>>,
                requests: Receiver<(Operation, State)>,
                thread_end: Sender<()>) {
-    match thread_func_impl(denon_name, denon_port, state, requests) {
-        Ok(_) => println!("thread success"),
-        Err(e) => print_io_error(&e),
+    for _ in 0..10 {
+        match TcpStream::connect((denon_name.as_str(), denon_port)) {
+            Ok(s) => {
+                match thread_func_impl(s, state, requests) {
+                    Ok(_) => println!("thread success"),
+                    Err(e) => print_io_error(&e),
+                }
+                break;
+            }
+            Err(_) => {
+                thread::sleep(Duration::from_millis(500));
+            }
+        }
     }
+
     match thread_end.send(()) {
         Ok(()) => {}
         Err(e) => { println!("Received error while sending thread sopped signal: {}", e); }
