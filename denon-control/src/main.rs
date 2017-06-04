@@ -9,6 +9,7 @@ mod state;
 mod operation;
 mod parse;
 mod pulseaudio;
+mod avahi;
 
 use denon_connection::{DenonConnection, State};
 use state::PowerState;
@@ -59,23 +60,29 @@ fn parse_args() -> getopts::Matches {
 
 fn print_status(dc : &DenonConnection) {
     println!("Current status of receiver:");
-    println!("\t{:?}", dc.get(State::power()));
-    println!("\t{:?}", dc.get(State::source_input()));
-    println!("\t{:?}", dc.get(State::main_volume()));
-    println!("\t{:?}", dc.get(State::max_volume()));
+    println!("\t{:?}", dc.get(State::power()).expect("failed to get power status"));
+    println!("\t{:?}", dc.get(State::source_input()).expect("failed to get current input"));
+    println!("\t{:?}", dc.get(State::main_volume()).expect("failed to get current volume"));
+    println!("\t{:?}", dc.get(State::max_volume()).expect("failed to get maximum volume"));
 }
 
 fn get_receiver_and_port(args : &getopts::Matches) -> (String, u16) {
-    let mut denon_name = String::from("0005cd221b08.lan");
+    let denon_name;
     if let Some(name) = args.opt_str("a") {
         denon_name = name;
+    } else {
+        denon_name = avahi::get_receiver();
     }
+    println!("using receiver: {}", denon_name);
     (denon_name, 23)
 }
 
 fn main() {
     let args = parse_args();
     let (denon_name, denon_port) = get_receiver_and_port(&args);
+    if denon_name.is_empty() {
+        std::process::exit(1);
+    }
     let dc = DenonConnection::new(denon_name.as_str(), denon_port);
 
     if args.opt_present("s") {

@@ -1,7 +1,6 @@
-
 use std::process::Command;
 
-// TODO control pulseaudio to switch outputs
+// control pulseaudio to switch outputs
 // sinks:
 // alsa_output.pci-0000_00_1b.0.analog-stereo
 // tunnel.cubietruck.local.alsa_output.platform-sunxi-sndspdif.0.analog-stereo
