@@ -78,7 +78,33 @@ fn get_receiver_and_port(args : &getopts::Matches) -> (String, u16) {
     (denon_name, 23)
 }
 
-fn main2(args : getopts::Matches, denon_name : String, denon_port : u16 ) -> Result<(), std::sync::mpsc::SendError<(Operation, State)>> {
+enum MainError {
+    SendError(std::sync::mpsc::SendError<(Operation, State)>),
+    ParseIntError(std::num::ParseIntError),
+}
+
+impl std::fmt::Display for MainError {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> Result<(), std::fmt::Error> {
+        match self {
+            &MainError::SendError(ref e) => write!(f, "SendError: {}", e),
+            &MainError::ParseIntError(ref e) => write!(f, "ParseIntError: {}", e),
+        }
+    }
+}
+
+impl std::convert::From<std::sync::mpsc::SendError<(operation::Operation, state::State)>> for MainError {
+    fn from(send_error : std::sync::mpsc::SendError<(operation::Operation, state::State)>) -> Self {
+        MainError::SendError(send_error)
+    }
+}
+
+impl std::convert::From<std::num::ParseIntError> for MainError {
+    fn from(parse_error : std::num::ParseIntError) -> Self {
+        MainError::ParseIntError(parse_error)
+    }
+}
+
+fn main2(args : getopts::Matches, denon_name : String, denon_port : u16 ) -> Result<(), MainError> {
     let dc = DenonConnection::new(denon_name.as_str(), denon_port);
 
     if args.opt_present("s") {
@@ -119,7 +145,11 @@ fn main2(args : getopts::Matches, denon_name : String, denon_port : u16 ) -> Res
     }
 
     if let Some(v) = args.opt_str("v") {
-        let vi : u32 = v.parse().unwrap();
+        let mut vi : u32 = v.parse()?;
+        // do not accidentally kill the ears
+        if vi > 50 {
+            vi = 50;
+        }
         dc.set(State::MainVolume(vi))?;
     }
     Ok(())
