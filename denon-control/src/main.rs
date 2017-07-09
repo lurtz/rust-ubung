@@ -3,6 +3,8 @@
 // MVMAX 86
 
 extern crate getopts;
+extern crate avahi_sys;
+extern crate libc;
 
 mod denon_connection;
 mod state;
@@ -10,6 +12,7 @@ mod operation;
 mod parse;
 mod pulseaudio;
 mod avahi;
+mod avahi2;
 
 use denon_connection::{DenonConnection, State, Operation};
 use state::PowerState;
