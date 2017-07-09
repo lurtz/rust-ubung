@@ -1,21 +1,8 @@
 #![allow(dead_code)]
 
-use std::ptr;
-
-use avahi_sys::AvahiClient;
-use avahi_sys::AvahiClientFlags;
-use avahi_sys::AvahiClientState;
-use avahi_sys::avahi_client_new;
-use avahi_sys::avahi_client_free;
-use avahi_sys::avahi_simple_poll_new;
-use avahi_sys::avahi_simple_poll_get;
-use avahi_sys::avahi_simple_poll_free;
-
-
 mod avahi {
     use std;
     use avahi_sys;
-    use libc;
     use libc::{c_void, c_int};
 
     struct Poller {
@@ -71,15 +58,14 @@ mod avahi {
     unsafe extern "C" fn callback_fn(_client: *mut avahi_sys::AvahiClient,
                                   _state: avahi_sys::AvahiClientState,
                                   _userdata: *mut c_void) {
-        println!("callback is at: {:?}", _userdata);
-        let functor : &mut CallbackBoxed = std::mem::transmute(_userdata);
+        let functor : &CallbackBoxed = std::mem::transmute(_userdata);
         if let Some(client) = Client::wrap(_client) {
             functor(&client, _state);
         }
     }
 
     fn get_callback_with_data(user_callback: &Callback) -> (Option<CCallback>, *mut c_void) {
-         let callback : Option<unsafe extern "C" fn(*mut avahi_sys::AvahiClient, avahi_sys::AvahiClientState, *mut libc::c_void)>;
+         let callback : Option<CCallback>;
         let userdata : *mut c_void;
         if let Some(ref cb_box) = *user_callback {
             callback = Some(callback_fn);
@@ -96,8 +82,6 @@ mod avahi {
         pub fn new(user_callback: Callback) -> Option<Client> {
             unsafe {
                 let (callback, userdata) = get_callback_with_data(&user_callback);
-
-                println!("callback is at: {:?}", userdata);
 
                 if let Some(mut poller) = Poller::new() {
                     let mut err: c_int = 0;
@@ -156,6 +140,7 @@ mod avahi {
             let expected_userdata_cfn = &*cb as * const CallbackBoxed;
             let expected_userdata_mfn = expected_userdata_cfn as * mut CallbackBoxed;
             let expected_userdata_mv = expected_userdata_mfn as * mut libc::c_void;
+            assert!(0x0 != expected_userdata_mv as usize);
             assert!(0x1 != expected_userdata_mv as usize);
             let (c_callback, data) = get_callback_with_data(&Some(cb));
             assert!(c_callback.is_some());
@@ -167,50 +152,6 @@ mod avahi {
 
             assert_eq!(expected_userdata_mv, data);
         }
-
-        #[test]
-        fn address_of_closures() {
-            type ClosureFn = Fn(u32);
-            type BoxedClosure = Box<ClosureFn>;
-
-            let bla: Box<u32> = Box::new(42);
-            println!("ptr of int on heap {:p}", bla);
-            let cb: Box<BoxedClosure> = Box::new(Box::new(|n| { println!("blub {}", n); }));
-
-            println!("address of static function {:?}", address_of_closures as * const fn());
-            println!("stack address of cb {:?}", &cb as * const Box<BoxedClosure>);
-            println!("pointer of callback on heap via :p {:p}", cb);
-
-            let cb_ref : &BoxedClosure = &*cb;
-            println!("pointer of callback on heap via cast {:?}", cb_ref as * const BoxedClosure);
-            println!("pointer of callback on heap casted without intermediaries {:?}",  &*cb as &BoxedClosure as * const BoxedClosure);
-            println!("pointer of callback on heap casted without intermediaries {:?}",  &*cb as &BoxedClosure as * const BoxedClosure as * const libc::c_void);
-        }
-    }
-}
-
-fn bla() {
-    use libc::{c_void, c_int};
-
-    unsafe {
-        let mut err: c_int = 0;
-        unsafe extern "C" fn callback(_client: *mut AvahiClient,
-                                      _state: AvahiClientState,
-                                      _userdata: *mut c_void) {
-        }
-
-        let poller = avahi_simple_poll_new();
-        let client = avahi_client_new(avahi_simple_poll_get(poller),
-                                      AvahiClientFlags(0),
-                                      Some(callback),
-                                      ptr::null_mut(),
-                                      &mut err);
-        if err == 0
-        // TODO AVAHI_OK, avahi_strerror..
-        {
-            avahi_client_free(client);
-        }
-        avahi_simple_poll_free(poller);
     }
 }
 
@@ -219,6 +160,58 @@ mod test {
     use avahi2::avahi::CallbackBoxed2;
     use avahi2::avahi::Client;
 
+    use avahi_sys::{AvahiClient, AvahiClientFlags, AvahiClientState};
+    use avahi_sys::{avahi_client_new, avahi_client_free};
+    use avahi_sys::{avahi_simple_poll_new, avahi_simple_poll_get, avahi_simple_poll_free};
+
+    use std::ptr;
+    use libc::{c_void, c_int};
+
+    #[test]
+    fn example_code() {
+        unsafe {
+            let mut err: c_int = 0;
+            unsafe extern "C" fn callback(_client: *mut AvahiClient,
+                                          _state: AvahiClientState,
+                                          _userdata: *mut c_void) {
+            }
+
+            let poller = avahi_simple_poll_new();
+            let client = avahi_client_new(avahi_simple_poll_get(poller),
+                                          AvahiClientFlags(0),
+                                          Some(callback),
+                                          ptr::null_mut(),
+                                          &mut err);
+            if err == 0
+            // TODO AVAHI_OK, avahi_strerror..
+            {
+                avahi_client_free(client);
+            }
+            avahi_simple_poll_free(poller);
+        }
+    }
+
+    /*
+    #[test]
+    fn address_of_closures() {
+        type ClosureFn = Fn(u32);
+        type BoxedClosure = Box<ClosureFn>;
+
+        let bla: Box<u32> = Box::new(42);
+        println!("ptr of int on heap {:p}", bla);
+        let cb: Box<BoxedClosure> = Box::new(Box::new(|n| { println!("blub {}", n); }));
+
+        println!("address of static function {:?}", address_of_closures as * const fn());
+        println!("stack address of cb {:?}", &cb as * const Box<BoxedClosure>);
+        println!("pointer of callback on heap via :p {:p}", cb);
+
+        let cb_ref : &BoxedClosure = &*cb;
+        println!("pointer of callback on heap via cast {:?}", cb_ref as * const BoxedClosure);
+        println!("pointer of callback on heap casted without intermediaries {:?}",  &*cb as &BoxedClosure as * const BoxedClosure);
+        println!("pointer of callback on heap casted without intermediaries {:?}",  &*cb as &BoxedClosure as * const BoxedClosure as * const c_void);
+    }
+    */
+
     #[test]
     fn constructor_without_callback_works() {
         let _ = Client::new(None);
@@ -226,8 +219,15 @@ mod test {
 
     #[test]
     fn constructor_with_callback_works() {
-        let cb: CallbackBoxed2 = Box::new(Box::new(|_, _| {}));
+        let cb: CallbackBoxed2 = Box::new(Box::new(|_, state| {println!("received state: {:?}", state);}));
         let _ = Client::new(Some(cb));
+    }
+
+    #[test]
+    fn querying_data_from_daemon() {
+        let cb: CallbackBoxed2 = Box::new(Box::new(|_, state| {println!("received state: {:?}", state);}));
+        let _ = Client::new(Some(cb));
+        assert!(false);
     }
 }
 
