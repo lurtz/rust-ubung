@@ -69,22 +69,37 @@ mod avahi {
         }}
     }
 
-    callback_types![client_callback, [libc, avahi_sys, avahi2::avahi], Fn(&avahi::Client, avahi::ClientState), unsafe extern "C" fn (_client: *mut avahi_sys::AvahiClient, _state: avahi_sys::AvahiClientState, _userdata: *mut libc::c_void), avahi::callback_fn];
+    callback_types![client_callback, [libc, avahi_sys, avahi2::avahi], Fn(&avahi::ClientTrait, avahi::ClientState), unsafe extern "C" fn (_client: *mut avahi_sys::AvahiClient, _state: avahi_sys::AvahiClientState, _userdata: *mut libc::c_void), avahi::callback_fn];
+
+    pub trait ClientTrait {
+    }
+
+    struct WrappedClient {
+        client : * mut avahi_sys::AvahiClient,
+    }
+
+    impl ClientTrait for WrappedClient {}
+
+    impl WrappedClient {
+        fn new(client : * mut avahi_sys::AvahiClient) -> WrappedClient {
+            WrappedClient{client}
+        }
+    }
 
     pub struct Client {
         poller : Poller,
         client : * mut avahi_sys::AvahiClient,
         callback : client_callback::Callback,
-        wrapped : bool,
     }
+
+//    impl Client_trait for Client {}
 
     unsafe extern "C" fn callback_fn(_client: *mut avahi_sys::AvahiClient,
                                   _state: avahi_sys::AvahiClientState,
                                   _userdata: *mut c_void) {
         let functor : &client_callback::CallbackBoxed = std::mem::transmute(_userdata);
-        if let Some(client) = Client::wrap(_client) {
-            functor(&client, _state);
-        }
+        let client = WrappedClient::new(_client);
+        functor(&client, _state);
     }
 
     impl Client {
@@ -101,17 +116,11 @@ mod avahi {
                                           userdata,
                                           &mut err);
                     if 0 == err {
-                        return Some(Client{poller: poller, client: client, callback: user_callback, wrapped: false});
+                        return Some(Client{poller: poller, client: client, callback: user_callback});
                     }
                 }
                 return None;
             }
-        }
-        fn wrap(client: *mut avahi_sys::AvahiClient) -> Option<Client> {
-            if let Some(poller) = Poller::new() {
-                return Some(Client{poller: poller, client: client, callback: None, wrapped: true});
-            }
-            return None;
         }
 
         fn get(&self) -> * mut avahi_sys::AvahiClient {
@@ -125,10 +134,8 @@ mod avahi {
 
     impl Drop for Client {
         fn drop(&mut self) {
-            if !self.wrapped {
-                unsafe {
-                    avahi_sys::avahi_client_free(self.client);
-                }
+            unsafe {
+                avahi_sys::avahi_client_free(self.client);
             }
         }
     }
@@ -138,21 +145,34 @@ mod avahi {
     pub type BrowserEvent = avahi_sys::AvahiBrowserEvent;
     pub type LookupResultFlags = avahi_sys::AvahiLookupResultFlags;
 
-    callback_types![service_browser_callback, [libc, avahi_sys, avahi2::avahi], Fn(&avahi::ServiceBrowser, avahi::BrowserEvent, &str, &str, &str, avahi::LookupResultFlags), unsafe extern "C" fn (_service_browser: *mut avahi_sys::AvahiServiceBrowser, _ifindex: avahi_sys::AvahiIfIndex, _protocol: avahi_sys::AvahiProtocol, _event: avahi_sys::AvahiBrowserEvent, *const libc::c_char, *const libc::c_char, *const libc::c_char, _flags: avahi_sys::AvahiLookupResultFlags, _userdata: *mut libc::c_void), avahi::service_browser_callback_fn];
+    callback_types![service_browser_callback, [libc, avahi_sys, avahi2::avahi], Fn(&avahi::WrappedServiceBrowser, avahi::BrowserEvent, &str, &str, &str, avahi::LookupResultFlags), unsafe extern "C" fn (_service_browser: *mut avahi_sys::AvahiServiceBrowser, _ifindex: avahi_sys::AvahiIfIndex, _protocol: avahi_sys::AvahiProtocol, _event: avahi_sys::AvahiBrowserEvent, *const libc::c_char, *const libc::c_char, *const libc::c_char, _flags: avahi_sys::AvahiLookupResultFlags, _userdata: *mut libc::c_void), avahi::service_browser_callback_fn];
+
+    pub trait ServiceBrowserTrait {}
+
+    pub struct WrappedServiceBrowser {
+        service_browser: * mut avahi_sys::AvahiServiceBrowser,
+    }
+
+    impl WrappedServiceBrowser {
+        fn new(service_browser: * mut avahi_sys::AvahiServiceBrowser) -> WrappedServiceBrowser {
+            WrappedServiceBrowser{service_browser}
+        }
+    }
 
     unsafe extern "C" fn service_browser_callback_fn(
         _service_browser: *mut avahi_sys::AvahiServiceBrowser, _ifindex: avahi_sys::AvahiIfIndex, _protocol: avahi_sys::AvahiProtocol, _event: avahi_sys::AvahiBrowserEvent, _name: *const c_char, _type: *const c_char, _domain: *const c_char, _flags: avahi_sys::AvahiLookupResultFlags, _userdata: *mut c_void) {
         let functor : &service_browser_callback::CallbackBoxed = std::mem::transmute(_userdata);
-//        if let Some(client) = Client::wrap(_client) {
-//            functor(&client, _state);
-//        }
+        let sb = WrappedServiceBrowser::new(_service_browser);
+        let name_string = ffi::CStr::from_ptr(_name).to_string_lossy().into_owned();
+        let type_string = ffi::CStr::from_ptr(_type).to_string_lossy().into_owned();
+        let domain_string = ffi::CStr::from_ptr(_domain).to_string_lossy().into_owned();
+        functor(&sb, _event, &name_string, &type_string, &domain_string, _flags);
     }
 
     pub struct ServiceBrowser<'a> {
         client: &'a Client,
         service_browser: * mut avahi_sys::AvahiServiceBrowser,
         callback : service_browser_callback::Callback,
-        wrapped: bool,
     }
 
     impl<'a> ServiceBrowser<'a> {
@@ -161,22 +181,18 @@ mod avahi {
                 let ctype = ffi::CString::new(service_type).unwrap();
                 let sb = avahi_sys::avahi_service_browser_new(client.get(), -1, -1, ctype.as_ptr(), std::ptr::null(), avahi_sys::AvahiLookupFlags::AVAHI_LOOKUP_NO_TXT, None, std::ptr::null_mut());
                 if std::ptr::null() != sb {
-                    Some(ServiceBrowser{client: client, service_browser: sb, callback: callback, wrapped: false})
+                    Some(ServiceBrowser{client: client, service_browser: sb, callback: callback})
                 } else {
                     None
                 }
             }
         }
-
-        //fn wrap() -> ServiceBrowser {}
     }
 
     impl<'a> Drop for ServiceBrowser<'a> {
         fn drop(&mut self) {
             unsafe {
-                if !self.wrapped {
-                    avahi_sys::avahi_service_browser_free(self.service_browser);
-                }
+                avahi_sys::avahi_service_browser_free(self.service_browser);
             }
         }
     }
@@ -225,7 +241,7 @@ mod test {
     use avahi2::avahi::client_callback::CallbackBoxed2;
     use avahi2::avahi::Client;
 
-    use avahi_sys::{AvahiClient, AvahiClientFlags, ClientState};
+    use avahi_sys::{AvahiClient, AvahiClientFlags, AvahiClientState};
     use avahi_sys::{avahi_client_new, avahi_client_free};
     use avahi_sys::{avahi_simple_poll_new, avahi_simple_poll_get, avahi_simple_poll_free};
 
@@ -237,7 +253,7 @@ mod test {
         unsafe {
             let mut err: c_int = 0;
             unsafe extern "C" fn callback(_client: *mut AvahiClient,
-                                          _state: ClientState,
+                                          _state: AvahiClientState,
                                           _userdata: *mut c_void) {
             }
 
