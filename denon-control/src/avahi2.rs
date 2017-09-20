@@ -90,6 +90,7 @@ mod avahi {
         poller : Poller,
         client : * mut avahi_sys::AvahiClient,
         callback : client_callback::Callback,
+        service_browser: Option<ServiceBrowser>,
     }
 
 //    impl Client_trait for Client {}
@@ -116,7 +117,7 @@ mod avahi {
                                           userdata,
                                           &mut err);
                     if 0 == err {
-                        return Some(Client{poller: poller, client: client, callback: user_callback});
+                        return Some(Client{poller: poller, client: client, callback: user_callback, service_browser: None});
                     }
                 }
                 return None;
@@ -127,8 +128,20 @@ mod avahi {
             return self.client;
         }
 
-        fn create_service_browser<'a>(&'a self, service_type: &str, callback: service_browser_callback::Callback) -> Option<ServiceBrowser<'a>> {
-            ServiceBrowser::new(self, service_type, callback)
+        pub fn create_service_browser(&mut self, service_type: &str, callback: service_browser_callback::CallbackBoxed2) -> Result<(), ()> {
+            self.service_browser = ServiceBrowser::new(self, service_type, callback);
+            if self.service_browser.is_some() {
+                Ok(())
+            } else {
+                Err(())
+            }
+        }
+
+        pub fn simple_poll_loop(&mut self) -> bool {
+            unsafe {
+                avahi_sys::avahi_simple_poll_loop(self.poller.get_raw());
+            }
+            true
         }
     }
 
@@ -163,33 +176,61 @@ mod avahi {
         _service_browser: *mut avahi_sys::AvahiServiceBrowser, _ifindex: avahi_sys::AvahiIfIndex, _protocol: avahi_sys::AvahiProtocol, _event: avahi_sys::AvahiBrowserEvent, _name: *const c_char, _type: *const c_char, _domain: *const c_char, _flags: avahi_sys::AvahiLookupResultFlags, _userdata: *mut c_void) {
         let functor : &service_browser_callback::CallbackBoxed = std::mem::transmute(_userdata);
         let sb = WrappedServiceBrowser::new(_service_browser);
-        let name_string = ffi::CStr::from_ptr(_name).to_string_lossy().into_owned();
-        let type_string = ffi::CStr::from_ptr(_type).to_string_lossy().into_owned();
-        let domain_string = ffi::CStr::from_ptr(_domain).to_string_lossy().into_owned();
+
+        let name_string;
+        if std::ptr::null() != _name {
+            name_string = ffi::CStr::from_ptr(_name).to_string_lossy().into_owned()
+        } else {
+            name_string = String::from("");
+        }
+
+        let type_string;
+        if std::ptr::null() != _type {
+            type_string = ffi::CStr::from_ptr(_type).to_string_lossy().into_owned();
+        } else {
+            type_string = String::from("");
+        }
+
+        let domain_string;
+        if std::ptr::null() != _domain {
+            domain_string = ffi::CStr::from_ptr(_domain).to_string_lossy().into_owned();
+        } else {
+            domain_string = String::from("");
+        }
+
         functor(&sb, _event, &name_string, &type_string, &domain_string, _flags);
     }
 
-    pub struct ServiceBrowser<'a> {
-        client: &'a Client,
+    pub struct ServiceBrowser {
         service_browser: * mut avahi_sys::AvahiServiceBrowser,
-        callback : service_browser_callback::Callback,
+        callback : service_browser_callback::CallbackBoxed2,
     }
 
-    impl<'a> ServiceBrowser<'a> {
-        fn new(client: &'a Client, service_type: &str, callback: service_browser_callback::Callback) -> Option<ServiceBrowser<'a>> {
+    impl ServiceBrowser {
+        fn new(client: &Client, service_type: &str, user_callback: service_browser_callback::CallbackBoxed2) -> Option<ServiceBrowser> {
+            let cb_option: service_browser_callback::Callback = Some(user_callback);
+
             unsafe {
+                let flag: avahi_sys::AvahiLookupFlags = std::mem::transmute(0);
+
                 let ctype = ffi::CString::new(service_type).unwrap();
-                let sb = avahi_sys::avahi_service_browser_new(client.get(), -1, -1, ctype.as_ptr(), std::ptr::null(), avahi_sys::AvahiLookupFlags::AVAHI_LOOKUP_NO_TXT, None, std::ptr::null_mut());
+                let (callback, userdata) = service_browser_callback::get_callback_with_data(&cb_option);
+                let sb = avahi_sys::avahi_service_browser_new(client.get(), -1, -1, ctype.as_ptr(), std::ptr::null(), flag, callback, userdata);
                 if std::ptr::null() != sb {
-                    Some(ServiceBrowser{client: client, service_browser: sb, callback: callback})
+                    Some(ServiceBrowser{service_browser: sb, callback: cb_option.unwrap()})
                 } else {
+                    println!("error while creating service browser: {}", avahi_sys::avahi_client_errno(client.get()));
                     None
                 }
             }
         }
+
+        fn get(&self) -> * mut avahi_sys::AvahiServiceBrowser {
+            return self.service_browser;
+        }
     }
 
-    impl<'a> Drop for ServiceBrowser<'a> {
+    impl Drop for ServiceBrowser {
         fn drop(&mut self) {
             unsafe {
                 avahi_sys::avahi_service_browser_free(self.service_browser);
@@ -239,6 +280,7 @@ mod avahi {
 #[cfg(test)]
 mod test {
     use avahi2::avahi::client_callback::CallbackBoxed2;
+    use avahi2::avahi::service_browser_callback;
     use avahi2::avahi::Client;
 
     use avahi_sys::{AvahiClient, AvahiClientFlags, AvahiClientState};
@@ -305,9 +347,22 @@ mod test {
     }
 
     #[test]
-    fn querying_data_from_daemon() {
+    fn create_service_browser_with_callback() {
+        use std::thread;
+        use std::time::Duration;
+
         let cb: CallbackBoxed2 = Box::new(Box::new(|_, state| {println!("received state: {:?}", state);}));
-        let _ = Client::new(Some(cb));
+        let mut client = Client::new(Some(cb)).unwrap();
+        //let sbcb: service_browser_callback::CallbackBoxed2 = Box::new(Box::new(|_,_,_,_,_,_| {println!("received service")}));
+        let sbcb: service_browser_callback::CallbackBoxed2 = Box::new(Box::new(|_, _event, name_string, type_string, domain_string, _flags| {println!("received service: name {}, type {}, domain {}", name_string, type_string, domain_string)}));
+
+        let sb = client.create_service_browser("_presence._tcp", sbcb);
+        assert!(sb.is_ok());
+
+        client.simple_poll_loop();
+
+        thread::sleep(Duration::from_millis(50000));
+
         assert!(false);
     }
 }
