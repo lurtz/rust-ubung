@@ -137,9 +137,16 @@ mod avahi {
             }
         }
 
-        pub fn simple_poll_loop(&mut self) -> bool {
+        pub fn simple_poll_iterate(&mut self, mut sleep_time: i32) -> bool {
             unsafe {
-                avahi_sys::avahi_simple_poll_loop(self.poller.get_raw());
+                use std::thread;
+                use std::time::Duration;
+
+                while sleep_time > 0 && 0 == avahi_sys::avahi_simple_poll_iterate(self.poller.get_raw(), 0) {
+                    thread::sleep(Duration::from_millis(100));
+                    sleep_time -= 100;
+                }
+                //avahi_sys::avahi_simple_poll_loop(self.poller.get_raw());
             }
             true
         }
@@ -348,9 +355,6 @@ mod test {
 
     #[test]
     fn create_service_browser_with_callback() {
-        use std::thread;
-        use std::time::Duration;
-
         let cb: CallbackBoxed2 = Box::new(Box::new(|_, state| {println!("received state: {:?}", state);}));
         let mut client = Client::new(Some(cb)).unwrap();
         //let sbcb: service_browser_callback::CallbackBoxed2 = Box::new(Box::new(|_,_,_,_,_,_| {println!("received service")}));
@@ -359,9 +363,9 @@ mod test {
         let sb = client.create_service_browser("_presence._tcp", sbcb);
         assert!(sb.is_ok());
 
-        client.simple_poll_loop();
+        client.simple_poll_iterate(2000);
 
-        thread::sleep(Duration::from_millis(50000));
+//        thread::sleep(Duration::from_millis(50000));
 
         assert!(false);
     }
