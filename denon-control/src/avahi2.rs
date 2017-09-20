@@ -137,7 +137,7 @@ mod avahi {
             }
         }
 
-        pub fn simple_poll_iterate(&mut self, mut sleep_time: i32) -> bool {
+        pub fn simple_poll_iterate(&mut self, mut sleep_time: i32) {
             unsafe {
                 use std::thread;
                 use std::time::Duration;
@@ -146,21 +146,18 @@ mod avahi {
                     thread::sleep(Duration::from_millis(100));
                     sleep_time -= 100;
                 }
-                //avahi_sys::avahi_simple_poll_loop(self.poller.get_raw());
             }
-            true
         }
     }
 
     impl Drop for Client {
         fn drop(&mut self) {
+            self.service_browser = None;
             unsafe {
                 avahi_sys::avahi_client_free(self.client);
             }
         }
     }
-
-// typedef void(* AvahiServiceBrowserCallback) (AvahiServiceBrowser *b, AvahiIfIndex interface, AvahiProtocol protocol, AvahiBrowserEvent event, const char *name, const char *type, const char *domain, AvahiLookupResultFlags flags, void *userdata)
 
     pub type BrowserEvent = avahi_sys::AvahiBrowserEvent;
     pub type LookupResultFlags = avahi_sys::AvahiLookupResultFlags;
@@ -364,10 +361,6 @@ mod test {
         assert!(sb.is_ok());
 
         client.simple_poll_iterate(2000);
-
-//        thread::sleep(Duration::from_millis(50000));
-
-        assert!(false);
     }
 }
 
