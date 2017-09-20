@@ -228,10 +228,6 @@ mod avahi {
                 }
             }
         }
-
-        fn get(&self) -> * mut avahi_sys::AvahiServiceBrowser {
-            return self.service_browser;
-        }
     }
 
     impl Drop for ServiceBrowser {
