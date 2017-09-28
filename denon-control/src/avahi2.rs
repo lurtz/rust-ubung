@@ -70,7 +70,7 @@ mod avahi {
         }}
     }
 
-    callback_types![client_callback, [libc, avahi_sys, avahi2::avahi], Fn(&avahi::ClientTrait, avahi::ClientState), unsafe extern "C" fn (_client: *mut avahi_sys::AvahiClient, _state: avahi_sys::AvahiClientState, _userdata: *mut libc::c_void), avahi::callback_fn];
+    callback_types![client_callback, [libc, avahi_sys, avahi2::avahi], Fn(avahi::ClientState), unsafe extern "C" fn (_client: *mut avahi_sys::AvahiClient, _state: avahi_sys::AvahiClientState, _userdata: *mut libc::c_void), avahi::callback_fn];
 
     pub type ServiceResolver = avahi_sys::AvahiServiceResolver;
     pub type IfIndex = avahi_sys::AvahiIfIndex;
@@ -124,34 +124,6 @@ mod avahi {
                            *mut ::libc::c_void
         ), avahi::callback_fn_resolver];
 
-    pub trait ClientTrait {
-        fn create_service_resolver(&self, IfIndex, Protocol, &str, &str, &str, resolver_callback::Callback);
-    }
-
-    pub struct WrappedClient {
-        client : * mut avahi_sys::AvahiClient,
-    }
-
-    impl ClientTrait for WrappedClient {
-        fn create_service_resolver(&self, ifindex: IfIndex, prot: Protocol, name: &str, type_: &str, domain: &str, cb: resolver_callback::Callback) {
-            unsafe {
-                let (callback, userdata) = resolver_callback::get_callback_with_data(&cb);
-
-                let name_string = ffi::CString::new(name).unwrap();
-                let type_string = ffi::CString::new(type_).unwrap();
-                let domain_string = ffi::CString::new(domain).unwrap();
-
-                avahi_sys::avahi_service_resolver_new(self.client, ifindex, prot, name_string.as_ptr(), type_string.as_ptr(), domain_string.as_ptr(), -1, std::mem::transmute(0), callback, userdata);
-            }
-        }
-    }
-
-    impl WrappedClient {
-        fn new(client : * mut avahi_sys::AvahiClient) -> WrappedClient {
-            WrappedClient{client}
-        }
-    }
-
     pub struct Client {
         poller : Poller,
         client : * mut avahi_sys::AvahiClient,
@@ -165,8 +137,7 @@ mod avahi {
                                   _state: avahi_sys::AvahiClientState,
                                   _userdata: *mut c_void) {
         let functor : &client_callback::CallbackBoxed = std::mem::transmute(_userdata);
-        let client = WrappedClient::new(_client);
-        functor(&client, _state);
+        functor(_state);
     }
 
     impl Client {
@@ -240,32 +211,11 @@ mod avahi {
     pub type BrowserEvent = avahi_sys::AvahiBrowserEvent;
     pub type LookupResultFlags = avahi_sys::AvahiLookupResultFlags;
 
-    callback_types![service_browser_callback, [libc, avahi_sys, avahi2::avahi], Fn(&avahi::WrappedServiceBrowser, avahi::IfIndex, avahi::Protocol, avahi::BrowserEvent, &str, &str, &str, avahi::LookupResultFlags), unsafe extern "C" fn (_service_browser: *mut avahi_sys::AvahiServiceBrowser, _ifindex: avahi_sys::AvahiIfIndex, _protocol: avahi_sys::AvahiProtocol, _event: avahi_sys::AvahiBrowserEvent, *const libc::c_char, *const libc::c_char, *const libc::c_char, _flags: avahi_sys::AvahiLookupResultFlags, _userdata: *mut libc::c_void), avahi::service_browser_callback_fn];
-
-    pub trait ServiceBrowserTrait {
-        fn get_client(&self) -> WrappedClient;
-    }
-
-    pub struct WrappedServiceBrowser {
-        service_browser: * mut avahi_sys::AvahiServiceBrowser,
-    }
-
-    impl WrappedServiceBrowser {
-        fn new(service_browser: * mut avahi_sys::AvahiServiceBrowser) -> WrappedServiceBrowser {
-            WrappedServiceBrowser{service_browser}
-        }
-
-        pub fn get_client(&self) -> WrappedClient {
-            unsafe {
-                WrappedClient::new(avahi_sys::avahi_service_browser_get_client(self.service_browser))
-            }
-        }
-    }
+    callback_types![service_browser_callback, [libc, avahi_sys, avahi2::avahi], Fn(avahi::IfIndex, avahi::Protocol, avahi::BrowserEvent, &str, &str, &str, avahi::LookupResultFlags), unsafe extern "C" fn (_service_browser: *mut avahi_sys::AvahiServiceBrowser, _ifindex: avahi_sys::AvahiIfIndex, _protocol: avahi_sys::AvahiProtocol, _event: avahi_sys::AvahiBrowserEvent, *const libc::c_char, *const libc::c_char, *const libc::c_char, _flags: avahi_sys::AvahiLookupResultFlags, _userdata: *mut libc::c_void), avahi::service_browser_callback_fn];
 
     unsafe extern "C" fn service_browser_callback_fn(
         _service_browser: *mut avahi_sys::AvahiServiceBrowser, _ifindex: avahi_sys::AvahiIfIndex, _protocol: avahi_sys::AvahiProtocol, _event: avahi_sys::AvahiBrowserEvent, _name: *const c_char, _type: *const c_char, _domain: *const c_char, _flags: avahi_sys::AvahiLookupResultFlags, _userdata: *mut c_void) {
         let functor : &service_browser_callback::CallbackBoxed = std::mem::transmute(_userdata);
-        let sb = WrappedServiceBrowser::new(_service_browser);
 
         let name_string;
         if std::ptr::null() != _name {
@@ -288,7 +238,7 @@ mod avahi {
             domain_string = String::from("");
         }
 
-        functor(&sb, _ifindex, _protocol, _event, &name_string, &type_string, &domain_string, _flags);
+        functor(_ifindex, _protocol, _event, &name_string, &type_string, &domain_string, _flags);
     }
 
     pub struct ServiceBrowser {
@@ -345,7 +295,7 @@ mod avahi {
 
         #[test]
         fn get_callback_with_data_with_callback_works() {
-            let cb: CallbackBoxed2 = Rc::new(Box::new(|_, _| {}));
+            let cb: CallbackBoxed2 = Rc::new(Box::new(|_| {}));
             let expected_userdata_cfn = &*cb as * const CallbackBoxed;
             let expected_userdata_mfn = expected_userdata_cfn as * mut CallbackBoxed;
             let expected_userdata_mv = expected_userdata_mfn as * mut libc::c_void;
@@ -435,7 +385,7 @@ mod test {
 
     #[test]
     fn constructor_with_callback_works() {
-        let cb: CallbackBoxed2 = Rc::new(Box::new(|_, state| {println!("received state: {:?}", state);}));
+        let cb: CallbackBoxed2 = Rc::new(Box::new(|state| {println!("received state: {:?}", state);}));
         let _ = Client::new(Some(cb));
     }
 
@@ -446,7 +396,7 @@ mod test {
         use avahi2::avahi;
         use std::sync::mpsc::channel;
 
-        let cb: CallbackBoxed2 = Rc::new(Box::new(|_, state| {println!("received state: {:?}", state);}));
+        let cb: CallbackBoxed2 = Rc::new(Box::new(|state| {println!("received state: {:?}", state);}));
         let mut client = Client::new(Some(cb)).unwrap();
 
         let scrcb: resolver_callback::CallbackBoxed2 = Rc::new(Box::new(|host_name| {println!("hostname: {}" , host_name);}));
@@ -454,7 +404,7 @@ mod test {
        
         let (tx, rx) = channel::<(avahi::IfIndex, avahi::Protocol, String, String, String)>();
         let sbcb: service_browser_callback::CallbackBoxed2 = Rc::new(Box::new(
-                move |_wrapped_service_browser, _ifindex, _protocol, _event, name_string, type_string, domain_string, _flags| {
+                move |_ifindex, _protocol, _event, name_string, type_string, domain_string, _flags| {
                     println!("received service: name {}, type {}, domain {}", name_string, type_string, domain_string);
                     tx.send((_ifindex, _protocol, name_string.to_owned(), type_string.to_owned(), domain_string.to_owned())).unwrap();
                 }));
