@@ -72,13 +72,13 @@ mod avahi {
 
     callback_types![client_callback, [libc, avahi_sys, avahi2::avahi], Fn(&avahi::ClientTrait, avahi::ClientState), unsafe extern "C" fn (_client: *mut avahi_sys::AvahiClient, _state: avahi_sys::AvahiClientState, _userdata: *mut libc::c_void), avahi::callback_fn];
 
-    type ServiceResolver = avahi_sys::AvahiServiceResolver;
-    type IfIndex = avahi_sys::AvahiIfIndex;
-    type Protocol = avahi_sys::AvahiProtocol;
-    type LookupFlags = avahi_sys::AvahiLookupFlags;
-    type ResolverEvent = avahi_sys::AvahiResolverEvent;
-    type Address = avahi_sys::AvahiAddress;
-    type StringList = avahi_sys::AvahiStringList;
+    pub type ServiceResolver = avahi_sys::AvahiServiceResolver;
+    pub type IfIndex = avahi_sys::AvahiIfIndex;
+    pub type Protocol = avahi_sys::AvahiProtocol;
+    pub type LookupFlags = avahi_sys::AvahiLookupFlags;
+    pub type ResolverEvent = avahi_sys::AvahiResolverEvent;
+    pub type Address = avahi_sys::AvahiAddress;
+    pub type StringList = avahi_sys::AvahiStringList;
 
     unsafe extern "C" fn callback_fn_resolver(
         r: *mut ServiceResolver,
@@ -212,6 +212,18 @@ mod avahi {
                     thread::sleep(Duration::from_millis(100));
                     sleep_time -= 100;
                 }
+            }
+        }
+
+        fn create_service_resolver(&self, ifindex: IfIndex, prot: Protocol, name: &str, type_: &str, domain: &str, cb: resolver_callback::Callback) {
+            unsafe {
+                let (callback, userdata) = resolver_callback::get_callback_with_data(&cb);
+
+                let name_string = ffi::CString::new(name).unwrap();
+                let type_string = ffi::CString::new(type_).unwrap();
+                let domain_string = ffi::CString::new(domain).unwrap();
+
+                avahi_sys::avahi_service_resolver_new(self.client, ifindex, prot, name_string.as_ptr(), type_string.as_ptr(), domain_string.as_ptr(), -1, std::mem::transmute(0), callback, userdata);
             }
         }
     }
@@ -427,25 +439,34 @@ mod test {
         let _ = Client::new(Some(cb));
     }
 
+// fn create_service_resolver(&self, ifindex: IfIndex, prot: Protocol, name: &str, type_: &str, domain: &str, cb: resolver_callback::Callback) {
+
     #[test]
     fn create_service_browser_with_callback() {
-        use avahi2::avahi::ClientTrait;
+        use avahi2::avahi;
+        use std::sync::mpsc::channel;
 
         let cb: CallbackBoxed2 = Rc::new(Box::new(|_, state| {println!("received state: {:?}", state);}));
-        let scrcb: resolver_callback::CallbackBoxed2 = Rc::new(Box::new(|host_name| {println!("hostname: {}" , host_name);}));
-        let scrcb_copy = scrcb.clone();
         let mut client = Client::new(Some(cb)).unwrap();
-       // let sbcb: service_browser_callback::CallbackBoxed2 = Rc::new(Box::new(|_,_,_,_,_,_| {println!("received service")}));
+
+        let scrcb: resolver_callback::CallbackBoxed2 = Rc::new(Box::new(|host_name| {println!("hostname: {}" , host_name);}));
+        // let sbcb: service_browser_callback::CallbackBoxed2 = Rc::new(Box::new(|_,_,_,_,_,_| {println!("received service")}));
+       
+        let (tx, rx) = channel::<(avahi::IfIndex, avahi::Protocol, String, String, String)>();
         let sbcb: service_browser_callback::CallbackBoxed2 = Rc::new(Box::new(
                 move |_wrapped_service_browser, _ifindex, _protocol, _event, name_string, type_string, domain_string, _flags| {
                     println!("received service: name {}, type {}, domain {}", name_string, type_string, domain_string);
-                    _wrapped_service_browser.get_client().create_service_resolver(_ifindex, _protocol, name_string, type_string, domain_string, Some(scrcb_copy));
+                    tx.send((_ifindex, _protocol, name_string.to_owned(), type_string.to_owned(), domain_string.to_owned())).unwrap();
                 }));
 
         let sb = client.create_service_browser("_presence._tcp", sbcb);
         assert!(sb.is_ok());
 
         client.simple_poll_iterate(2000);
+
+        while let Ok(response) = rx.try_recv() {
+            println!("callback sent: {:?}", response);
+        }
     }
 }
 
