@@ -383,37 +383,8 @@ mod test {
     use avahi2::avahi::client_callback::CallbackBoxed2;
     use avahi2::avahi::Client;
 
-    use avahi_sys::{AvahiClient, AvahiClientFlags, AvahiClientState};
-    use avahi_sys::{avahi_client_new, avahi_client_free};
-    use avahi_sys::{avahi_simple_poll_new, avahi_simple_poll_get, avahi_simple_poll_free};
-
-    use std::ptr;
     use std::rc::Rc;
-    use libc::{c_void, c_int};
-
-    #[test]
-    fn example_code() {
-        unsafe {
-            let mut err: c_int = 0;
-            unsafe extern "C" fn callback(_client: *mut AvahiClient,
-                                          _state: AvahiClientState,
-                                          _userdata: *mut c_void) {
-            }
-
-            let poller = avahi_simple_poll_new();
-            let client = avahi_client_new(avahi_simple_poll_get(poller),
-                                          AvahiClientFlags(0),
-                                          Some(callback),
-                                          ptr::null_mut(),
-                                          &mut err);
-            if err == 0
-            // TODO AVAHI_OK, avahi_strerror..
-            {
-                avahi_client_free(client);
-            }
-            avahi_simple_poll_free(poller);
-        }
-    }
+    use libc::c_void;
 
     #[test]
     fn address_of_closures() {
