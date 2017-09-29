@@ -381,9 +381,7 @@ pub fn get_receiver() -> String {
 #[cfg(test)]
 mod test {
     use avahi2::avahi::client_callback::CallbackBoxed2;
-    use avahi2::avahi::resolver_callback;
     use avahi2::avahi::Client;
-    use avahi2::avahi;
 
     use avahi_sys::{AvahiClient, AvahiClientFlags, AvahiClientState};
     use avahi_sys::{avahi_client_new, avahi_client_free};
@@ -392,8 +390,6 @@ mod test {
     use std::ptr;
     use std::rc::Rc;
     use libc::{c_void, c_int};
-
-    use std::sync::mpsc::channel;
 
     #[test]
     fn example_code() {
@@ -457,34 +453,9 @@ mod test {
 
     #[test]
     fn create_service_browser_with_callback() {
-        let cb: CallbackBoxed2 = Rc::new(Box::new(|state| {println!("received state: {:?}", state);}));
-        let mut client = Client::new(Some(cb)).unwrap();
-
-        let (tx, rx) = channel();
-        let sbcb = avahi::create_service_browser_callback(tx, "DENON");
-
-        let sb1 = client.create_service_browser("_raop._tcp", sbcb);
-        assert!(sb1.is_ok());
-
-        client.simple_poll_iterate(1000);
-
-        let (tx_host, rx_host) = channel::<String>();
-        let scrcb: resolver_callback::CallbackBoxed2 = Rc::new(Box::new(move |host_name| {
-            println!("hostname: {}" , host_name);
-            tx_host.send(host_name.to_owned()).unwrap();
-        }));
-
-        while let Ok(response) = rx.try_recv() {
-            println!("callback sent: {:?}", response);
-            client.create_service_resolver(response.0, response.1, &response.2, &response.3, &response.4, Some(scrcb.clone()));
-        }
-        client.simple_poll_iterate(1000);
-
-        let mut hostnames = Vec::<String>::new();
-        while let Ok(hostname) = rx_host.try_recv() {
-            hostnames.push(hostname);
-        }
-        println!("hostnames received: {:?}", hostnames);
+        use avahi2;
+        let receiver = avahi2::get_receiver();
+        assert!("DENON-AVR-1912.local" == receiver);
     }
 }
 
