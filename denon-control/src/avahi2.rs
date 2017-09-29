@@ -94,16 +94,18 @@ mod avahi {
            _txt: *mut StringList,
            _flags: LookupResultFlags,
            userdata: *mut ::libc::c_void) {
-        let functor : &resolver_callback::CallbackBoxed = std::mem::transmute(userdata);
+        if avahi_sys::AvahiResolverEvent::AVAHI_RESOLVER_FOUND == _event {
+            let functor : &resolver_callback::CallbackBoxed = std::mem::transmute(userdata);
 
-        let host_name_string;
-        if std::ptr::null() != host_name {
-            host_name_string = ffi::CStr::from_ptr(host_name).to_string_lossy().into_owned()
-        } else {
-            host_name_string = String::from("");
+            let host_name_string;
+            if std::ptr::null() != host_name {
+                host_name_string = ffi::CStr::from_ptr(host_name).to_string_lossy().into_owned()
+            } else {
+                host_name_string = String::from("");
+            }
+
+            functor(&host_name_string);
         }
-
-        functor(&host_name_string);
         avahi_sys::avahi_service_resolver_free(r);
     }
 
@@ -186,7 +188,7 @@ mod avahi {
             }
         }
 
-        fn create_service_resolver(&self, ifindex: IfIndex, prot: Protocol, name: &str, type_: &str, domain: &str, cb: resolver_callback::Callback) {
+        pub fn create_service_resolver(&self, ifindex: IfIndex, prot: Protocol, name: &str, type_: &str, domain: &str, cb: resolver_callback::Callback) {
             unsafe {
                 let (callback, userdata) = resolver_callback::get_callback_with_data(&cb);
 
@@ -389,33 +391,43 @@ mod test {
         let _ = Client::new(Some(cb));
     }
 
-// fn create_service_resolver(&self, ifindex: IfIndex, prot: Protocol, name: &str, type_: &str, domain: &str, cb: resolver_callback::Callback) {
-
     #[test]
     fn create_service_browser_with_callback() {
+        use avahi_sys;
         use avahi2::avahi;
         use std::sync::mpsc::channel;
 
         let cb: CallbackBoxed2 = Rc::new(Box::new(|state| {println!("received state: {:?}", state);}));
         let mut client = Client::new(Some(cb)).unwrap();
 
-        let scrcb: resolver_callback::CallbackBoxed2 = Rc::new(Box::new(|host_name| {println!("hostname: {}" , host_name);}));
-        // let sbcb: service_browser_callback::CallbackBoxed2 = Rc::new(Box::new(|_,_,_,_,_,_| {println!("received service")}));
-       
         let (tx, rx) = channel::<(avahi::IfIndex, avahi::Protocol, String, String, String)>();
         let sbcb: service_browser_callback::CallbackBoxed2 = Rc::new(Box::new(
                 move |_ifindex, _protocol, _event, name_string, type_string, domain_string, _flags| {
                     println!("received service: name {}, type {}, domain {}", name_string, type_string, domain_string);
-                    tx.send((_ifindex, _protocol, name_string.to_owned(), type_string.to_owned(), domain_string.to_owned())).unwrap();
+                    if avahi_sys::AvahiBrowserEvent::AVAHI_BROWSER_NEW == _event {
+                        tx.send((_ifindex, _protocol, name_string.to_owned(), type_string.to_owned(), domain_string.to_owned())).unwrap();
+                    }
                 }));
 
-        let sb = client.create_service_browser("_presence._tcp", sbcb);
-        assert!(sb.is_ok());
+        let sb1 = client.create_service_browser("_raop._tcp", sbcb);
+        assert!(sb1.is_ok());
 
-        client.simple_poll_iterate(2000);
+        client.simple_poll_iterate(1000);
+
+        let (tx_host, rx_host) = channel::<String>();
+        let scrcb: resolver_callback::CallbackBoxed2 = Rc::new(Box::new(move |host_name| {
+            println!("hostname: {}" , host_name);
+            tx_host.send(host_name.to_owned()).unwrap();
+        }));
 
         while let Ok(response) = rx.try_recv() {
             println!("callback sent: {:?}", response);
+            client.create_service_resolver(response.0, response.1, &response.2, &response.3, &response.4, Some(scrcb.clone()));
+        }
+        client.simple_poll_iterate(1000);
+
+        while let Ok(hostname) = rx_host.try_recv() {
+            println!("hostname received: {:?}", hostname);
         }
     }
 }
