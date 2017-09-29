@@ -5,6 +5,8 @@ mod avahi {
     use avahi_sys;
     use libc::{c_void, c_int, c_char};
     use std::ffi;
+    use std::sync::mpsc::Sender;
+    use std::rc::Rc;
 
     struct Poller {
         poller : * mut avahi_sys::AvahiSimplePoll,
@@ -132,8 +134,6 @@ mod avahi {
         callback : client_callback::Callback,
         service_browser: Option<ServiceBrowser>,
     }
-
-//    impl Client_trait for Client {}
 
     unsafe extern "C" fn callback_fn(_client: *mut avahi_sys::AvahiClient,
                                   _state: avahi_sys::AvahiClientState,
@@ -276,6 +276,22 @@ mod avahi {
         }
     }
 
+    type ServiceBrowserMessage = (IfIndex, Protocol, String, String, String);
+
+    pub fn create_service_browser_callback(tx: Sender<ServiceBrowserMessage>, name_to_filter: &str) -> service_browser_callback::CallbackBoxed2 {
+        let filter_name = String::from(name_to_filter);
+        let sbcb: service_browser_callback::CallbackBoxed2 = Rc::new(Box::new(
+            move |_ifindex, _protocol, _event, name_string, type_string, domain_string, _flags| {
+                if avahi_sys::AvahiBrowserEvent::AVAHI_BROWSER_NEW == _event {
+                    if name_string.contains(&filter_name) {
+                        tx.send((_ifindex, _protocol, name_string.to_owned(), type_string.to_owned(), domain_string.to_owned())).unwrap();
+                    }
+                }
+            }));
+
+     sbcb
+    }
+
     #[cfg(test)]
     mod test {
         use avahi2::avahi::client_callback::get_callback_with_data;
@@ -316,12 +332,58 @@ mod avahi {
     }
 }
 
+pub fn get_receiver() -> String {
+    use avahi2::avahi;
+    use std::sync::mpsc::channel;
+    use std::rc::Rc;
+
+    let mut client = avahi::Client::new(None).unwrap();
+
+    let (tx, rx) = channel();
+    let sbcb = avahi::create_service_browser_callback(tx, "DENON");
+
+    let sb1 = client.create_service_browser("_raop._tcp", sbcb);
+    assert!(sb1.is_ok());
+
+    client.simple_poll_iterate(1000);
+
+    let (tx_host, rx_host) = channel::<String>();
+    let scrcb: avahi::resolver_callback::CallbackBoxed2 = Rc::new(Box::new(move |host_name| {
+        tx_host.send(host_name.to_owned()).unwrap();
+    }));
+
+    while let Ok(response) = rx.try_recv() {
+        client.create_service_resolver(response.0, response.1, &response.2, &response.3, &response.4, Some(scrcb.clone()));
+    }
+    client.simple_poll_iterate(1000);
+
+    let mut hostnames = Vec::<String>::new();
+    while let Ok(hostname) = rx_host.try_recv() {
+        hostnames.push(hostname);
+    }
+
+    if hostnames.len() > 1 {
+        println!("multiple receivers found: {:?}, taking: {}", hostnames, hostnames[0]);
+        println!("use -a option if you want to use another receiver");
+    }
+
+    if hostnames.is_empty() {
+        println!("No receiver found!");
+        return String::new();
+    } else {
+        return hostnames[0].clone();
+    }
+}
+
+
+
+
 #[cfg(test)]
 mod test {
     use avahi2::avahi::client_callback::CallbackBoxed2;
-    use avahi2::avahi::service_browser_callback;
     use avahi2::avahi::resolver_callback;
     use avahi2::avahi::Client;
+    use avahi2::avahi;
 
     use avahi_sys::{AvahiClient, AvahiClientFlags, AvahiClientState};
     use avahi_sys::{avahi_client_new, avahi_client_free};
@@ -330,6 +392,8 @@ mod test {
     use std::ptr;
     use std::rc::Rc;
     use libc::{c_void, c_int};
+
+    use std::sync::mpsc::channel;
 
     #[test]
     fn example_code() {
@@ -393,21 +457,11 @@ mod test {
 
     #[test]
     fn create_service_browser_with_callback() {
-        use avahi_sys;
-        use avahi2::avahi;
-        use std::sync::mpsc::channel;
-
         let cb: CallbackBoxed2 = Rc::new(Box::new(|state| {println!("received state: {:?}", state);}));
         let mut client = Client::new(Some(cb)).unwrap();
 
-        let (tx, rx) = channel::<(avahi::IfIndex, avahi::Protocol, String, String, String)>();
-        let sbcb: service_browser_callback::CallbackBoxed2 = Rc::new(Box::new(
-                move |_ifindex, _protocol, _event, name_string, type_string, domain_string, _flags| {
-                    println!("received service: name {}, type {}, domain {}", name_string, type_string, domain_string);
-                    if avahi_sys::AvahiBrowserEvent::AVAHI_BROWSER_NEW == _event {
-                        tx.send((_ifindex, _protocol, name_string.to_owned(), type_string.to_owned(), domain_string.to_owned())).unwrap();
-                    }
-                }));
+        let (tx, rx) = channel();
+        let sbcb = avahi::create_service_browser_callback(tx, "DENON");
 
         let sb1 = client.create_service_browser("_raop._tcp", sbcb);
         assert!(sb1.is_ok());
@@ -426,9 +480,11 @@ mod test {
         }
         client.simple_poll_iterate(1000);
 
+        let mut hostnames = Vec::<String>::new();
         while let Ok(hostname) = rx_host.try_recv() {
-            println!("hostname received: {:?}", hostname);
+            hostnames.push(hostname);
         }
+        println!("hostnames received: {:?}", hostnames);
     }
 }
 

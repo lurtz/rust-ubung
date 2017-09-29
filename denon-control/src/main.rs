@@ -75,7 +75,8 @@ fn get_receiver_and_port(args : &getopts::Matches) -> (String, u16) {
     if let Some(name) = args.opt_str("a") {
         denon_name = name;
     } else {
-        denon_name = avahi::get_receiver();
+        //denon_name = avahi::get_receiver();
+        denon_name = avahi2::get_receiver();
     }
     println!("using receiver: {}", denon_name);
     (denon_name, 23)
