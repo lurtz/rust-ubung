@@ -188,9 +188,10 @@ mod avahi {
             }
         }
 
-        pub fn create_service_resolver(&self, ifindex: IfIndex, prot: Protocol, name: &str, type_: &str, domain: &str, cb: resolver_callback::Callback) {
+        pub fn create_service_resolver(&self, ifindex: IfIndex, prot: Protocol, name: &str, type_: &str, domain: &str, cb: resolver_callback::CallbackBoxed2) {
             unsafe {
-                let (callback, userdata) = resolver_callback::get_callback_with_data(&cb);
+                let cb_option = Some(cb);
+                let (callback, userdata) = resolver_callback::get_callback_with_data(&cb_option);
 
                 let name_string = ffi::CString::new(name).unwrap();
                 let type_string = ffi::CString::new(type_).unwrap();
@@ -353,7 +354,7 @@ pub fn get_receiver() -> String {
     }));
 
     while let Ok(response) = rx.try_recv() {
-        client.create_service_resolver(response.0, response.1, &response.2, &response.3, &response.4, Some(scrcb.clone()));
+        client.create_service_resolver(response.0, response.1, &response.2, &response.3, &response.4, scrcb.clone());
     }
     client.simple_poll_iterate(1000);
 
@@ -374,9 +375,6 @@ pub fn get_receiver() -> String {
         return hostnames[0].clone();
     }
 }
-
-
-
 
 #[cfg(test)]
 mod test {
