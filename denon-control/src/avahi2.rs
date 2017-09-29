@@ -127,16 +127,36 @@ mod avahi {
             }
         }
 
-        fn get(&self) -> * mut avahi_sys::AvahiClient {
-            return self.client;
+        fn errno(&self) -> i32 {
+            unsafe {
+                avahi_sys::avahi_client_errno(self.client)
+            }
         }
 
         pub fn create_service_browser(&mut self, service_type: &str, callback: service_browser_callback::CallbackBoxed2) -> Result<(), ()> {
-            self.service_browser = ServiceBrowser::new(self, service_type, callback);
+            self.service_browser = self.create_service_browser2(service_type, callback);
             if self.service_browser.is_some() {
                 Ok(())
             } else {
                 Err(())
+            }
+        }
+
+        fn create_service_browser2(&self, service_type: &str, user_callback: service_browser_callback::CallbackBoxed2) -> Option<ServiceBrowser> {
+            let cb_option = Some(user_callback);
+
+            unsafe {
+                let flag = std::mem::transmute(0);
+
+                let ctype = ffi::CString::new(service_type).unwrap();
+                let (callback, userdata) = service_browser_callback::get_callback_with_data(&cb_option);
+                let sb = avahi_sys::avahi_service_browser_new(self.client, -1, -1, ctype.as_ptr(), std::ptr::null(), flag, callback, userdata);
+                if std::ptr::null() != sb {
+                    Some(ServiceBrowser::new(sb, cb_option.unwrap()))
+                } else {
+                    println!("error while creating service browser: {}", self.errno());
+                    None
+                }
             }
         }
 
@@ -225,23 +245,11 @@ mod avahi {
     }
 
     impl ServiceBrowser {
-        fn new(client: &Client, service_type: &str, user_callback: service_browser_callback::CallbackBoxed2) -> Option<ServiceBrowser> {
-            let cb_option = Some(user_callback);
-
-            unsafe {
-                let flag = std::mem::transmute(0);
-
-                let ctype = ffi::CString::new(service_type).unwrap();
-                let (callback, userdata) = service_browser_callback::get_callback_with_data(&cb_option);
-                let sb = avahi_sys::avahi_service_browser_new(client.get(), -1, -1, ctype.as_ptr(), std::ptr::null(), flag, callback, userdata);
-                if std::ptr::null() != sb {
-                    Some(ServiceBrowser{service_browser: sb, callback: cb_option.unwrap()})
-                } else {
-                    println!("error while creating service browser: {}", avahi_sys::avahi_client_errno(client.get()));
-                    None
-                }
-            }
+        fn new(service_browser: * mut avahi_sys::AvahiServiceBrowser, callback : service_browser_callback::CallbackBoxed2
+            ) -> ServiceBrowser {
+            ServiceBrowser{service_browser: service_browser, callback: callback}
         }
+
     }
 
     impl Drop for ServiceBrowser {
