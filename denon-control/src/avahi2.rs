@@ -239,7 +239,7 @@ mod avahi {
         functor(_ifindex, _protocol, _event, &name_string, &type_string, &domain_string, _flags);
     }
 
-    pub struct ServiceBrowser {
+    struct ServiceBrowser {
         service_browser: * mut avahi_sys::AvahiServiceBrowser,
         callback : service_browser_callback::CallbackBoxed2,
     }
@@ -325,14 +325,14 @@ mod avahi {
 
     #[cfg(test)]
     mod test {
+        use libc;
+        use std;
+        use std::rc::Rc;
         use avahi2::avahi::client_callback::get_callback_with_data;
         use avahi2::avahi::client_callback::CallbackBoxed;
         use avahi2::avahi::client_callback::CallbackBoxed2;
         use avahi2::avahi::client_callback::CCallback;
         use avahi2::avahi::callback_fn;
-        use libc;
-        use std;
-        use std::rc::Rc;
 
         #[test]
         fn get_callback_with_data_without_callback_works() {
