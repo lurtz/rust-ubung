@@ -6,6 +6,7 @@ mod avahi {
     use libc::{c_void, c_int, c_char};
     use std::ffi;
     use std::sync::mpsc::Sender;
+    use std::sync::{Arc, Mutex};
     use std::rc::Rc;
 
     type ClientState = avahi_sys::AvahiClientState;
@@ -49,12 +50,12 @@ mod avahi {
         }}
     }
 
-    struct Poller {
+    pub struct Poller {
         poller : * mut avahi_sys::AvahiSimplePoll,
     }
 
     impl Poller {
-        fn new() -> Option<Poller> {
+        pub fn new() -> Option<Poller> {
             unsafe {
                 let poller = avahi_sys::avahi_simple_poll_new();
                 if std::ptr::null() != poller {
@@ -69,8 +70,16 @@ mod avahi {
             avahi_sys::avahi_simple_poll_get(self.poller)
         }
 
-        unsafe fn get_raw(&mut self) -> * mut avahi_sys::AvahiSimplePoll {
-            return self.poller;
+        pub fn simple_poll_iterate(&mut self, mut sleep_time: i32) {
+            unsafe {
+                use std::thread;
+                use std::time::Duration;
+
+                while sleep_time > 0 && 0 == avahi_sys::avahi_simple_poll_iterate(self.poller, 0) {
+                    thread::sleep(Duration::from_millis(100));
+                    sleep_time -= 100;
+                }
+            }
         }
     }
 
@@ -93,7 +102,6 @@ mod avahi {
         avahi::callback_fn];
 
     pub struct Client {
-        poller : Poller,
         client : * mut avahi_sys::AvahiClient,
         callback : client_callback::Callback,
         service_browser: Option<ServiceBrowser>,
@@ -107,21 +115,19 @@ mod avahi {
     }
 
     impl Client {
-        pub fn new(user_callback: client_callback::Callback) -> Option<Client> {
+        pub fn new(poller: &mut Poller, user_callback: client_callback::Callback) -> Option<Client> {
             unsafe {
                 let (callback, userdata) = client_callback::get_callback_with_data(&user_callback);
 
-                if let Some(mut poller) = Poller::new() {
-                    let mut err: c_int = 0;
-                    let client = avahi_sys::avahi_client_new(
-                                          poller.get(),
-                                          avahi_sys::AvahiClientFlags(0),
-                                          callback,
-                                          userdata,
-                                          &mut err);
-                    if 0 == err {
-                        return Some(Client{poller: poller, client: client, callback: user_callback, service_browser: None});
-                    }
+                let mut err: c_int = 0;
+                let client = avahi_sys::avahi_client_new(
+                                      poller.get(),
+                                      avahi_sys::AvahiClientFlags(0),
+                                      callback,
+                                      userdata,
+                                      &mut err);
+                if 0 == err {
+                    return Some(Client{client: client, callback: user_callback, service_browser: None});
                 }
                 return None;
             }
@@ -156,18 +162,6 @@ mod avahi {
                 } else {
                     println!("error while creating service browser: {}", self.errno());
                     None
-                }
-            }
-        }
-
-        pub fn simple_poll_iterate(&mut self, mut sleep_time: i32) {
-            unsafe {
-                use std::thread;
-                use std::time::Duration;
-
-                while sleep_time > 0 && 0 == avahi_sys::avahi_simple_poll_iterate(self.poller.get_raw(), 0) {
-                    thread::sleep(Duration::from_millis(100));
-                    sleep_time -= 100;
                 }
             }
         }
@@ -260,18 +254,25 @@ mod avahi {
         }
     }
 
-    pub fn create_service_browser_callback(tx: Sender<ServiceBrowserMessage>, name_to_filter: &str) -> service_browser_callback::CallbackBoxed2 {
+    pub fn create_service_browser_callback(client: Arc<Mutex<Client>>, tx: Sender<String>, name_to_filter: &str) -> service_browser_callback::CallbackBoxed2 {
         let filter_name = String::from(name_to_filter);
+
+        let scrcb: resolver_callback::CallbackBoxed2 = Rc::new(Box::new(move |host_name| {
+            tx.send(host_name.to_owned()).unwrap();
+        }));
+
         let sbcb: service_browser_callback::CallbackBoxed2 = Rc::new(Box::new(
             move |_ifindex, _protocol, _event, name_string, type_string, domain_string, _flags| {
                 if avahi_sys::AvahiBrowserEvent::AVAHI_BROWSER_NEW == _event {
                     if name_string.contains(&filter_name) {
-                        tx.send((_ifindex, _protocol, name_string.to_owned(), type_string.to_owned(), domain_string.to_owned())).unwrap();
+                        let client_clone = client.clone();
+                        let client_locked = client_clone.lock().unwrap();
+                        client_locked.create_service_resolver(_ifindex, _protocol, name_string, type_string, domain_string, scrcb.clone());
                     }
                 }
             }));
 
-     sbcb
+        sbcb
     }
 
     unsafe extern "C" fn callback_fn_resolver(
@@ -366,31 +367,27 @@ mod avahi {
 pub fn get_receiver() -> String {
     use avahi2::avahi;
     use std::sync::mpsc::channel;
-    use std::rc::Rc;
+    use std::sync::{Arc, Mutex};
 
-    let mut client = avahi::Client::new(None).unwrap();
+    let mut poller = avahi::Poller::new().unwrap();
+    let client = Arc::new(Mutex::new(avahi::Client::new(&mut poller, None).unwrap()));
 
-    let (tx, rx) = channel();
-    let sbcb = avahi::create_service_browser_callback(tx, "DENON");
+    let (tx_host, rx_host) = channel();
 
-    let sb1 = client.create_service_browser("_raop._tcp", sbcb);
+    let sbcb = avahi::create_service_browser_callback(client.clone(), tx_host, "DENON");
+
+    let sb1 = client.lock().unwrap().create_service_browser("_raop._tcp", sbcb);
     assert!(sb1.is_ok());
 
-    client.simple_poll_iterate(1000);
-
-    let (tx_host, rx_host) = channel::<String>();
-    let scrcb: avahi::resolver_callback::CallbackBoxed2 = Rc::new(Box::new(move |host_name| {
-        tx_host.send(host_name.to_owned()).unwrap();
-    }));
-
-    while let Ok(response) = rx.try_recv() {
-        client.create_service_resolver(response.0, response.1, &response.2, &response.3, &response.4, scrcb.clone());
-    }
-    client.simple_poll_iterate(1000);
-
     let mut hostnames = Vec::new();
-    while let Ok(hostname) = rx_host.try_recv() {
-        hostnames.push(hostname);
+    let mut wait_time = 2000;
+    while wait_time > 0 && hostnames.is_empty() {
+        wait_time -= 100;
+        let message = rx_host.try_recv();
+        match message {
+            Ok(hostname) => hostnames.push(hostname),
+            Err(_) => poller.simple_poll_iterate(100),
+        }
     }
 
     if hostnames.len() > 1 {
@@ -410,6 +407,7 @@ pub fn get_receiver() -> String {
 mod test {
     use avahi2::avahi::client_callback::CallbackBoxed2;
     use avahi2::avahi::Client;
+    use avahi2::avahi::Poller;
 
     use std::rc::Rc;
     use libc::c_void;
@@ -441,13 +439,15 @@ mod test {
 
     #[test]
     fn constructor_without_callback_works() {
-        let _ = Client::new(None);
+        let mut poller = Poller::new().unwrap();
+        let _ = Client::new(&mut poller, None);
     }
 
     #[test]
     fn constructor_with_callback_works() {
         let cb: CallbackBoxed2 = Rc::new(Box::new(|state| {println!("received state: {:?}", state);}));
-        let _ = Client::new(Some(cb));
+        let mut poller = Poller::new().unwrap();
+        let _ = Client::new(&mut poller, Some(cb));
     }
 
     #[test]

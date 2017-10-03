@@ -1,12 +1,9 @@
 use std::process::Command;
 
 // control pulseaudio to switch outputs
-// sinks:
-// alsa_output.pci-0000_00_1b.0.analog-stereo
-// tunnel.cubietruck.local.alsa_output.platform-sunxi-sndspdif.0.analog-stereo
 
 pub const INTERNAL : &'static str = "alsa_output.pci-0000_00_1b.0.analog-stereo";
-pub const CUBIETRUCK : &'static str = "tunnel.cubietruck.local.alsa_output.platform-sunxi-sndspdif.0.analog-stereo";
+pub const CUBIETRUCK : &'static str = "tunnel.cubietruck-2.local.alsa_output.platform-sound.analog-stereo";
 
 const PACTL : &'static str = "/usr/bin/pactl";
 
