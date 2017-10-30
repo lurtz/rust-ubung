@@ -408,15 +408,14 @@ mod test {
     use avahi2::avahi::client_callback::CallbackBoxed2;
     use avahi2::avahi::Client;
     use avahi2::avahi::Poller;
+    use avahi2;
 
     use std::rc::Rc;
+    use std::sync::mpsc::channel;
     use libc::c_void;
 
     #[test]
     fn address_of_closures() {
-        use std::rc::Rc;
-        use std::sync::mpsc::channel;
-
         type ClosureFn = Fn(u32);
         type BoxedClosure = Box<ClosureFn>;
 
@@ -457,7 +456,6 @@ mod test {
 
     #[test]
     fn create_service_browser_with_callback() {
-        use avahi2;
         let receiver = avahi2::get_receiver();
         assert!("DENON-AVR-1912.local" == receiver);
     }
