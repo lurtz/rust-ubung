@@ -61,7 +61,7 @@ mod avahi {
     pub enum AvahiError {
         PollerNew,
         ClientNew,
-        CreateServiceBrowser,
+        CreateServiceBrowser(String, i32),
         NoHostsFound,
         ClientLocked,
         NulError,
@@ -187,10 +187,14 @@ mod avahi {
         }
 
         pub fn create_service_browser(&mut self, service_type: &str, callback: service_browser_callback::CallbackBoxed2) -> Result<(), AvahiError> {
-            self.service_browser = self.create_service_browser2(service_type, callback).ok();
-            match self.service_browser {
-                Some(_) => Ok(()),
-                None => Err(AvahiError::CreateServiceBrowser),
+            let service_browser = self.create_service_browser2(service_type, callback);
+            match service_browser {
+                Ok(sb) => {
+                    self.service_browser = Some(sb);
+                    Ok(())},
+                Err(err) => {
+                    self.service_browser = None;
+                    Err(err)},
             }
         }
 
@@ -206,8 +210,7 @@ mod avahi {
                 if std::ptr::null() != sb {
                     Ok(ServiceBrowser::new(sb, cb_option.unwrap()))
                 } else {
-                    println!("error while creating service browser: {}", self.errno());
-                    Err(AvahiError::CreateServiceBrowser)
+                    Err(AvahiError::CreateServiceBrowser(String::from("error while creating service browser"), self.errno()))
                 }
             }
         }
