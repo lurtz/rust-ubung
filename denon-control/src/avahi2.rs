@@ -102,6 +102,7 @@ mod avahi {
         avahi::callback_fn];
 
     pub struct Client {
+        poller: Arc<Mutex<Poller>>,
         client : * mut avahi_sys::AvahiClient,
         callback : client_callback::Callback,
         service_browser: Option<ServiceBrowser>,
@@ -115,19 +116,25 @@ mod avahi {
     }
 
     impl Client {
-        pub fn new(poller: &mut Poller, user_callback: client_callback::Callback) -> Option<Client> {
+        pub fn new(poller: Arc<Mutex<Poller>>, user_callback: client_callback::Callback) -> Option<Client> {
             unsafe {
                 let (callback, userdata) = client_callback::get_callback_with_data(&user_callback);
 
+                let native_poller;
+                {
+                    let poller_locked = poller.lock();
+                    native_poller = poller_locked.unwrap().get();
+                }
+
                 let mut err: c_int = 0;
                 let client = avahi_sys::avahi_client_new(
-                                      poller.get(),
+                                      native_poller,
                                       avahi_sys::AvahiClientFlags(0),
                                       callback,
                                       userdata,
                                       &mut err);
                 if 0 == err {
-                    return Some(Client{client: client, callback: user_callback, service_browser: None});
+                    return Some(Client{poller, client: client, callback: user_callback, service_browser: None});
                 }
                 return None;
             }
@@ -265,8 +272,7 @@ mod avahi {
             move |_ifindex, _protocol, _event, name_string, type_string, domain_string, _flags| {
                 if avahi_sys::AvahiBrowserEvent::AVAHI_BROWSER_NEW == _event {
                     if name_string.contains(&filter_name) {
-                        let client_clone = client.clone();
-                        let client_locked = client_clone.lock().unwrap();
+                        let client_locked = client.lock().unwrap();
                         client_locked.create_service_resolver(_ifindex, _protocol, name_string, type_string, domain_string, scrcb.clone());
                     }
                 }
@@ -369,8 +375,8 @@ pub fn get_receiver() -> String {
     use std::sync::mpsc::channel;
     use std::sync::{Arc, Mutex};
 
-    let mut poller = avahi::Poller::new().unwrap();
-    let client = Arc::new(Mutex::new(avahi::Client::new(&mut poller, None).unwrap()));
+    let poller = Arc::new(Mutex::new(avahi::Poller::new().unwrap()));
+    let client = Arc::new(Mutex::new(avahi::Client::new(poller.clone(), None).unwrap()));
 
     let (tx_host, rx_host) = channel();
 
@@ -386,7 +392,9 @@ pub fn get_receiver() -> String {
         let message = rx_host.try_recv();
         match message {
             Ok(hostname) => hostnames.push(hostname),
-            Err(_) => poller.simple_poll_iterate(100),
+            Err(_) => {
+                let poller_locked = poller.lock();
+                poller_locked.unwrap().simple_poll_iterate(100) },
         }
     }
 
@@ -411,6 +419,8 @@ mod test {
     use avahi2;
 
     use std::rc::Rc;
+    use std::sync::Arc;
+    use std::sync::Mutex;
     use std::sync::mpsc::channel;
     use libc::c_void;
 
@@ -443,15 +453,15 @@ mod test {
 
     #[test]
     fn constructor_without_callback_works() {
-        let mut poller = Poller::new().unwrap();
-        let _ = Client::new(&mut poller, None);
+        let poller = Arc::new(Mutex::new(Poller::new().unwrap()));
+        let _ = Client::new(poller, None);
     }
 
     #[test]
     fn constructor_with_callback_works() {
         let cb: CallbackBoxed2 = Rc::new(Box::new(|state| {println!("received state: {:?}", state);}));
-        let mut poller = Poller::new().unwrap();
-        let _ = Client::new(&mut poller, Some(cb));
+        let poller = Arc::new(Mutex::new(Poller::new().unwrap()));
+        let _ = Client::new(poller, Some(cb));
     }
 
     #[test]
