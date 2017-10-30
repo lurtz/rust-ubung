@@ -8,6 +8,8 @@ mod avahi {
     use std::sync::mpsc::Sender;
     use std::sync::{Arc, Mutex};
     use std::rc::Rc;
+    use std::thread;
+    use std::time::{Duration, Instant};
 
     type ClientState = avahi_sys::AvahiClientState;
     type ServiceResolver = avahi_sys::AvahiServiceResolver;
@@ -77,18 +79,23 @@ mod avahi {
             avahi_sys::avahi_simple_poll_get(self.poller)
         }
 
-        pub fn simple_poll_iterate(&mut self, sleep_time: u64) {
+        fn simple_poll_iterate(&mut self, sleep_time: i32) -> i32 {
             unsafe {
-                use std::thread;
-                use std::time::{Duration, Instant};
+                 avahi_sys::avahi_simple_poll_iterate(self.poller, sleep_time)
+            }
+        }
 
-                let start = Instant::now();
-                let mut elapsed_time = 0;
+        pub fn iterate(&mut self, sleep_time: u64) {
+            let start = Instant::now();
+            let mut time_remaining = sleep_time;
 
-
-                while elapsed_time <= sleep_time as u64 && 0 == avahi_sys::avahi_simple_poll_iterate(self.poller,  (sleep_time - elapsed_time) as i32) {
-                    elapsed_time = time_in_millis(&start);
+            while time_remaining != 0 && 0 == self.simple_poll_iterate(time_remaining as i32) {
+                let elapsed_time = time_in_millis(&start);
+                if sleep_time > elapsed_time {
+                    time_remaining = sleep_time - elapsed_time;
                     thread::sleep(Duration::from_millis(25));
+                } else {
+                    time_remaining = 0;
                 }
             }
         }
@@ -406,7 +413,7 @@ pub fn get_hostname(type_: &str, filter: &str) -> String {
             Ok(hostname) => hostnames.push(hostname),
             Err(_) => {
                 let poller_locked = poller.lock();
-                poller_locked.unwrap().simple_poll_iterate(100) },
+                poller_locked.unwrap().iterate(100) },
         }
     }
 
