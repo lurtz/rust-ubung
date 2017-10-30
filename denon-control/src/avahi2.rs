@@ -309,16 +309,16 @@ mod avahi {
         let filter_name = String::from(name_to_filter);
 
         let scrcb: resolver_callback::CallbackBoxed2 = Rc::new(Box::new(move |host_name| {
-            tx.send(host_name.to_owned()).ok();
+            if let Some(hostname) = host_name {
+                tx.send(hostname).ok();
+            }
         }));
 
         let sbcb: service_browser_callback::CallbackBoxed2 = Rc::new(Box::new(
             move |_ifindex, _protocol, _event, name_string, type_string, domain_string, _flags| {
-                if avahi_sys::AvahiBrowserEvent::AVAHI_BROWSER_NEW == _event {
-                    if name_string.contains(&filter_name) {
-                        if let Ok(client_locked) = client.lock() {
-                            client_locked.create_service_resolver(_ifindex, _protocol, name_string, type_string, domain_string, scrcb.clone());
-                        }
+                if avahi_sys::AvahiBrowserEvent::AVAHI_BROWSER_NEW == _event && name_string.contains(&filter_name) {
+                    if let Ok(client_locked) = client.lock() {
+                        client_locked.create_service_resolver(_ifindex, _protocol, name_string, type_string, domain_string, scrcb.clone());
                     }
                 }
             }));
@@ -345,12 +345,12 @@ mod avahi {
 
             let host_name_string;
             if std::ptr::null() != host_name {
-                host_name_string = ffi::CStr::from_ptr(host_name).to_string_lossy().into_owned()
+                host_name_string = Some(ffi::CStr::from_ptr(host_name).to_string_lossy().into_owned())
             } else {
-                host_name_string = String::from("");
+                host_name_string = None
             }
 
-            functor(&host_name_string);
+            functor(host_name_string);
         }
         avahi_sys::avahi_service_resolver_free(r);
     }
@@ -358,7 +358,7 @@ mod avahi {
     callback_types![
         resolver_callback,
         [avahi2::avahi],
-        Fn(&str),
+        Fn(Option<String>),
         unsafe extern "C" fn(
             *mut avahi::ServiceResolver,
             avahi::IfIndex,
