@@ -388,7 +388,7 @@ mod avahi {
     }
 }
 
-pub fn get_hostname(type_: &str, filter: &str) -> String {
+pub fn get_hostname(type_: &str, filter: &str) -> Option<String> {
     use avahi2::avahi;
     use std::sync::mpsc::channel;
     use std::sync::{Arc, Mutex};
@@ -423,13 +423,13 @@ pub fn get_hostname(type_: &str, filter: &str) -> String {
 
     if hostnames.is_empty() {
         println!("No host found!");
-        return String::new();
+        return None;
     } else {
-        return hostnames[0].clone();
+        return Some(hostnames[0].clone());
     }
 }
 
-pub fn get_receiver() -> String {
+pub fn get_receiver() -> Option<String> {
     get_hostname("_raop._tcp", "DENON")
 }
 
@@ -489,13 +489,13 @@ mod test {
     #[test]
     fn create_service_browser_with_callback() {
         let receiver = avahi2::get_receiver();
-        assert!("DENON-AVR-1912.local" == receiver);
+        assert!("DENON-AVR-1912.local" == receiver.unwrap());
     }
 
     #[test]
     fn get_hostname() {
         let host = avahi2::get_hostname("_presence._tcp", "");
-        assert!("barcas.local" == host);
+        assert!("barcas.local" == host.unwrap());
     }
 }
 

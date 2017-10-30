@@ -1,6 +1,6 @@
 use std::process::Command;
 
-pub fn get_receiver() -> String {
+pub fn get_receiver() -> Option<String> {
     let output = Command::new("/usr/bin/avahi-browse")
         .arg("-p")
         .arg("-t")
@@ -25,8 +25,8 @@ pub fn get_receiver() -> String {
 
     if denon_names.is_empty() {
         println!("No receiver found!");
-        return String::new();
+        return None;
     } else {
-        return String::from(denon_names[0]);
+        return Some(String::from(denon_names[0]));
     }
 }

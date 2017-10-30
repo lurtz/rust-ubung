@@ -76,7 +76,11 @@ fn get_receiver_and_port(args : &getopts::Matches) -> (String, u16) {
         denon_name = name;
     } else {
         //denon_name = avahi::get_receiver();
-        denon_name = avahi2::get_receiver();
+        let denon_name_option = avahi2::get_receiver();
+        match denon_name_option {
+            Some(name) => denon_name = name,
+            None => {denon_name = String::new(); println!("no receiver found, consider using the -a option");}
+        }
     }
     println!("using receiver: {}", denon_name);
     (denon_name, 23)
