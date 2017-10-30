@@ -64,6 +64,7 @@ mod avahi {
         CreateServiceBrowser,
         NoHostsFound,
         ClientLocked,
+        NulError,
     }
 
     impl<'a> std::convert::From<std::sync::PoisonError<std::sync::MutexGuard<'a, Poller>>> for AvahiError {
@@ -75,6 +76,12 @@ mod avahi {
     impl<'a> std::convert::From<std::sync::PoisonError<std::sync::MutexGuard<'a, Client>>> for AvahiError {
         fn from(_error : std::sync::PoisonError<std::sync::MutexGuard<'a, Client>>) -> Self {
             AvahiError::ClientLocked
+        }
+    }
+
+    impl std::convert::From<std::ffi::NulError> for AvahiError {
+        fn from(_error : std::ffi::NulError) -> Self {
+            AvahiError::NulError
         }
     }
 
@@ -180,31 +187,27 @@ mod avahi {
         }
 
         pub fn create_service_browser(&mut self, service_type: &str, callback: service_browser_callback::CallbackBoxed2) -> Result<(), AvahiError> {
-            self.service_browser = self.create_service_browser2(service_type, callback);
+            self.service_browser = self.create_service_browser2(service_type, callback).ok();
             match self.service_browser {
                 Some(_) => Ok(()),
                 None => Err(AvahiError::CreateServiceBrowser),
             }
         }
 
-        fn create_service_browser2(&self, service_type: &str, user_callback: service_browser_callback::CallbackBoxed2) -> Option<ServiceBrowser> {
+        fn create_service_browser2(&self, service_type: &str, user_callback: service_browser_callback::CallbackBoxed2) -> Result<ServiceBrowser, AvahiError> {
             let cb_option = Some(user_callback);
 
             unsafe {
                 let flag = std::mem::transmute(0);
 
-                let ctype;
-                match ffi::CString::new(service_type) {
-                    Ok(string) => ctype = string,
-                    Err(_) => return None,
-                }
+                let ctype = ffi::CString::new(service_type)?;
                 let (callback, userdata) = service_browser_callback::get_callback_with_data(&cb_option);
                 let sb = avahi_sys::avahi_service_browser_new(self.client, -1, -1, ctype.as_ptr(), std::ptr::null(), flag, callback, userdata);
                 if std::ptr::null() != sb {
-                    Some(ServiceBrowser::new(sb, cb_option.unwrap()))
+                    Ok(ServiceBrowser::new(sb, cb_option.unwrap()))
                 } else {
                     println!("error while creating service browser: {}", self.errno());
-                    None
+                    Err(AvahiError::CreateServiceBrowser)
                 }
             }
         }
