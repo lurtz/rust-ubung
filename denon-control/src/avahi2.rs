@@ -415,12 +415,15 @@ mod test {
     #[test]
     fn address_of_closures() {
         use std::rc::Rc;
+        use std::sync::mpsc::channel;
+
         type ClosureFn = Fn(u32);
         type BoxedClosure = Box<ClosureFn>;
 
         let bla: Box<u32> = Box::new(42);
         println!("ptr of int on heap {:p}", bla);
-        let cb: Rc<BoxedClosure> = Rc::new(Box::new(|n| { println!("blub {}", n); }));
+        let (tx, rx) = channel();
+        let cb: Rc<BoxedClosure> = Rc::new(Box::new(move |n| { tx.send(n).is_ok(); println!("blub {}", n); }));
 
         println!("address of static function {:?}", address_of_closures as * const fn());
         println!("stack address of cb {:?}", &cb as * const Rc<BoxedClosure>);
@@ -435,6 +438,8 @@ mod test {
         unsafe {
             (*cb_ptr)(3);
         }
+
+        assert!(3 == rx.recv().unwrap());
     }
 
     #[test]
