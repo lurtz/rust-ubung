@@ -50,6 +50,13 @@ mod avahi {
         }}
     }
 
+    pub fn time_in_millis(timer: &std::time::Instant) -> u64 {
+        let elapsed = timer.elapsed();
+        let el_s = elapsed.as_secs() * 1000;
+        let el_n = (elapsed.subsec_nanos() / 1_000_000) as u64;
+        el_s + el_n
+    }
+
     pub struct Poller {
         poller : * mut avahi_sys::AvahiSimplePoll,
     }
@@ -70,14 +77,18 @@ mod avahi {
             avahi_sys::avahi_simple_poll_get(self.poller)
         }
 
-        pub fn simple_poll_iterate(&mut self, mut sleep_time: i32) {
+        pub fn simple_poll_iterate(&mut self, sleep_time: u64) {
             unsafe {
                 use std::thread;
-                use std::time::Duration;
+                use std::time::{Duration, Instant};
 
-                while sleep_time > 0 && 0 == avahi_sys::avahi_simple_poll_iterate(self.poller, 0) {
-                    thread::sleep(Duration::from_millis(100));
-                    sleep_time -= 100;
+                let start = Instant::now();
+                let mut elapsed_time = 0;
+
+
+                while elapsed_time <= sleep_time as u64 && 0 == avahi_sys::avahi_simple_poll_iterate(self.poller,  (sleep_time - elapsed_time) as i32) {
+                    elapsed_time = time_in_millis(&start);
+                    thread::sleep(Duration::from_millis(25));
                 }
             }
         }
@@ -374,6 +385,7 @@ pub fn get_hostname(type_: &str, filter: &str) -> String {
     use avahi2::avahi;
     use std::sync::mpsc::channel;
     use std::sync::{Arc, Mutex};
+    use std::time::Instant;
 
     let poller = Arc::new(Mutex::new(avahi::Poller::new().unwrap()));
     let client = Arc::new(Mutex::new(avahi::Client::new(poller.clone(), None).unwrap()));
@@ -386,9 +398,9 @@ pub fn get_hostname(type_: &str, filter: &str) -> String {
     assert!(sb1.is_ok());
 
     let mut hostnames = Vec::new();
-    let mut wait_time = 2000;
-    while wait_time > 0 && hostnames.is_empty() {
-        wait_time -= 100;
+    let start = Instant::now();
+    let wait_time = 2000;
+    while avahi::time_in_millis(&start) < wait_time && hostnames.is_empty() {
         let message = rx_host.try_recv();
         match message {
             Ok(hostname) => hostnames.push(hostname),
