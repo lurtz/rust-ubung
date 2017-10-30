@@ -4,11 +4,10 @@ mod avahi {
     use std;
     use avahi_sys;
     use libc::{c_void, c_int, c_char};
-    use std::ffi;
+    use std::{ffi, thread};
     use std::sync::mpsc::Sender;
     use std::sync::{Arc, Mutex};
     use std::rc::Rc;
-    use std::thread;
     use std::time::{Duration, Instant};
 
     type ClientState = avahi_sys::AvahiClientState;
@@ -59,18 +58,38 @@ mod avahi {
         el_s + el_n
     }
 
+    pub enum AvahiError {
+        PollerNew,
+        ClientNew,
+        CreateServiceBrowser,
+        NoHostsFound,
+        ClientLocked,
+    }
+
+    impl<'a> std::convert::From<std::sync::PoisonError<std::sync::MutexGuard<'a, Poller>>> for AvahiError {
+        fn from(_error : std::sync::PoisonError<std::sync::MutexGuard<'a, Poller>>) -> Self {
+            AvahiError::PollerNew
+        }
+    }
+
+    impl<'a> std::convert::From<std::sync::PoisonError<std::sync::MutexGuard<'a, Client>>> for AvahiError {
+        fn from(_error : std::sync::PoisonError<std::sync::MutexGuard<'a, Client>>) -> Self {
+            AvahiError::ClientLocked
+        }
+    }
+
     pub struct Poller {
         poller : * mut avahi_sys::AvahiSimplePoll,
     }
 
     impl Poller {
-        pub fn new() -> Option<Poller> {
+        pub fn new() -> Result<Poller, AvahiError> {
             unsafe {
                 let poller = avahi_sys::avahi_simple_poll_new();
                 if std::ptr::null() != poller {
-                    return Some(Poller{poller: poller});
+                    return Ok(Poller{poller: poller});
                 } else {
-                    return None;
+                    return Err(AvahiError::PollerNew);
                 }
             }
         }
@@ -134,15 +153,11 @@ mod avahi {
     }
 
     impl Client {
-        pub fn new(poller: Arc<Mutex<Poller>>, user_callback: client_callback::Callback) -> Option<Client> {
+        pub fn new(poller: Arc<Mutex<Poller>>, user_callback: client_callback::Callback) -> Result<Client, AvahiError> {
             unsafe {
                 let (callback, userdata) = client_callback::get_callback_with_data(&user_callback);
 
-                let native_poller;
-                {
-                    let poller_locked = poller.lock();
-                    native_poller = poller_locked.unwrap().get();
-                }
+                let native_poller = poller.lock()?.get();
 
                 let mut err: c_int = 0;
                 let client = avahi_sys::avahi_client_new(
@@ -152,9 +167,9 @@ mod avahi {
                                       userdata,
                                       &mut err);
                 if 0 == err {
-                    return Some(Client{poller, client: client, callback: user_callback, service_browser: None});
+                    return Ok(Client{poller, client: client, callback: user_callback, service_browser: None});
                 }
-                return None;
+                return Err(AvahiError::ClientNew);
             }
         }
 
@@ -164,12 +179,11 @@ mod avahi {
             }
         }
 
-        pub fn create_service_browser(&mut self, service_type: &str, callback: service_browser_callback::CallbackBoxed2) -> Result<(), ()> {
+        pub fn create_service_browser(&mut self, service_type: &str, callback: service_browser_callback::CallbackBoxed2) -> Result<(), AvahiError> {
             self.service_browser = self.create_service_browser2(service_type, callback);
-            if self.service_browser.is_some() {
-                Ok(())
-            } else {
-                Err(())
+            match self.service_browser {
+                Some(_) => Ok(()),
+                None => Err(AvahiError::CreateServiceBrowser),
             }
         }
 
@@ -179,7 +193,11 @@ mod avahi {
             unsafe {
                 let flag = std::mem::transmute(0);
 
-                let ctype = ffi::CString::new(service_type).unwrap();
+                let ctype;
+                match ffi::CString::new(service_type) {
+                    Ok(string) => ctype = string,
+                    Err(_) => return None,
+                }
                 let (callback, userdata) = service_browser_callback::get_callback_with_data(&cb_option);
                 let sb = avahi_sys::avahi_service_browser_new(self.client, -1, -1, ctype.as_ptr(), std::ptr::null(), flag, callback, userdata);
                 if std::ptr::null() != sb {
@@ -196,11 +214,13 @@ mod avahi {
                 let cb_option = Some(cb);
                 let (callback, userdata) = resolver_callback::get_callback_with_data(&cb_option);
 
-                let name_string = ffi::CString::new(name).unwrap();
-                let type_string = ffi::CString::new(type_).unwrap();
-                let domain_string = ffi::CString::new(domain).unwrap();
+                let name_string = ffi::CString::new(name);
+                let type_string = ffi::CString::new(type_);
+                let domain_string = ffi::CString::new(domain);
 
-                avahi_sys::avahi_service_resolver_new(self.client, ifindex, prot, name_string.as_ptr(), type_string.as_ptr(), domain_string.as_ptr(), -1, std::mem::transmute(0), callback, userdata);
+                if name_string.is_ok() && type_string.is_ok() && domain_string.is_ok() {
+                    avahi_sys::avahi_service_resolver_new(self.client, ifindex, prot, name_string.unwrap().as_ptr(), type_string.unwrap().as_ptr(), domain_string.unwrap().as_ptr(), -1, std::mem::transmute(0), callback, userdata);
+                }
             }
         }
     }
@@ -283,15 +303,16 @@ mod avahi {
         let filter_name = String::from(name_to_filter);
 
         let scrcb: resolver_callback::CallbackBoxed2 = Rc::new(Box::new(move |host_name| {
-            tx.send(host_name.to_owned()).unwrap();
+            tx.send(host_name.to_owned()).ok();
         }));
 
         let sbcb: service_browser_callback::CallbackBoxed2 = Rc::new(Box::new(
             move |_ifindex, _protocol, _event, name_string, type_string, domain_string, _flags| {
                 if avahi_sys::AvahiBrowserEvent::AVAHI_BROWSER_NEW == _event {
                     if name_string.contains(&filter_name) {
-                        let client_locked = client.lock().unwrap();
-                        client_locked.create_service_resolver(_ifindex, _protocol, name_string, type_string, domain_string, scrcb.clone());
+                        if let Ok(client_locked) = client.lock() {
+                            client_locked.create_service_resolver(_ifindex, _protocol, name_string, type_string, domain_string, scrcb.clone());
+                        }
                     }
                 }
             }));
@@ -388,20 +409,20 @@ mod avahi {
     }
 }
 
-pub fn get_hostname(type_: &str, filter: &str) -> Option<String> {
+pub fn get_hostname(type_: &str, filter: &str) -> Result<String, avahi::AvahiError> {
     use avahi2::avahi;
     use std::sync::mpsc::channel;
     use std::sync::{Arc, Mutex};
     use std::time::Instant;
 
-    let poller = Arc::new(Mutex::new(avahi::Poller::new().unwrap()));
-    let client = Arc::new(Mutex::new(avahi::Client::new(poller.clone(), None).unwrap()));
+    let poller = Arc::new(Mutex::new(avahi::Poller::new()?));
+    let client = Arc::new(Mutex::new(avahi::Client::new(poller.clone(), None)?));
 
     let (tx_host, rx_host) = channel();
 
     let sbcb = avahi::create_service_browser_callback(client.clone(), tx_host, filter);
 
-    let sb1 = client.lock().unwrap().create_service_browser(type_, sbcb);
+    let sb1 = client.lock()?.create_service_browser(type_, sbcb);
     assert!(sb1.is_ok());
 
     let mut hostnames = Vec::new();
@@ -423,14 +444,14 @@ pub fn get_hostname(type_: &str, filter: &str) -> Option<String> {
 
     if hostnames.is_empty() {
         println!("No host found!");
-        return None;
+        return Err(avahi::AvahiError::NoHostsFound);
     } else {
-        return Some(hostnames[0].clone());
+        return Ok(hostnames[0].clone());
     }
 }
 
 pub fn get_receiver() -> Option<String> {
-    get_hostname("_raop._tcp", "DENON")
+    get_hostname("_raop._tcp", "DENON").ok()
 }
 
 #[cfg(test)]
@@ -454,7 +475,9 @@ mod test {
         let bla: Box<u32> = Box::new(42);
         println!("ptr of int on heap {:p}", bla);
         let (tx, rx) = channel();
-        let cb: Rc<BoxedClosure> = Rc::new(Box::new(move |n| { tx.send(n).is_ok(); println!("blub {}", n); }));
+        let cb: Rc<BoxedClosure> = Rc::new(Box::new(move |n| {
+            tx.send(n).unwrap();
+        }));
 
         println!("address of static function {:?}", address_of_closures as * const fn());
         println!("stack address of cb {:?}", &cb as * const Rc<BoxedClosure>);
@@ -475,14 +498,14 @@ mod test {
 
     #[test]
     fn constructor_without_callback_works() {
-        let poller = Arc::new(Mutex::new(Poller::new().unwrap()));
+        let poller = Arc::new(Mutex::new(Poller::new().ok().unwrap()));
         let _ = Client::new(poller, None);
     }
 
     #[test]
     fn constructor_with_callback_works() {
         let cb: CallbackBoxed2 = Rc::new(Box::new(|state| {println!("received state: {:?}", state);}));
-        let poller = Arc::new(Mutex::new(Poller::new().unwrap()));
+        let poller = Arc::new(Mutex::new(Poller::new().ok().unwrap()));
         let _ = Client::new(poller, Some(cb));
     }
 
@@ -494,7 +517,7 @@ mod test {
 
     #[test]
     fn get_hostname() {
-        let host = avahi2::get_hostname("_presence._tcp", "");
+        let host = avahi2::get_hostname("_presence._tcp", "").ok();
         assert!("barcas.local" == host.unwrap());
     }
 }
