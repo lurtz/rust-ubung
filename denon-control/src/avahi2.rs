@@ -1,5 +1,10 @@
 #![allow(dead_code)]
 
+use std::sync::mpsc::channel;
+use std::sync::Mutex;
+use std::time::Duration;
+use std::rc::Rc;
+
 mod avahi {
     use avahi_sys;
     pub use avahi_error::AvahiError;
@@ -70,6 +75,14 @@ mod avahi {
         let seconds = time.as_secs();
         let useconds = time.subsec_nanos() / 1000;
         timeval{tv_sec: seconds as i64, tv_usec: useconds as i64}
+    }
+
+    unsafe fn init_if_not_null(cstr: * const c_char) -> String {
+        if ptr::null() != cstr {
+            ffi::CStr::from_ptr(cstr).to_string_lossy().into_owned()
+        } else {
+            String::from("")
+        }
     }
 
     pub struct Poller {
@@ -243,26 +256,9 @@ mod avahi {
         _service_browser: *mut avahi_sys::AvahiServiceBrowser, ifindex: avahi_sys::AvahiIfIndex, protocol: avahi_sys::AvahiProtocol, event: avahi_sys::AvahiBrowserEvent, name: *const c_char, typee: *const c_char, domain: *const c_char, flags: avahi_sys::AvahiLookupResultFlags, userdata: *mut c_void) {
         let functor : &service_browser_callback::CallbackBoxed = transmute(userdata);
 
-        let name_string;
-        if ptr::null() != name {
-            name_string = ffi::CStr::from_ptr(name).to_string_lossy().into_owned()
-        } else {
-            name_string = String::from("");
-        }
-
-        let type_string;
-        if ptr::null() != typee {
-            type_string = ffi::CStr::from_ptr(typee).to_string_lossy().into_owned();
-        } else {
-            type_string = String::from("");
-        }
-
-        let domain_string;
-        if ptr::null() != domain {
-            domain_string = ffi::CStr::from_ptr(domain).to_string_lossy().into_owned();
-        } else {
-            domain_string = String::from("");
-        }
+        let name_string = init_if_not_null(name);
+        let type_string = init_if_not_null(typee);
+        let domain_string = init_if_not_null(domain);
 
         functor(ifindex, protocol, event, &name_string, &type_string, &domain_string, flags);
     }
@@ -398,12 +394,6 @@ mod avahi {
 }
 
 pub fn get_hostname(type_: &str, filter: &str) -> Result<String, avahi::AvahiError> {
-    use avahi2::avahi;
-    use std::sync::mpsc::channel;
-    use std::sync::Mutex;
-    use std::time::Duration;
-    use std::rc::Rc;
-
     let poller = Rc::new(avahi::Poller::new()?);
     let client = Rc::new(Mutex::new(avahi::Client::new(poller.clone())?));
 
