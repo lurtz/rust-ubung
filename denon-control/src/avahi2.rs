@@ -5,11 +5,11 @@ mod avahi {
     use avahi_sys;
     pub use avahi_error::AvahiError;
     use libc::{c_void, c_int, c_char, timeval};
-    use std::{ffi, thread};
+    use std::ffi;
     use std::sync::mpsc::Sender;
     use std::sync::Mutex;
     use std::rc::Rc;
-    use std::time::{Duration, Instant};
+    use std::time::Duration;
     use std::cell::Cell;
     use std::time::SystemTime;
     use std::time;
@@ -92,27 +92,6 @@ mod avahi {
 
         unsafe fn get(&self) -> * const avahi_sys::AvahiPoll {
             avahi_sys::avahi_simple_poll_get(self.poller.get())
-        }
-
-        fn simple_poll_iterate(&self, sleep_time: i32) -> i32 {
-            unsafe {
-                 avahi_sys::avahi_simple_poll_iterate(self.poller.get(), sleep_time)
-            }
-        }
-
-        pub fn iterate(&self, sleep_time: u64) {
-            let start = Instant::now();
-            let mut time_remaining = sleep_time;
-
-            while time_remaining != 0 && 0 == self.simple_poll_iterate(time_remaining as i32) {
-                let elapsed_time = time_in_millis(&start);
-                if sleep_time > elapsed_time {
-                    time_remaining = sleep_time - elapsed_time;
-                    thread::sleep(Duration::from_millis(25));
-                } else {
-                    time_remaining = 0;
-                }
-            }
         }
 
         pub fn looop(&self) -> i32 {
@@ -360,15 +339,15 @@ mod avahi {
            _interface: IfIndex,
            _protocol: Protocol,
            _event: ResolverEvent,
-           _name: *const ::libc::c_char,
-           _type_: *const ::libc::c_char,
-           _domain: *const ::libc::c_char,
-           host_name: *const ::libc::c_char,
+           _name: *const c_char,
+           _type_: *const c_char,
+           _domain: *const c_char,
+           host_name: *const c_char,
            _a: *const Address,
            _port: u16,
            _txt: *mut StringList,
            _flags: LookupResultFlags,
-           userdata: *mut ::libc::c_void) {
+           userdata: *mut c_void) {
         if avahi_sys::AvahiResolverEvent::AVAHI_RESOLVER_FOUND == _event {
             let functor : &resolver_callback::CallbackBoxed = std::mem::transmute(userdata);
 
@@ -386,29 +365,29 @@ mod avahi {
 
     callback_types![
         resolver_callback,
-        [avahi2::avahi],
+        [avahi2::avahi, libc],
         Fn(Option<String>),
         unsafe extern "C" fn(
             *mut avahi::ServiceResolver,
             avahi::IfIndex,
             avahi::Protocol,
             avahi::ResolverEvent,
-            *const ::libc::c_char,
-            *const ::libc::c_char,
-            *const ::libc::c_char,
-            *const ::libc::c_char,
+            *const libc::c_char,
+            *const libc::c_char,
+            *const libc::c_char,
+            *const libc::c_char,
             *const avahi::Address,
             u16,
             *mut avahi::StringList,
             avahi::LookupResultFlags,
-            *mut ::libc::c_void),
+            *mut libc::c_void),
         avahi::callback_fn_resolver];
 
     #[cfg(test)]
     mod test {
-        use libc;
-        use std;
+        use libc::c_void;
         use std::rc::Rc;
+        use std::ptr;
         use avahi2::avahi::client_callback::{
             get_callback_with_data, CallbackBoxed, CallbackBoxed2, CCallback};
         use avahi2::avahi::callback_fn;
@@ -418,7 +397,7 @@ mod avahi {
             let (c_callback, data) = get_callback_with_data(&None);
             assert_eq!(None, c_callback);
             assert_eq!(None, c_callback);
-            assert_eq!(std::ptr::null_mut(), data);
+            assert_eq!(ptr::null_mut(), data);
         }
 
         #[test]
@@ -426,7 +405,7 @@ mod avahi {
             let cb: CallbackBoxed2 = Rc::new(Box::new(|_| {}));
             let expected_userdata_cfn = &*cb as * const CallbackBoxed;
             let expected_userdata_mfn = expected_userdata_cfn as * mut CallbackBoxed;
-            let expected_userdata_mv = expected_userdata_mfn as * mut libc::c_void;
+            let expected_userdata_mv = expected_userdata_mfn as * mut c_void;
             assert!(0x0 != expected_userdata_mv as usize);
             assert!(0x1 != expected_userdata_mv as usize);
             let (c_callback, data) = get_callback_with_data(&Some(cb));
