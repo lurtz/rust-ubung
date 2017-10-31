@@ -3,6 +3,7 @@ use std::sync::{PoisonError, MutexGuard};
 use std::convert::From;
 use std::io;
 use std::fmt;
+use std::time::SystemTimeError;
 
 pub enum AvahiError {
     PollerNew,
@@ -12,6 +13,7 @@ pub enum AvahiError {
     MutexLocked,
     NulError(NulError),
     IOError(io::Error),
+    SystemTimeError(SystemTimeError),
 }
 
 impl fmt::Display for AvahiError {
@@ -28,6 +30,7 @@ impl fmt::Display for AvahiError {
             &MutexLocked => write!(f, "MutexLocked"),
             &NulError(ref e) => write!(f, "NulError: {}", e),
             &IOError(ref e) => write!(f, "IOError: {}", e),
+            &SystemTimeError(ref e) => write!(f, "SystemTimeError: {}", e),
         }
     }
 }
@@ -53,6 +56,12 @@ impl From<NulError> for AvahiError {
 impl From<io::Error> for AvahiError {
     fn from(error: io::Error) -> Self {
         AvahiError::IOError(error)
+    }
+}
+
+impl From<SystemTimeError> for AvahiError {
+    fn from(error: SystemTimeError) -> Self {
+        AvahiError::SystemTimeError(error)
     }
 }
 

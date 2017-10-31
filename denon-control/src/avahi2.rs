@@ -4,12 +4,13 @@ mod avahi {
     use std;
     use avahi_sys;
     pub use avahi_error::AvahiError;
-    use libc::{c_void, c_int, c_char};
+    use libc::{c_void, c_int, c_char, timeval};
     use std::{ffi, thread};
     use std::sync::mpsc::Sender;
     use std::sync::{Arc, Mutex};
     use std::rc::Rc;
     use std::time::{Duration, Instant};
+    use std::cell::Cell;
 
     type ClientState = avahi_sys::AvahiClientState;
     type ServiceResolver = avahi_sys::AvahiServiceResolver;
@@ -60,7 +61,7 @@ mod avahi {
     }
 
     pub struct Poller {
-        poller : * mut avahi_sys::AvahiSimplePoll,
+        poller : Cell<* mut avahi_sys::AvahiSimplePoll>,
     }
 
     impl Poller {
@@ -68,24 +69,24 @@ mod avahi {
             unsafe {
                 let poller = avahi_sys::avahi_simple_poll_new();
                 if std::ptr::null() != poller {
-                    return Ok(Poller{poller: poller});
+                    return Ok(Poller{poller: Cell::new(poller)});
                 } else {
                     return Err(AvahiError::PollerNew);
                 }
             }
         }
 
-        unsafe fn get(&mut self) -> * const avahi_sys::AvahiPoll {
-            avahi_sys::avahi_simple_poll_get(self.poller)
+        unsafe fn get(&self) -> * const avahi_sys::AvahiPoll {
+            avahi_sys::avahi_simple_poll_get(self.poller.get())
         }
 
-        fn simple_poll_iterate(&mut self, sleep_time: i32) -> i32 {
+        fn simple_poll_iterate(&self, sleep_time: i32) -> i32 {
             unsafe {
-                 avahi_sys::avahi_simple_poll_iterate(self.poller, sleep_time)
+                 avahi_sys::avahi_simple_poll_iterate(self.poller.get(), sleep_time)
             }
         }
 
-        pub fn iterate(&mut self, sleep_time: u64) {
+        pub fn iterate(&self, sleep_time: u64) {
             let start = Instant::now();
             let mut time_remaining = sleep_time;
 
@@ -99,12 +100,57 @@ mod avahi {
                 }
             }
         }
+
+        pub fn looop(&self) -> i32 {
+            unsafe {
+                avahi_sys::avahi_simple_poll_loop(self.poller.get())
+            }
+        }
+
+        pub fn quit(&self) {
+            unsafe {
+                avahi_sys::avahi_simple_poll_quit(self.poller.get())
+            }
+        }
+
+        pub fn timeout(&self, dur: Duration) -> Result<(), AvahiError> {
+            let now = std::time::SystemTime::now();
+            let time_since_epoch = now.duration_since(std::time::UNIX_EPOCH)?;
+            let target = dur + time_since_epoch;
+            let seconds = target.as_secs();
+            let useconds = target.subsec_nanos() / 1000;
+            let tv = timeval{tv_sec: seconds as i64, tv_usec: useconds as i64};
+
+            unsafe {
+                let poll = self.get();
+                let timeout_new = (*poll).timeout_new;
+                if let Some(tn) = timeout_new {
+                    let atimeout = tn(poll, &tv, Some(timeout_fn), self.poller.get() as * mut c_void);
+                    assert!(std::ptr::null() != atimeout);
+                }
+            }
+            Ok(())
+        }
     }
+
+    unsafe extern "C" fn timeout_fn(_client: *mut avahi_sys::AvahiTimeout,
+                                  _userdata: *mut c_void) {
+        let spoll : * mut avahi_sys::AvahiSimplePoll = std::mem::transmute(_userdata);
+        avahi_sys::avahi_simple_poll_quit(spoll);
+
+        let poll = avahi_sys::avahi_simple_poll_get(spoll);
+        let free_func = (*poll).timeout_free;
+        if let Some(ff) = free_func {
+            ff(_client);
+        }
+    }
+
+    unsafe impl Sync for Poller {}
 
     impl Drop for Poller {
         fn drop(&mut self) {
             unsafe {
-                avahi_sys::avahi_simple_poll_free(self.poller);
+                avahi_sys::avahi_simple_poll_free(self.poller.get());
             }
         }
     }
@@ -120,7 +166,7 @@ mod avahi {
         avahi::callback_fn];
 
     pub struct Client {
-        poller: Arc<Mutex<Poller>>,
+        poller: Arc<Poller>,
         client : * mut avahi_sys::AvahiClient,
         callback : client_callback::Callback,
         service_browser: Option<ServiceBrowser>,
@@ -134,11 +180,11 @@ mod avahi {
     }
 
     impl Client {
-        pub fn new(poller: Arc<Mutex<Poller>>, user_callback: client_callback::Callback) -> Result<Client, AvahiError> {
+        pub fn new(poller: Arc<Poller>, user_callback: client_callback::Callback) -> Result<Client, AvahiError> {
             unsafe {
                 let (callback, userdata) = client_callback::get_callback_with_data(&user_callback);
 
-                let native_poller = poller.lock()?.get();
+                let native_poller = poller.get();
 
                 let mut err: c_int = 0;
                 let client = avahi_sys::avahi_client_new(
@@ -279,12 +325,13 @@ mod avahi {
         }
     }
 
-    pub fn create_service_browser_callback(client: Arc<Mutex<Client>>, tx: Sender<String>, name_to_filter: &str) -> service_browser_callback::CallbackBoxed2 {
+    pub fn create_service_browser_callback(client: Arc<Mutex<Client>>, poller: Arc<Poller>, tx: Sender<String>, name_to_filter: &str) -> service_browser_callback::CallbackBoxed2 {
         let filter_name = String::from(name_to_filter);
 
         let scrcb: resolver_callback::CallbackBoxed2 = Rc::new(Box::new(move |host_name| {
             if let Some(hostname) = host_name {
                 tx.send(hostname).ok();
+                poller.quit();
             }
         }));
 
@@ -393,39 +440,24 @@ pub fn get_hostname(type_: &str, filter: &str) -> Result<String, avahi::AvahiErr
     use avahi2::avahi;
     use std::sync::mpsc::channel;
     use std::sync::{Arc, Mutex};
-    use std::time::Instant;
+    use std::time::Duration;
 
-    let poller = Arc::new(Mutex::new(avahi::Poller::new()?));
+    let poller = Arc::new(avahi::Poller::new()?);
     let client = Arc::new(Mutex::new(avahi::Client::new(poller.clone(), None)?));
 
     let (tx_host, rx_host) = channel();
 
-    let sbcb = avahi::create_service_browser_callback(client.clone(), tx_host, filter);
+    let sbcb = avahi::create_service_browser_callback(client.clone(), poller.clone(), tx_host, filter);
 
     let sb1 = client.lock()?.create_service_browser(type_, sbcb);
     assert!(sb1.is_ok());
 
-    let mut hostnames = Vec::new();
-    let start = Instant::now();
-    let wait_time = 2000;
-    while avahi::time_in_millis(&start) < wait_time && hostnames.is_empty() {
-        let message = rx_host.try_recv();
-        match message {
-            Ok(hostname) => hostnames.push(hostname),
-            Err(_) => {
-                let poller_locked = poller.lock();
-                poller_locked.unwrap().iterate(100) },
-        }
-    }
+    poller.timeout(Duration::from_millis(2000))?;
+    poller.looop();
 
-    if hostnames.len() > 1 {
-        println!("multiple hosts found: {:?}, taking: {}", hostnames, hostnames[0]);
-    }
-
-    if hostnames.is_empty() {
-        return Err(avahi::AvahiError::NoHostsFound);
-    } else {
-        return Ok(hostnames[0].clone());
+    match rx_host.try_recv() {
+        Ok(hostname) => return Ok(hostname),
+        Err(_) => return Err(avahi::AvahiError::NoHostsFound),
     }
 }
 
@@ -442,7 +474,6 @@ mod test {
 
     use std::rc::Rc;
     use std::sync::Arc;
-    use std::sync::Mutex;
     use std::sync::mpsc::channel;
     use libc::c_void;
 
@@ -477,14 +508,14 @@ mod test {
 
     #[test]
     fn constructor_without_callback_works() {
-        let poller = Arc::new(Mutex::new(Poller::new().ok().unwrap()));
+        let poller = Arc::new(Poller::new().ok().unwrap());
         let _ = Client::new(poller, None);
     }
 
     #[test]
     fn constructor_with_callback_works() {
         let cb: CallbackBoxed2 = Rc::new(Box::new(|state| {println!("received state: {:?}", state);}));
-        let poller = Arc::new(Mutex::new(Poller::new().ok().unwrap()));
+        let poller = Arc::new(Poller::new().ok().unwrap());
         let _ = Client::new(poller, Some(cb));
     }
 
