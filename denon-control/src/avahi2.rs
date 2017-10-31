@@ -11,6 +11,8 @@ mod avahi {
     use std::rc::Rc;
     use std::time::{Duration, Instant};
     use std::cell::Cell;
+    use std::time::SystemTime;
+    use std::time;
 
     type ClientState = avahi_sys::AvahiClientState;
     type ServiceResolver = avahi_sys::AvahiServiceResolver;
@@ -58,6 +60,18 @@ mod avahi {
         let el_s = elapsed.as_secs() * 1000;
         let el_n = (elapsed.subsec_nanos() / 1_000_000) as u64;
         el_s + el_n
+    }
+
+    fn time_in(dur: Duration) -> Result<Duration, AvahiError> {
+        let now = SystemTime::now();
+        let time_since_epoch = now.duration_since(time::UNIX_EPOCH)?;
+        Ok(dur + time_since_epoch)
+    }
+
+    fn create_timeval(time: Duration) -> timeval {
+        let seconds = time.as_secs();
+        let useconds = time.subsec_nanos() / 1000;
+        timeval{tv_sec: seconds as i64, tv_usec: useconds as i64}
     }
 
     pub struct Poller {
@@ -114,12 +128,8 @@ mod avahi {
         }
 
         pub fn timeout(&self, dur: Duration) -> Result<(), AvahiError> {
-            let now = std::time::SystemTime::now();
-            let time_since_epoch = now.duration_since(std::time::UNIX_EPOCH)?;
-            let target = dur + time_since_epoch;
-            let seconds = target.as_secs();
-            let useconds = target.subsec_nanos() / 1000;
-            let tv = timeval{tv_sec: seconds as i64, tv_usec: useconds as i64};
+            let target = time_in(dur)?;
+            let tv = create_timeval(target);
 
             unsafe {
                 let poll = self.get();
@@ -135,7 +145,7 @@ mod avahi {
 
     unsafe extern "C" fn timeout_fn(_client: *mut avahi_sys::AvahiTimeout,
                                   _userdata: *mut c_void) {
-        let spoll : * mut avahi_sys::AvahiSimplePoll = std::mem::transmute(_userdata);
+        let spoll: * mut avahi_sys::AvahiSimplePoll = std::mem::transmute(_userdata);
         avahi_sys::avahi_simple_poll_quit(spoll);
 
         let poll = avahi_sys::avahi_simple_poll_get(spoll);
