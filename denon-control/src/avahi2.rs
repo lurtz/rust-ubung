@@ -42,6 +42,8 @@ mod avahi {
             pub type Callback = Option<CallbackBoxed2>;
             pub type CCallback = $ccallback;
 
+            pub const CALLBACK_FN: CCallback = $callback_fn;
+
             pub fn get_callback_with_data(user_callback: &Callback) -> (Option<CCallback>, *mut c_void) {
                 let callback : Option<CCallback>;
                 let userdata : *mut c_void;
@@ -361,8 +363,7 @@ mod avahi {
         use std::rc::Rc;
         use std::ptr;
         use avahi2::avahi::service_browser_callback::{
-            get_callback_with_data, CallbackBoxed, CallbackBoxed2, CCallback};
-        use avahi2::avahi::service_browser_callback_fn;
+            get_callback_with_data, CallbackBoxed, CallbackBoxed2, CCallback, CALLBACK_FN};
 
         #[test]
         fn get_callback_with_data_without_callback_works() {
@@ -383,7 +384,7 @@ mod avahi {
             let (c_callback, data) = get_callback_with_data(&Some(cb));
             assert!(c_callback.is_some());
             if let Some(callback) = c_callback {
-                let expected_callback = service_browser_callback_fn as * const CCallback;
+                let expected_callback = CALLBACK_FN as * const CCallback;
                 let actual_callback = callback as * const CCallback;
                 assert_eq!(expected_callback, actual_callback);
             }
