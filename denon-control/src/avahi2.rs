@@ -491,12 +491,12 @@ mod test {
     #[test]
     fn create_service_browser_with_callback() {
         let receiver = avahi2::get_receiver();
-        assert!("DENON-AVR-1912.local" == receiver.ok().unwrap());
+        assert!("DENON-AVR-1912.local" == receiver.unwrap());
     }
 
     #[test]
     fn get_hostname() {
-        let host = avahi2::get_hostname("_presence._tcp", "").ok();
+        let host = avahi2::get_hostname("_presence._tcp", "");
         assert!("barcas.local" == host.unwrap());
     }
 }
