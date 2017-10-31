@@ -7,7 +7,7 @@ mod avahi {
     use libc::{c_void, c_int, c_char, timeval};
     use std::{ffi, thread};
     use std::sync::mpsc::Sender;
-    use std::sync::{Arc, Mutex};
+    use std::sync::Mutex;
     use std::rc::Rc;
     use std::time::{Duration, Instant};
     use std::cell::Cell;
@@ -325,7 +325,7 @@ mod avahi {
         }
     }
 
-    pub fn create_service_browser_callback(client: Arc<Mutex<Client>>, poller: Rc<Poller>, tx: Sender<String>, name_to_filter: &str) -> service_browser_callback::CallbackBoxed2 {
+    pub fn create_service_browser_callback(client: Rc<Mutex<Client>>, poller: Rc<Poller>, tx: Sender<String>, name_to_filter: &str) -> service_browser_callback::CallbackBoxed2 {
         let filter_name = String::from(name_to_filter);
 
         let scrcb: resolver_callback::CallbackBoxed2 = Rc::new(Box::new(move |host_name| {
@@ -439,12 +439,12 @@ mod avahi {
 pub fn get_hostname(type_: &str, filter: &str) -> Result<String, avahi::AvahiError> {
     use avahi2::avahi;
     use std::sync::mpsc::channel;
-    use std::sync::{Arc, Mutex};
+    use std::sync::Mutex;
     use std::time::Duration;
     use std::rc::Rc;
 
     let poller = Rc::new(avahi::Poller::new()?);
-    let client = Arc::new(Mutex::new(avahi::Client::new(poller.clone(), None)?));
+    let client = Rc::new(Mutex::new(avahi::Client::new(poller.clone(), None)?));
 
     let (tx_host, rx_host) = channel();
 
