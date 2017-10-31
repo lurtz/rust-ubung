@@ -409,10 +409,8 @@ mod avahi {
         use libc;
         use std;
         use std::rc::Rc;
-        use avahi2::avahi::client_callback::get_callback_with_data;
-        use avahi2::avahi::client_callback::CallbackBoxed;
-        use avahi2::avahi::client_callback::CallbackBoxed2;
-        use avahi2::avahi::client_callback::CCallback;
+        use avahi2::avahi::client_callback::{
+            get_callback_with_data, CallbackBoxed, CallbackBoxed2, CCallback};
         use avahi2::avahi::callback_fn;
 
         #[test]
