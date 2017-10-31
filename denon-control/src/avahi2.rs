@@ -1,18 +1,16 @@
 #![allow(dead_code)]
 
 mod avahi {
-    use std;
     use avahi_sys;
     pub use avahi_error::AvahiError;
     use libc::{c_void, c_int, c_char, timeval};
-    use std::ffi;
+    use std::{ffi, time, ptr};
     use std::sync::mpsc::Sender;
     use std::sync::Mutex;
     use std::rc::Rc;
-    use std::time::Duration;
     use std::cell::Cell;
-    use std::time::SystemTime;
-    use std::time;
+    use std::time::{Duration, SystemTime};
+    use std::mem::transmute;
 
     type ClientState = avahi_sys::AvahiClientState;
     type ServiceResolver = avahi_sys::AvahiServiceResolver;
@@ -29,7 +27,7 @@ mod avahi {
     macro_rules! callback_types {
         ($name:ident, [$($module:path),*], $function:ty, $ccallback:ty, $callback_fn:path) => {pub mod $name {
             $(use $module;)*
-            use std;
+            use std::ptr;
             use std::rc::Rc;
             use libc::c_void;
 
@@ -47,7 +45,7 @@ mod avahi {
                     userdata = &(*(*cb_box)) as * const CallbackBoxed as * mut CallbackBoxed as * mut c_void;
                 } else {
                     callback = None;
-                    userdata = std::ptr::null_mut();
+                    userdata = ptr::null_mut();
                 }
 
                 return (callback, userdata);
@@ -55,7 +53,7 @@ mod avahi {
         }}
     }
 
-    pub fn time_in_millis(timer: &std::time::Instant) -> u64 {
+    pub fn time_in_millis(timer: &time::Instant) -> u64 {
         let elapsed = timer.elapsed();
         let el_s = elapsed.as_secs() * 1000;
         let el_n = (elapsed.subsec_nanos() / 1_000_000) as u64;
@@ -82,7 +80,7 @@ mod avahi {
         pub fn new() -> Result<Poller, AvahiError> {
             unsafe {
                 let poller = avahi_sys::avahi_simple_poll_new();
-                if std::ptr::null() != poller {
+                if ptr::null() != poller {
                     return Ok(Poller{poller: Cell::new(poller)});
                 } else {
                     return Err(AvahiError::PollerNew);
@@ -115,22 +113,22 @@ mod avahi {
                 let timeout_new = (*poll).timeout_new;
                 if let Some(tn) = timeout_new {
                     let atimeout = tn(poll, &tv, Some(timeout_fn), self.poller.get() as * mut c_void);
-                    assert!(std::ptr::null() != atimeout);
+                    assert!(ptr::null() != atimeout);
                 }
             }
             Ok(())
         }
     }
 
-    unsafe extern "C" fn timeout_fn(_client: *mut avahi_sys::AvahiTimeout,
-                                  _userdata: *mut c_void) {
-        let spoll: * mut avahi_sys::AvahiSimplePoll = std::mem::transmute(_userdata);
+    unsafe extern "C" fn timeout_fn(client: *mut avahi_sys::AvahiTimeout,
+                                  userdata: *mut c_void) {
+        let spoll: * mut avahi_sys::AvahiSimplePoll = transmute(userdata);
         avahi_sys::avahi_simple_poll_quit(spoll);
 
         let poll = avahi_sys::avahi_simple_poll_get(spoll);
         let free_func = (*poll).timeout_free;
         if let Some(ff) = free_func {
-            ff(_client);
+            ff(client);
         }
     }
 
@@ -147,9 +145,9 @@ mod avahi {
         [libc, avahi_sys, avahi2::avahi],
         Fn(avahi::ClientState),
         unsafe extern "C" fn (
-            _client: *mut avahi_sys::AvahiClient,
-            _state: avahi_sys::AvahiClientState,
-            _userdata: *mut libc::c_void),
+            client: *mut avahi_sys::AvahiClient,
+            state: avahi_sys::AvahiClientState,
+            userdata: *mut libc::c_void),
         avahi::callback_fn];
 
     pub struct Client {
@@ -161,8 +159,8 @@ mod avahi {
 
     unsafe extern "C" fn callback_fn(_client: *mut avahi_sys::AvahiClient,
                                   _state: avahi_sys::AvahiClientState,
-                                  _userdata: *mut c_void) {
-        let functor : &client_callback::CallbackBoxed = std::mem::transmute(_userdata);
+                                  userdata: *mut c_void) {
+        let functor : &client_callback::CallbackBoxed = transmute(userdata);
         functor(_state);
     }
 
@@ -209,12 +207,12 @@ mod avahi {
             let cb_option = Some(user_callback);
 
             unsafe {
-                let flag = std::mem::transmute(0);
+                let flag = transmute(0);
 
                 let ctype = ffi::CString::new(service_type)?;
                 let (callback, userdata) = service_browser_callback::get_callback_with_data(&cb_option);
-                let sb = avahi_sys::avahi_service_browser_new(self.client, -1, -1, ctype.as_ptr(), std::ptr::null(), flag, callback, userdata);
-                if std::ptr::null() != sb {
+                let sb = avahi_sys::avahi_service_browser_new(self.client, -1, -1, ctype.as_ptr(), ptr::null(), flag, callback, userdata);
+                if ptr::null() != sb {
                     Ok(ServiceBrowser::new(sb, cb_option.unwrap()))
                 } else {
                     Err(AvahiError::CreateServiceBrowser(String::from("error while creating service browser"), self.errno()))
@@ -232,7 +230,7 @@ mod avahi {
                 let domain_string = ffi::CString::new(domain);
 
                 if name_string.is_ok() && type_string.is_ok() && domain_string.is_ok() {
-                    avahi_sys::avahi_service_resolver_new(self.client, ifindex, prot, name_string.unwrap().as_ptr(), type_string.unwrap().as_ptr(), domain_string.unwrap().as_ptr(), -1, std::mem::transmute(0), callback, userdata);
+                    avahi_sys::avahi_service_resolver_new(self.client, ifindex, prot, name_string.unwrap().as_ptr(), type_string.unwrap().as_ptr(), domain_string.unwrap().as_ptr(), -1, transmute(0), callback, userdata);
                 }
             }
         }
@@ -252,43 +250,43 @@ mod avahi {
         [libc, avahi_sys, avahi2::avahi],
         Fn(avahi::IfIndex, avahi::Protocol, avahi::BrowserEvent, &str, &str, &str, avahi::LookupResultFlags),
         unsafe extern "C" fn (
-            _service_browser: *mut avahi_sys::AvahiServiceBrowser,
-            _ifindex: avahi_sys::AvahiIfIndex,
-            _protocol: avahi_sys::AvahiProtocol,
-            _event: avahi_sys::AvahiBrowserEvent,
-            *const libc::c_char,
-            *const libc::c_char,
-            *const libc::c_char,
-            _flags: avahi_sys::AvahiLookupResultFlags,
-            _userdata: *mut libc::c_void),
+            service_browser: *mut avahi_sys::AvahiServiceBrowser,
+            ifindex: avahi_sys::AvahiIfIndex,
+            protocol: avahi_sys::AvahiProtocol,
+            event: avahi_sys::AvahiBrowserEvent,
+            name: *const libc::c_char,
+            typee: *const libc::c_char,
+            domain: *const libc::c_char,
+            flags: avahi_sys::AvahiLookupResultFlags,
+            userdata: *mut libc::c_void),
         avahi::service_browser_callback_fn];
 
     unsafe extern "C" fn service_browser_callback_fn(
-        _service_browser: *mut avahi_sys::AvahiServiceBrowser, _ifindex: avahi_sys::AvahiIfIndex, _protocol: avahi_sys::AvahiProtocol, _event: avahi_sys::AvahiBrowserEvent, _name: *const c_char, _type: *const c_char, _domain: *const c_char, _flags: avahi_sys::AvahiLookupResultFlags, _userdata: *mut c_void) {
-        let functor : &service_browser_callback::CallbackBoxed = std::mem::transmute(_userdata);
+        _service_browser: *mut avahi_sys::AvahiServiceBrowser, ifindex: avahi_sys::AvahiIfIndex, protocol: avahi_sys::AvahiProtocol, event: avahi_sys::AvahiBrowserEvent, name: *const c_char, typee: *const c_char, domain: *const c_char, flags: avahi_sys::AvahiLookupResultFlags, userdata: *mut c_void) {
+        let functor : &service_browser_callback::CallbackBoxed = transmute(userdata);
 
         let name_string;
-        if std::ptr::null() != _name {
-            name_string = ffi::CStr::from_ptr(_name).to_string_lossy().into_owned()
+        if ptr::null() != name {
+            name_string = ffi::CStr::from_ptr(name).to_string_lossy().into_owned()
         } else {
             name_string = String::from("");
         }
 
         let type_string;
-        if std::ptr::null() != _type {
-            type_string = ffi::CStr::from_ptr(_type).to_string_lossy().into_owned();
+        if ptr::null() != typee {
+            type_string = ffi::CStr::from_ptr(typee).to_string_lossy().into_owned();
         } else {
             type_string = String::from("");
         }
 
         let domain_string;
-        if std::ptr::null() != _domain {
-            domain_string = ffi::CStr::from_ptr(_domain).to_string_lossy().into_owned();
+        if ptr::null() != domain {
+            domain_string = ffi::CStr::from_ptr(domain).to_string_lossy().into_owned();
         } else {
             domain_string = String::from("");
         }
 
-        functor(_ifindex, _protocol, _event, &name_string, &type_string, &domain_string, _flags);
+        functor(ifindex, protocol, event, &name_string, &type_string, &domain_string, flags);
     }
 
     struct ServiceBrowser {
@@ -338,7 +336,7 @@ mod avahi {
         r: *mut ServiceResolver,
            _interface: IfIndex,
            _protocol: Protocol,
-           _event: ResolverEvent,
+           event: ResolverEvent,
            _name: *const c_char,
            _type_: *const c_char,
            _domain: *const c_char,
@@ -348,11 +346,11 @@ mod avahi {
            _txt: *mut StringList,
            _flags: LookupResultFlags,
            userdata: *mut c_void) {
-        if avahi_sys::AvahiResolverEvent::AVAHI_RESOLVER_FOUND == _event {
-            let functor : &resolver_callback::CallbackBoxed = std::mem::transmute(userdata);
+        if avahi_sys::AvahiResolverEvent::AVAHI_RESOLVER_FOUND == event {
+            let functor : &resolver_callback::CallbackBoxed = transmute(userdata);
 
             let host_name_string;
-            if std::ptr::null() != host_name {
+            if ptr::null() != host_name {
                 host_name_string = Some(ffi::CStr::from_ptr(host_name).to_string_lossy().into_owned())
             } else {
                 host_name_string = None
