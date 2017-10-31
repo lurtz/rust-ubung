@@ -166,7 +166,7 @@ mod avahi {
         avahi::callback_fn];
 
     pub struct Client {
-        poller: Arc<Poller>,
+        poller: Rc<Poller>,
         client : * mut avahi_sys::AvahiClient,
         callback : client_callback::Callback,
         service_browser: Option<ServiceBrowser>,
@@ -180,7 +180,7 @@ mod avahi {
     }
 
     impl Client {
-        pub fn new(poller: Arc<Poller>, user_callback: client_callback::Callback) -> Result<Client, AvahiError> {
+        pub fn new(poller: Rc<Poller>, user_callback: client_callback::Callback) -> Result<Client, AvahiError> {
             unsafe {
                 let (callback, userdata) = client_callback::get_callback_with_data(&user_callback);
 
@@ -325,7 +325,7 @@ mod avahi {
         }
     }
 
-    pub fn create_service_browser_callback(client: Arc<Mutex<Client>>, poller: Arc<Poller>, tx: Sender<String>, name_to_filter: &str) -> service_browser_callback::CallbackBoxed2 {
+    pub fn create_service_browser_callback(client: Arc<Mutex<Client>>, poller: Rc<Poller>, tx: Sender<String>, name_to_filter: &str) -> service_browser_callback::CallbackBoxed2 {
         let filter_name = String::from(name_to_filter);
 
         let scrcb: resolver_callback::CallbackBoxed2 = Rc::new(Box::new(move |host_name| {
@@ -441,8 +441,9 @@ pub fn get_hostname(type_: &str, filter: &str) -> Result<String, avahi::AvahiErr
     use std::sync::mpsc::channel;
     use std::sync::{Arc, Mutex};
     use std::time::Duration;
+    use std::rc::Rc;
 
-    let poller = Arc::new(avahi::Poller::new()?);
+    let poller = Rc::new(avahi::Poller::new()?);
     let client = Arc::new(Mutex::new(avahi::Client::new(poller.clone(), None)?));
 
     let (tx_host, rx_host) = channel();
@@ -468,12 +469,10 @@ pub fn get_receiver() -> Result<String, avahi::AvahiError> {
 #[cfg(test)]
 mod test {
     use avahi2::avahi::client_callback::CallbackBoxed2;
-    use avahi2::avahi::Client;
-    use avahi2::avahi::Poller;
+    use avahi2::avahi::{Client, Poller};
     use avahi2;
 
     use std::rc::Rc;
-    use std::sync::Arc;
     use std::sync::mpsc::channel;
     use libc::c_void;
 
@@ -508,14 +507,14 @@ mod test {
 
     #[test]
     fn constructor_without_callback_works() {
-        let poller = Arc::new(Poller::new().ok().unwrap());
+        let poller = Rc::new(Poller::new().ok().unwrap());
         let _ = Client::new(poller, None);
     }
 
     #[test]
     fn constructor_with_callback_works() {
         let cb: CallbackBoxed2 = Rc::new(Box::new(|state| {println!("received state: {:?}", state);}));
-        let poller = Arc::new(Poller::new().ok().unwrap());
+        let poller = Rc::new(Poller::new().ok().unwrap());
         let _ = Client::new(poller, Some(cb));
     }
 
