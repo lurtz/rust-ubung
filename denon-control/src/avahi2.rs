@@ -140,46 +140,24 @@ mod avahi {
         }
     }
 
-    callback_types![
-        client_callback,
-        [libc, avahi_sys, avahi2::avahi],
-        Fn(avahi::ClientState),
-        unsafe extern "C" fn (
-            client: *mut avahi_sys::AvahiClient,
-            state: avahi_sys::AvahiClientState,
-            userdata: *mut libc::c_void),
-        avahi::callback_fn];
-
     pub struct Client {
         poller: Rc<Poller>,
         client : * mut avahi_sys::AvahiClient,
-        callback : client_callback::Callback,
         service_browser: Option<ServiceBrowser>,
     }
 
-    unsafe extern "C" fn callback_fn(_client: *mut avahi_sys::AvahiClient,
-                                  _state: avahi_sys::AvahiClientState,
-                                  userdata: *mut c_void) {
-        let functor : &client_callback::CallbackBoxed = transmute(userdata);
-        functor(_state);
-    }
-
     impl Client {
-        pub fn new(poller: Rc<Poller>, user_callback: client_callback::Callback) -> Result<Client, AvahiError> {
+        pub fn new(poller: Rc<Poller>) -> Result<Client, AvahiError> {
             unsafe {
-                let (callback, userdata) = client_callback::get_callback_with_data(&user_callback);
-
-                let native_poller = poller.get();
-
                 let mut err: c_int = 0;
                 let client = avahi_sys::avahi_client_new(
-                                      native_poller,
+                                      poller.get(),
                                       avahi_sys::AvahiClientFlags(0),
-                                      callback,
-                                      userdata,
+                                      None,
+                                      ptr::null_mut(),
                                       &mut err);
                 if 0 == err {
-                    return Ok(Client{poller, client: client, callback: user_callback, service_browser: None});
+                    return Ok(Client{poller, client: client, service_browser: None});
                 }
                 return Err(AvahiError::ClientNew);
             }
@@ -386,9 +364,9 @@ mod avahi {
         use libc::c_void;
         use std::rc::Rc;
         use std::ptr;
-        use avahi2::avahi::client_callback::{
+        use avahi2::avahi::service_browser_callback::{
             get_callback_with_data, CallbackBoxed, CallbackBoxed2, CCallback};
-        use avahi2::avahi::callback_fn;
+        use avahi2::avahi::service_browser_callback_fn;
 
         #[test]
         fn get_callback_with_data_without_callback_works() {
@@ -400,7 +378,7 @@ mod avahi {
 
         #[test]
         fn get_callback_with_data_with_callback_works() {
-            let cb: CallbackBoxed2 = Rc::new(Box::new(|_| {}));
+            let cb: CallbackBoxed2 = Rc::new(Box::new(|_,_,_,_,_,_,_| {}));
             let expected_userdata_cfn = &*cb as * const CallbackBoxed;
             let expected_userdata_mfn = expected_userdata_cfn as * mut CallbackBoxed;
             let expected_userdata_mv = expected_userdata_mfn as * mut c_void;
@@ -409,7 +387,7 @@ mod avahi {
             let (c_callback, data) = get_callback_with_data(&Some(cb));
             assert!(c_callback.is_some());
             if let Some(callback) = c_callback {
-                let expected_callback = callback_fn as * const CCallback;
+                let expected_callback = service_browser_callback_fn as * const CCallback;
                 let actual_callback = callback as * const CCallback;
                 assert_eq!(expected_callback, actual_callback);
             }
@@ -427,7 +405,7 @@ pub fn get_hostname(type_: &str, filter: &str) -> Result<String, avahi::AvahiErr
     use std::rc::Rc;
 
     let poller = Rc::new(avahi::Poller::new()?);
-    let client = Rc::new(Mutex::new(avahi::Client::new(poller.clone(), None)?));
+    let client = Rc::new(Mutex::new(avahi::Client::new(poller.clone())?));
 
     let (tx_host, rx_host) = channel();
 
@@ -451,7 +429,6 @@ pub fn get_receiver() -> Result<String, avahi::AvahiError> {
 
 #[cfg(test)]
 mod test {
-    use avahi2::avahi::client_callback::CallbackBoxed2;
     use avahi2::avahi::{Client, Poller};
     use avahi2;
 
@@ -491,14 +468,7 @@ mod test {
     #[test]
     fn constructor_without_callback_works() {
         let poller = Rc::new(Poller::new().ok().unwrap());
-        let _ = Client::new(poller, None);
-    }
-
-    #[test]
-    fn constructor_with_callback_works() {
-        let cb: CallbackBoxed2 = Rc::new(Box::new(|state| {println!("received state: {:?}", state);}));
-        let poller = Rc::new(Poller::new().ok().unwrap());
-        let _ = Client::new(poller, Some(cb));
+        let _ = Client::new(poller);
     }
 
     #[test]
