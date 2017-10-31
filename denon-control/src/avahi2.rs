@@ -145,8 +145,6 @@ mod avahi {
         }
     }
 
-    unsafe impl Sync for Poller {}
-
     impl Drop for Poller {
         fn drop(&mut self) {
             unsafe {
