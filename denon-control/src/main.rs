@@ -13,6 +13,7 @@ mod parse;
 mod pulseaudio;
 mod avahi;
 mod avahi2;
+mod avahi_error;
 
 use denon_connection::{DenonConnection, State, Operation};
 use state::PowerState;
@@ -78,8 +79,8 @@ fn get_receiver_and_port(args : &getopts::Matches) -> (String, u16) {
         //denon_name = avahi::get_receiver();
         let denon_name_option = avahi2::get_receiver();
         match denon_name_option {
-            Some(name) => denon_name = name,
-            None => {denon_name = String::new(); println!("no receiver found, consider using the -a option");}
+            Ok(name) => denon_name = name,
+            Err(_) => {denon_name = String::new(); println!("no receiver found, consider using the -a option");}
         }
     }
     println!("using receiver: {}", denon_name);

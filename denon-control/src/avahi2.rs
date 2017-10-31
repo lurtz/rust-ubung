@@ -3,6 +3,7 @@
 mod avahi {
     use std;
     use avahi_sys;
+    pub use avahi_error::AvahiError;
     use libc::{c_void, c_int, c_char};
     use std::{ffi, thread};
     use std::sync::mpsc::Sender;
@@ -56,33 +57,6 @@ mod avahi {
         let el_s = elapsed.as_secs() * 1000;
         let el_n = (elapsed.subsec_nanos() / 1_000_000) as u64;
         el_s + el_n
-    }
-
-    pub enum AvahiError {
-        PollerNew,
-        ClientNew,
-        CreateServiceBrowser(String, i32),
-        NoHostsFound,
-        ClientLocked,
-        NulError,
-    }
-
-    impl<'a> std::convert::From<std::sync::PoisonError<std::sync::MutexGuard<'a, Poller>>> for AvahiError {
-        fn from(_error : std::sync::PoisonError<std::sync::MutexGuard<'a, Poller>>) -> Self {
-            AvahiError::PollerNew
-        }
-    }
-
-    impl<'a> std::convert::From<std::sync::PoisonError<std::sync::MutexGuard<'a, Client>>> for AvahiError {
-        fn from(_error : std::sync::PoisonError<std::sync::MutexGuard<'a, Client>>) -> Self {
-            AvahiError::ClientLocked
-        }
-    }
-
-    impl std::convert::From<std::ffi::NulError> for AvahiError {
-        fn from(_error : std::ffi::NulError) -> Self {
-            AvahiError::NulError
-        }
     }
 
     pub struct Poller {
@@ -449,15 +423,14 @@ pub fn get_hostname(type_: &str, filter: &str) -> Result<String, avahi::AvahiErr
     }
 
     if hostnames.is_empty() {
-        println!("No host found!");
         return Err(avahi::AvahiError::NoHostsFound);
     } else {
         return Ok(hostnames[0].clone());
     }
 }
 
-pub fn get_receiver() -> Option<String> {
-    get_hostname("_raop._tcp", "DENON").ok()
+pub fn get_receiver() -> Result<String, avahi::AvahiError> {
+    get_hostname("_raop._tcp", "DENON")
 }
 
 #[cfg(test)]
@@ -518,7 +491,7 @@ mod test {
     #[test]
     fn create_service_browser_with_callback() {
         let receiver = avahi2::get_receiver();
-        assert!("DENON-AVR-1912.local" == receiver.unwrap());
+        assert!("DENON-AVR-1912.local" == receiver.ok().unwrap());
     }
 
     #[test]

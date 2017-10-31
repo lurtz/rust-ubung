@@ -1,13 +1,13 @@
 use std::process::Command;
+use avahi_error::AvahiError;
 
-pub fn get_receiver() -> Option<String> {
+pub fn get_receiver() -> Result<String, AvahiError> {
     let output = Command::new("/usr/bin/avahi-browse")
         .arg("-p")
         .arg("-t")
         .arg("-r")
         .arg("_raop._tcp")
-        .output()
-        .expect("avahi-browse failed");
+        .output()?;
 
     let output_stdout = String::from_utf8_lossy(&output.stdout);
     let lines = output_stdout.lines();
@@ -24,9 +24,8 @@ pub fn get_receiver() -> Option<String> {
     }
 
     if denon_names.is_empty() {
-        println!("No receiver found!");
-        return None;
+        return Err(AvahiError::NoHostsFound);
     } else {
-        return Some(String::from(denon_names[0]));
+        return Ok(String::from(denon_names[0]));
     }
 }
