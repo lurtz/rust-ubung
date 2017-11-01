@@ -13,7 +13,7 @@ mod avahi {
     use std::mem::transmute;
 
     type ClientState = avahi_sys::AvahiClientState;
-    type ServiceResolver = avahi_sys::AvahiServiceResolver;
+    type ServiceResolverr = avahi_sys::AvahiServiceResolver;
     type IfIndex = avahi_sys::AvahiIfIndex;
     type Protocol = avahi_sys::AvahiProtocol;
     type LookupFlags = avahi_sys::AvahiLookupFlags;
@@ -169,7 +169,7 @@ mod avahi {
         poller: Rc<Poller>,
         client : * mut avahi_sys::AvahiClient,
         service_browser: Option<ServiceBrowser>,
-        service_resolver: Option<ServiceResolverr>,
+        service_resolver: Option<ServiceResolver>,
     }
 
     impl Client {
@@ -235,7 +235,7 @@ mod avahi {
 
                 if name_string.is_ok() && type_string.is_ok() && domain_string.is_ok() {
                     let sr = avahi_sys::avahi_service_resolver_new(self.client, ifindex, prot, name_string.unwrap().as_ptr(), type_string.unwrap().as_ptr(), domain_string.unwrap().as_ptr(), -1, transmute(0), callback, userdata);
-                    self.service_resolver = Some(ServiceResolverr::new(sr));
+                    self.service_resolver = Some(ServiceResolver::new(sr));
                 }
             }
         }
@@ -298,7 +298,7 @@ mod avahi {
     }
 
     unsafe extern "C" fn callback_fn_resolver(
-        _r: *mut ServiceResolver,
+        _r: *mut ServiceResolverr,
         _interface: IfIndex,
         _protocol: Protocol,
         event: ResolverEvent,
@@ -332,17 +332,17 @@ mod avahi {
         avahi_sys::AvahiServiceResolverCallback,
         avahi::callback_fn_resolver];
 
-    struct ServiceResolverr {
-        service_resolver: * mut ServiceResolver,
+    struct ServiceResolver {
+        service_resolver: * mut ServiceResolverr,
     }
 
-    impl ServiceResolverr {
-        fn new(service_resolver: * mut ServiceResolver) -> ServiceResolverr {
-            ServiceResolverr{service_resolver}
+    impl ServiceResolver {
+        fn new(service_resolver: * mut ServiceResolverr) -> ServiceResolver {
+            ServiceResolver{service_resolver}
         }
     }
 
-    impl Drop for ServiceResolverr {
+    impl Drop for ServiceResolver {
         fn drop(&mut self) {
             unsafe {
                 avahi_sys::avahi_service_resolver_free(self.service_resolver);
