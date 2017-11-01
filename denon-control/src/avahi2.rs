@@ -229,7 +229,7 @@ mod avahi {
 
                 if name_string.is_ok() && type_string.is_ok() && domain_string.is_ok() {
                     let sr = avahi_sys::avahi_service_resolver_new(self.client, ifindex, prot, name_string.unwrap().as_ptr(), type_string.unwrap().as_ptr(), domain_string.unwrap().as_ptr(), -1, transmute(0), callback, userdata);
-                    self.service_resolver = Some(ServiceResolverr{service_resolver: sr});
+                    self.service_resolver = Some(ServiceResolverr::new(sr));
                 }
             }
         }
@@ -253,7 +253,15 @@ mod avahi {
         avahi::service_browser_callback_fn];
 
     unsafe extern "C" fn service_browser_callback_fn(
-        _service_browser: *mut avahi_sys::AvahiServiceBrowser, ifindex: avahi_sys::AvahiIfIndex, protocol: avahi_sys::AvahiProtocol, event: avahi_sys::AvahiBrowserEvent, name: *const c_char, typee: *const c_char, domain: *const c_char, flags: avahi_sys::AvahiLookupResultFlags, userdata: *mut c_void) {
+        _service_browser: *mut avahi_sys::AvahiServiceBrowser,
+        ifindex: avahi_sys::AvahiIfIndex,
+        protocol: avahi_sys::AvahiProtocol,
+        event: avahi_sys::AvahiBrowserEvent,
+        name: *const c_char,
+        typee: *const c_char,
+        domain: *const c_char,
+        flags: avahi_sys::AvahiLookupResultFlags,
+        userdata: *mut c_void) {
         let functor : &service_browser_callback::CallbackBoxed = transmute(userdata);
 
         let name_string = init_if_not_null(name);
@@ -273,7 +281,6 @@ mod avahi {
             ) -> ServiceBrowser {
             ServiceBrowser{service_browser: service_browser, callback: callback}
         }
-
     }
 
     impl Drop for ServiceBrowser {
@@ -321,6 +328,12 @@ mod avahi {
 
     struct ServiceResolverr {
         service_resolver: * mut ServiceResolver,
+    }
+
+    impl ServiceResolverr {
+        fn new(service_resolver: * mut ServiceResolver) -> ServiceResolverr {
+            ServiceResolverr{service_resolver}
+        }
     }
 
     impl Drop for ServiceResolverr {
