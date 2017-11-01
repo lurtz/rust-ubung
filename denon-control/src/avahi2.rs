@@ -27,27 +27,24 @@ mod avahi {
     macro_rules! callback_types {
         ($name:ident, [$($module:path),*], $function:ty, $ccallback:ty, $callback_fn:path) => {pub mod $name {
             $(use $module;)*
-            use std::ptr;
-            use std::rc::Rc;
-            use libc::c_void;
 
             pub type CallbackFn = $function;
             pub type CallbackBoxed = Box<CallbackFn>;
-            pub type CallbackBoxed2 = Rc<CallbackBoxed>;
+            pub type CallbackBoxed2 = ::std::rc::Rc<CallbackBoxed>;
             pub type Callback = Option<CallbackBoxed2>;
             pub type CCallback = $ccallback;
 
-            pub const CALLBACK_FN: CCallback = $callback_fn;
+            pub const CALLBACK_FN: CCallback = Some($callback_fn);
 
-            pub fn get_callback_with_data(user_callback: &Callback) -> (Option<CCallback>, *mut c_void) {
+            pub fn get_callback_with_data(user_callback: &Callback) -> (CCallback, *mut ::libc::c_void) {
                 let callback;
                 let userdata;
                 if let Some(ref cb_box) = *user_callback {
-                    callback = Some(CALLBACK_FN);
-                    userdata = &(*(*cb_box)) as * const CallbackBoxed as * mut CallbackBoxed as * mut c_void;
+                    callback = CALLBACK_FN;
+                    userdata = &(*(*cb_box)) as * const CallbackBoxed as * mut CallbackBoxed as * mut ::libc::c_void;
                 } else {
                     callback = None;
-                    userdata = ptr::null_mut();
+                    userdata = ::std::ptr::null_mut();
                 }
 
                 return (callback, userdata);
@@ -235,18 +232,9 @@ mod avahi {
 
     callback_types![
         service_browser_callback,
-        [libc, avahi_sys, avahi2::avahi],
+        [avahi_sys, avahi2::avahi],
         Fn(avahi::IfIndex, avahi::Protocol, avahi::BrowserEvent, &str, &str, &str, avahi::LookupResultFlags),
-        unsafe extern "C" fn (
-            service_browser: *mut avahi_sys::AvahiServiceBrowser,
-            ifindex: avahi_sys::AvahiIfIndex,
-            protocol: avahi_sys::AvahiProtocol,
-            event: avahi_sys::AvahiBrowserEvent,
-            name: *const libc::c_char,
-            typee: *const libc::c_char,
-            domain: *const libc::c_char,
-            flags: avahi_sys::AvahiLookupResultFlags,
-            userdata: *mut libc::c_void),
+        avahi_sys::AvahiServiceBrowserCallback,
         avahi::service_browser_callback_fn];
 
     unsafe extern "C" fn service_browser_callback_fn(
@@ -334,22 +322,9 @@ mod avahi {
 
     callback_types![
         resolver_callback,
-        [avahi2::avahi, libc],
+        [avahi2::avahi, avahi_sys],
         Fn(Option<String>),
-        unsafe extern "C" fn(
-            *mut avahi::ServiceResolver,
-            avahi::IfIndex,
-            avahi::Protocol,
-            avahi::ResolverEvent,
-            *const libc::c_char,
-            *const libc::c_char,
-            *const libc::c_char,
-            *const libc::c_char,
-            *const avahi::Address,
-            u16,
-            *mut avahi::StringList,
-            avahi::LookupResultFlags,
-            *mut libc::c_void),
+        avahi_sys::AvahiServiceResolverCallback,
         avahi::callback_fn_resolver];
 
     #[cfg(test)]
@@ -378,11 +353,10 @@ mod avahi {
             assert!(0x1 != expected_userdata_mv as usize);
             let (c_callback, data) = get_callback_with_data(&Some(cb));
             assert!(c_callback.is_some());
-            if let Some(callback) = c_callback {
-                let expected_callback = CALLBACK_FN as * const CCallback;
-                let actual_callback = callback as * const CCallback;
-                assert_eq!(expected_callback, actual_callback);
-            }
+
+            let expected_callback = CALLBACK_FN.unwrap() as * const CCallback;
+            let actual_callback = c_callback.unwrap() as * const CCallback;
+            assert_eq!(expected_callback, actual_callback);
 
             assert_eq!(expected_userdata_mv, data);
         }
