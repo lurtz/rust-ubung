@@ -128,6 +128,14 @@ mod avahi {
         }
     }
 
+    impl Drop for Poller {
+        fn drop(&mut self) {
+            unsafe {
+                avahi_sys::avahi_simple_poll_free(self.poller.get());
+            }
+        }
+    }
+
     pub struct Timeout<'a> {
         timeout: * mut avahi_sys::AvahiTimeout,
         poller: &'a Poller,
@@ -151,18 +159,11 @@ mod avahi {
         avahi_sys::avahi_simple_poll_quit(spoll);
     }
 
-    impl Drop for Poller {
-        fn drop(&mut self) {
-            unsafe {
-                avahi_sys::avahi_simple_poll_free(self.poller.get());
-            }
-        }
-    }
-
     pub struct Client {
         poller: Rc<Poller>,
         client : * mut avahi_sys::AvahiClient,
         service_browser: Option<ServiceBrowser>,
+        service_resolver: Option<ServiceResolverr>,
     }
 
     impl Client {
@@ -176,7 +177,7 @@ mod avahi {
                                       ptr::null_mut(),
                                       &mut err);
                 if 0 == err {
-                    return Ok(Client{poller, client: client, service_browser: None});
+                    return Ok(Client{poller, client: client, service_browser: None, service_resolver: None});
                 }
                 return Err(AvahiError::ClientNew);
             }
@@ -217,7 +218,7 @@ mod avahi {
             }
         }
 
-        pub fn create_service_resolver(&self, ifindex: IfIndex, prot: Protocol, name: &str, type_: &str, domain: &str, cb: resolver_callback::CallbackBoxed2) {
+        pub fn create_service_resolver(&mut self, ifindex: IfIndex, prot: Protocol, name: &str, type_: &str, domain: &str, cb: resolver_callback::CallbackBoxed2) {
             unsafe {
                 let cb_option = Some(cb);
                 let (callback, userdata) = resolver_callback::get_callback_with_data(&cb_option);
@@ -227,7 +228,8 @@ mod avahi {
                 let domain_string = ffi::CString::new(domain);
 
                 if name_string.is_ok() && type_string.is_ok() && domain_string.is_ok() {
-                    avahi_sys::avahi_service_resolver_new(self.client, ifindex, prot, name_string.unwrap().as_ptr(), type_string.unwrap().as_ptr(), domain_string.unwrap().as_ptr(), -1, transmute(0), callback, userdata);
+                    let sr = avahi_sys::avahi_service_resolver_new(self.client, ifindex, prot, name_string.unwrap().as_ptr(), type_string.unwrap().as_ptr(), domain_string.unwrap().as_ptr(), -1, transmute(0), callback, userdata);
+                    self.service_resolver = Some(ServiceResolverr{service_resolver: sr});
                 }
             }
         }
@@ -236,6 +238,7 @@ mod avahi {
     impl Drop for Client {
         fn drop(&mut self) {
             self.service_browser = None;
+            self.service_resolver = None;
             unsafe {
                 avahi_sys::avahi_client_free(self.client);
             }
@@ -281,6 +284,53 @@ mod avahi {
         }
     }
 
+    unsafe extern "C" fn callback_fn_resolver(
+        _r: *mut ServiceResolver,
+        _interface: IfIndex,
+        _protocol: Protocol,
+        event: ResolverEvent,
+        _name: *const c_char,
+        _type_: *const c_char,
+        _domain: *const c_char,
+        host_name: *const c_char,
+        _a: *const Address,
+        _port: u16,
+        _txt: *mut StringList,
+        _flags: LookupResultFlags,
+        userdata: *mut c_void) {
+        if avahi_sys::AvahiResolverEvent::AVAHI_RESOLVER_FOUND == event {
+            let functor : &resolver_callback::CallbackBoxed = transmute(userdata);
+
+            let host_name_string;
+            if ptr::null() != host_name {
+                host_name_string = Some(ffi::CStr::from_ptr(host_name).to_string_lossy().into_owned())
+            } else {
+                host_name_string = None
+            }
+
+            functor(host_name_string);
+        }
+    }
+
+    callback_types![
+        resolver_callback,
+        [avahi2::avahi, avahi_sys],
+        Fn(Option<String>),
+        avahi_sys::AvahiServiceResolverCallback,
+        avahi::callback_fn_resolver];
+
+    struct ServiceResolverr {
+        service_resolver: * mut ServiceResolver,
+    }
+
+    impl Drop for ServiceResolverr {
+        fn drop(&mut self) {
+            unsafe {
+                avahi_sys::avahi_service_resolver_free(self.service_resolver);
+            }
+        }
+    }
+
     pub fn create_service_browser_callback(client: Rc<Mutex<Client>>, poller: Rc<Poller>, tx: Sender<String>, name_to_filter: &str) -> service_browser_callback::CallbackBoxed2 {
         let filter_name = String::from(name_to_filter);
 
@@ -294,7 +344,7 @@ mod avahi {
         let sbcb: service_browser_callback::CallbackBoxed2 = Rc::new(Box::new(
             move |_ifindex, _protocol, _event, name_string, type_string, domain_string, _flags| {
                 if avahi_sys::AvahiBrowserEvent::AVAHI_BROWSER_NEW == _event && name_string.contains(&filter_name) {
-                    if let Ok(client_locked) = client.lock() {
+                    if let Ok(mut client_locked) = client.lock() {
                         client_locked.create_service_resolver(_ifindex, _protocol, name_string, type_string, domain_string, scrcb.clone());
                     }
                 }
@@ -302,42 +352,6 @@ mod avahi {
 
         sbcb
     }
-
-    unsafe extern "C" fn callback_fn_resolver(
-        r: *mut ServiceResolver,
-           _interface: IfIndex,
-           _protocol: Protocol,
-           event: ResolverEvent,
-           _name: *const c_char,
-           _type_: *const c_char,
-           _domain: *const c_char,
-           host_name: *const c_char,
-           _a: *const Address,
-           _port: u16,
-           _txt: *mut StringList,
-           _flags: LookupResultFlags,
-           userdata: *mut c_void) {
-        if avahi_sys::AvahiResolverEvent::AVAHI_RESOLVER_FOUND == event {
-            let functor : &resolver_callback::CallbackBoxed = transmute(userdata);
-
-            let host_name_string;
-            if ptr::null() != host_name {
-                host_name_string = Some(ffi::CStr::from_ptr(host_name).to_string_lossy().into_owned())
-            } else {
-                host_name_string = None
-            }
-
-            functor(host_name_string);
-        }
-        avahi_sys::avahi_service_resolver_free(r);
-    }
-
-    callback_types![
-        resolver_callback,
-        [avahi2::avahi, avahi_sys],
-        Fn(Option<String>),
-        avahi_sys::AvahiServiceResolverCallback,
-        avahi::callback_fn_resolver];
 
     #[cfg(test)]
     mod test {
