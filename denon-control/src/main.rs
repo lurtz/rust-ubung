@@ -22,14 +22,6 @@ use state::SourceInputState;
 use getopts::Options;
 use std::env;
 
-#[cfg(test)]
-mod test {
-    #[test]
-    fn bla() {
-        assert_eq!(2, 2);
-    }
-}
-
 // status object shall get the current status of the avr 1912
 // easiest way would be a map<Key, Value> where Value is an enum of u32 and String
 // Key is derived of a mapping from the protocol strings to constants -> define each string once
