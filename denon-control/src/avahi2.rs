@@ -1,10 +1,5 @@
 #![allow(dead_code)]
 
-use std::sync::mpsc::channel;
-use std::sync::Mutex;
-use std::time::Duration;
-use std::rc::Rc;
-
 mod avahi {
     use avahi_sys;
     pub use avahi_error::AvahiError;
@@ -45,10 +40,10 @@ mod avahi {
             pub const CALLBACK_FN: CCallback = $callback_fn;
 
             pub fn get_callback_with_data(user_callback: &Callback) -> (Option<CCallback>, *mut c_void) {
-                let callback : Option<CCallback>;
-                let userdata : *mut c_void;
+                let callback;
+                let userdata;
                 if let Some(ref cb_box) = *user_callback {
-                    callback = Some($callback_fn);
+                    callback = Some(CALLBACK_FN);
                     userdata = &(*(*cb_box)) as * const CallbackBoxed as * mut CallbackBoxed as * mut c_void;
                 } else {
                     callback = None;
@@ -394,30 +389,6 @@ mod avahi {
     }
 }
 
-pub fn get_hostname(type_: &str, filter: &str) -> Result<String, avahi::AvahiError> {
-    let poller = Rc::new(avahi::Poller::new()?);
-    let client = Rc::new(Mutex::new(avahi::Client::new(poller.clone())?));
-
-    let (tx_host, rx_host) = channel();
-
-    let sbcb = avahi::create_service_browser_callback(client.clone(), poller.clone(), tx_host, filter);
-
-    let sb1 = client.lock()?.create_service_browser(type_, sbcb);
-    assert!(sb1.is_ok());
-
-    poller.timeout(Duration::from_millis(2000))?;
-    poller.looop();
-
-    match rx_host.try_recv() {
-        Ok(hostname) => return Ok(hostname),
-        Err(_) => return Err(avahi::AvahiError::NoHostsFound),
-    }
-}
-
-pub fn get_receiver() -> Result<String, avahi::AvahiError> {
-    get_hostname("_raop._tcp", "DENON")
-}
-
 #[cfg(test)]
 mod test {
     use avahi2::avahi::{Client, Poller};
@@ -473,5 +444,34 @@ mod test {
         let host = avahi2::get_hostname("_presence._tcp", "");
         assert!("barcas.local" == host.unwrap());
     }
+}
+
+use std::sync::mpsc::channel;
+use std::sync::Mutex;
+use std::time::Duration;
+use std::rc::Rc;
+
+pub fn get_hostname(type_: &str, filter: &str) -> Result<String, avahi::AvahiError> {
+    let poller = Rc::new(avahi::Poller::new()?);
+    let client = Rc::new(Mutex::new(avahi::Client::new(poller.clone())?));
+
+    let (tx_host, rx_host) = channel();
+
+    let sbcb = avahi::create_service_browser_callback(client.clone(), poller.clone(), tx_host, filter);
+
+    let sb1 = client.lock()?.create_service_browser(type_, sbcb);
+    assert!(sb1.is_ok());
+
+    poller.timeout(Duration::from_millis(2000))?;
+    poller.looop();
+
+    match rx_host.try_recv() {
+        Ok(hostname) => return Ok(hostname),
+        Err(_) => return Err(avahi::AvahiError::NoHostsFound),
+    }
+}
+
+pub fn get_receiver() -> Result<String, avahi::AvahiError> {
+    get_hostname("_raop._tcp", "DENON")
 }
 
