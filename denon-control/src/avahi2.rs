@@ -121,7 +121,7 @@ mod avahi {
                 if let Some(tn) = timeout_new {
                     let atimeout = tn(poll, &tv, Some(timeout_fn), self.poller.get() as * mut c_void);
                     assert!(ptr::null() != atimeout);
-                    return Ok(Timeout{timeout: atimeout, poller: self});
+                    return Ok(Timeout::new(atimeout, self));
                 }
             }
             Err(AvahiError::Timeout)
@@ -139,6 +139,12 @@ mod avahi {
     pub struct Timeout<'a> {
         timeout: * mut avahi_sys::AvahiTimeout,
         poller: &'a Poller,
+    }
+
+    impl<'a> Timeout<'a> {
+        fn new(timeout: * mut avahi_sys::AvahiTimeout, poller: &Poller) -> Timeout {
+            Timeout{timeout, poller}
+        }
     }
 
     impl<'a> Drop for Timeout<'a> {
