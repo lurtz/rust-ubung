@@ -111,7 +111,7 @@ mod avahi {
             }
         }
 
-        pub fn timeout(&self, dur: Duration) -> Result<(), AvahiError> {
+        pub fn timeout(&self, dur: Duration) -> Result<Timeout, AvahiError> {
             let target = time_in(dur)?;
             let tv = create_timeval(target);
 
@@ -121,22 +121,34 @@ mod avahi {
                 if let Some(tn) = timeout_new {
                     let atimeout = tn(poll, &tv, Some(timeout_fn), self.poller.get() as * mut c_void);
                     assert!(ptr::null() != atimeout);
+                    return Ok(Timeout{timeout: atimeout, poller: self});
                 }
             }
-            Ok(())
+            Err(AvahiError::Timeout)
         }
     }
 
-    unsafe extern "C" fn timeout_fn(client: *mut avahi_sys::AvahiTimeout,
+    pub struct Timeout<'a> {
+        timeout: * mut avahi_sys::AvahiTimeout,
+        poller: &'a Poller,
+    }
+
+    impl<'a> Drop for Timeout<'a> {
+        fn drop(&mut self) {
+            unsafe {
+                let poll = self.poller.get();
+                let free_func = (*poll).timeout_free;
+                if let Some(ff) = free_func {
+                    ff(self.timeout);
+                }
+            }
+        }
+    }
+
+    unsafe extern "C" fn timeout_fn(_timeout: *mut avahi_sys::AvahiTimeout,
                                   userdata: *mut c_void) {
         let spoll: * mut avahi_sys::AvahiSimplePoll = transmute(userdata);
         avahi_sys::avahi_simple_poll_quit(spoll);
-
-        let poll = avahi_sys::avahi_simple_poll_get(spoll);
-        let free_func = (*poll).timeout_free;
-        if let Some(ff) = free_func {
-            ff(client);
-        }
     }
 
     impl Drop for Poller {
@@ -436,7 +448,7 @@ pub fn get_hostname(type_: &str, filter: &str) -> Result<String, avahi::AvahiErr
     let sb1 = client.lock()?.create_service_browser(type_, sbcb);
     assert!(sb1.is_ok());
 
-    poller.timeout(Duration::from_millis(2000))?;
+    let _timeout = poller.timeout(Duration::from_millis(2000))?;
     poller.looop();
 
     match rx_host.try_recv() {

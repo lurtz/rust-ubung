@@ -14,6 +14,7 @@ pub enum AvahiError {
     NulError(NulError),
     IOError(io::Error),
     SystemTimeError(SystemTimeError),
+    Timeout,
 }
 
 impl fmt::Display for AvahiError {
@@ -31,6 +32,7 @@ impl fmt::Display for AvahiError {
             &NulError(ref e) => write!(f, "NulError: {}", e),
             &IOError(ref e) => write!(f, "IOError: {}", e),
             &SystemTimeError(ref e) => write!(f, "SystemTimeError: {}", e),
+            &Timeout => write!(f, "Timeout"),
         }
     }
 }
