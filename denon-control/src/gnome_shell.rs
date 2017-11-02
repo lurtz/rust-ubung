@@ -1,5 +1,3 @@
-#![allow(dead_code)]
-
 use dbus;
 use dbus::{BusType, Connection, Message};
 use std::convert::From;
