@@ -1,5 +1,3 @@
-#![allow(dead_code)]
-
 mod avahi {
     use avahi_sys;
     pub use avahi_error::AvahiError;
@@ -12,17 +10,14 @@ mod avahi {
     use std::time::{Duration, SystemTime};
     use std::mem::transmute;
 
-    type ClientState = avahi_sys::AvahiClientState;
     type ServiceResolverr = avahi_sys::AvahiServiceResolver;
     type IfIndex = avahi_sys::AvahiIfIndex;
     type Protocol = avahi_sys::AvahiProtocol;
-    type LookupFlags = avahi_sys::AvahiLookupFlags;
     type ResolverEvent = avahi_sys::AvahiResolverEvent;
     type Address = avahi_sys::AvahiAddress;
     type StringList = avahi_sys::AvahiStringList;
     type BrowserEvent = avahi_sys::AvahiBrowserEvent;
     type LookupResultFlags = avahi_sys::AvahiLookupResultFlags;
-    type ServiceBrowserMessage = (IfIndex, Protocol, String, String, String);
 
     macro_rules! callback_types {
         ($name:ident, [$($module:path),*], $function:ty, $ccallback:ty, $callback_fn:path) => {pub mod $name {
@@ -50,13 +45,6 @@ mod avahi {
                 return (callback, userdata);
             }
         }}
-    }
-
-    pub fn time_in_millis(timer: &time::Instant) -> u64 {
-        let elapsed = timer.elapsed();
-        let el_s = elapsed.as_secs() * 1000;
-        let el_n = (elapsed.subsec_nanos() / 1_000_000) as u64;
-        el_s + el_n
     }
 
     fn time_in(dur: Duration) -> Result<Duration, AvahiError> {
@@ -166,7 +154,7 @@ mod avahi {
     }
 
     pub struct Client {
-        poller: Rc<Poller>,
+        _poller: Rc<Poller>,
         client : * mut avahi_sys::AvahiClient,
         service_browser: Option<ServiceBrowser>,
         service_resolver: Option<ServiceResolver>,
@@ -183,7 +171,7 @@ mod avahi {
                                       ptr::null_mut(),
                                       &mut err);
                 if 0 == err {
-                    return Ok(Client{poller, client: client, service_browser: None, service_resolver: None});
+                    return Ok(Client{_poller: poller, client, service_browser: None, service_resolver: None});
                 }
                 return Err(AvahiError::ClientNew);
             }
@@ -235,7 +223,7 @@ mod avahi {
 
                 if name_string.is_ok() && type_string.is_ok() && domain_string.is_ok() {
                     let sr = avahi_sys::avahi_service_resolver_new(self.client, ifindex, prot, name_string.unwrap().as_ptr(), type_string.unwrap().as_ptr(), domain_string.unwrap().as_ptr(), -1, transmute(0), callback, userdata);
-                    self.service_resolver = Some(ServiceResolver::new(sr));
+                    self.service_resolver = Some(ServiceResolver::new(sr, cb_option.unwrap()));
                 }
             }
         }
@@ -279,13 +267,13 @@ mod avahi {
 
     struct ServiceBrowser {
         service_browser: * mut avahi_sys::AvahiServiceBrowser,
-        callback : service_browser_callback::CallbackBoxed2,
+        _callback: service_browser_callback::CallbackBoxed2,
     }
 
     impl ServiceBrowser {
-        fn new(service_browser: * mut avahi_sys::AvahiServiceBrowser, callback : service_browser_callback::CallbackBoxed2
+        fn new(service_browser: * mut avahi_sys::AvahiServiceBrowser, callback: service_browser_callback::CallbackBoxed2
             ) -> ServiceBrowser {
-            ServiceBrowser{service_browser: service_browser, callback: callback}
+            ServiceBrowser{service_browser, _callback: callback}
         }
     }
 
@@ -334,11 +322,12 @@ mod avahi {
 
     struct ServiceResolver {
         service_resolver: * mut ServiceResolverr,
+        _callback: resolver_callback::CallbackBoxed2,
     }
 
     impl ServiceResolver {
-        fn new(service_resolver: * mut ServiceResolverr) -> ServiceResolver {
-            ServiceResolver{service_resolver}
+        fn new(service_resolver: * mut ServiceResolverr, callback: resolver_callback::CallbackBoxed2) -> ServiceResolver {
+            ServiceResolver{service_resolver, _callback: callback}
         }
     }
 
