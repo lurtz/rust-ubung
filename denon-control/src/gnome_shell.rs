@@ -44,35 +44,24 @@ impl GnomeShell {
         if return_code.is_none() || result.is_none() {
             return Err(Error::EVAL);
         }
-        if !return_code.unwrap() {
-            Err(Error::JAVASCRIPT(String::from(result.unwrap())))
+        let string_result = String::from(result.unwrap());
+        if return_code.unwrap() {
+            Ok(String::from(string_result))
         } else {
-            Ok(String::from(result.unwrap()))
+            Err(Error::JAVASCRIPT(String::from(string_result)))
         }
     }
 }
 
 #[cfg(test)]
 mod test {
-    use dbus::*;
-    use gnome_shell::*;
+    use gnome_shell::GnomeShell;
 
     #[test]
     fn gnome_shell() {
         let gs = GnomeShell::new().unwrap();
         let result = gs.eval("10+101").unwrap();
         assert!("111" == result);
-    }
-
-    #[test]
-    fn dbus_test() {
-        let c = Connection::get_private(BusType::Session).unwrap();
-        let m = Message::new_method_call(EXTENSION_IFACE, EXTENSION_PATH, INTERFACE, "Eval").unwrap().append1("10+101");
-        let r = c.send_with_reply_and_block(m, 2000).unwrap();
-        let (return_code, result) = r.get2::<bool, &str>();
-        println!("return_code: {:?}, result: {:?}", return_code, result);
-        assert!(true == return_code.unwrap());
-        assert!("111" == result.unwrap());
     }
 }
 
