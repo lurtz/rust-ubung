@@ -81,18 +81,10 @@ fn get_receiver_and_port(args : &getopts::Matches) -> (String, u16) {
     (denon_name, 23)
 }
 
+#[derive(Debug)]
 enum MainError {
     SendError(std::sync::mpsc::SendError<(Operation, State)>),
     ParseIntError(std::num::ParseIntError),
-}
-
-impl std::fmt::Display for MainError {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> Result<(), std::fmt::Error> {
-        match self {
-            &MainError::SendError(ref e) => write!(f, "SendError: {}", e),
-            &MainError::ParseIntError(ref e) => write!(f, "ParseIntError: {}", e),
-        }
-    }
 }
 
 impl std::convert::From<std::sync::mpsc::SendError<(operation::Operation, state::State)>> for MainError {
@@ -166,7 +158,7 @@ fn main() {
     }
     match main2(args, denon_name, denon_port) {
         Ok(_) => println!("success"),
-        Err(e) => println!("got error: {}", e),
+        Err(e) => println!("got error: {:?}", e),
     }
 }
 
