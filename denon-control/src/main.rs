@@ -21,6 +21,8 @@ use denon_connection::{DenonConnection, State, Operation};
 use state::PowerState;
 use state::SourceInputState;
 
+use std::error;
+use std::fmt;
 use getopts::Options;
 use std::env;
 
@@ -82,24 +84,36 @@ fn get_receiver_and_port(args : &getopts::Matches) -> (String, u16) {
 }
 
 #[derive(Debug)]
-enum MainError {
+enum Error {
     SendError(std::sync::mpsc::SendError<(Operation, State)>),
     ParseIntError(std::num::ParseIntError),
 }
 
-impl std::convert::From<std::sync::mpsc::SendError<(operation::Operation, state::State)>> for MainError {
+impl fmt::Display for Error {
+    fn fmt(&self, format: &mut fmt::Formatter) -> Result<(), fmt::Error> {
+        write!(format, "{:?}", self)
+    }
+}
+
+impl error::Error for Error {
+    fn description(&self) -> &str {
+        "Error for Denon operations"
+    }
+}
+
+impl std::convert::From<std::sync::mpsc::SendError<(operation::Operation, state::State)>> for Error {
     fn from(send_error : std::sync::mpsc::SendError<(operation::Operation, state::State)>) -> Self {
-        MainError::SendError(send_error)
+        Error::SendError(send_error)
     }
 }
 
-impl std::convert::From<std::num::ParseIntError> for MainError {
+impl std::convert::From<std::num::ParseIntError> for Error {
     fn from(parse_error : std::num::ParseIntError) -> Self {
-        MainError::ParseIntError(parse_error)
+        Error::ParseIntError(parse_error)
     }
 }
 
-fn main2(args : getopts::Matches, denon_name : String, denon_port : u16 ) -> Result<(), MainError> {
+fn main2(args : getopts::Matches, denon_name : String, denon_port : u16 ) -> Result<(), Error> {
     let dc = DenonConnection::new(denon_name.as_str(), denon_port);
 
     if args.opt_present("s") {

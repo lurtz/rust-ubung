@@ -3,9 +3,12 @@ use std::sync::{PoisonError, MutexGuard};
 use std::convert::From;
 use std::io;
 use std::time::SystemTimeError;
+use std::error;
+use std::fmt;
+use std::fmt::{Display, Formatter};
 
 #[derive(Debug)]
-pub enum AvahiError {
+pub enum Error {
     PollerNew,
     ClientNew,
     CreateServiceBrowser(String, i32),
@@ -17,27 +20,39 @@ pub enum AvahiError {
     Timeout,
 }
 
-impl<'a, T> From<PoisonError<MutexGuard<'a, T>>> for AvahiError {
+impl Display for Error {
+    fn fmt(&self, format: &mut Formatter) -> Result<(), fmt::Error> {
+        write!(format, "{:?}", self)
+    }
+}
+
+impl error::Error for Error {
+    fn description(&self) -> &str {
+        "Error for Avahi related operations"
+    }
+}
+
+impl<'a, T> From<PoisonError<MutexGuard<'a, T>>> for Error {
     fn from(_error: PoisonError<MutexGuard<'a, T>>) -> Self {
-        AvahiError::MutexLocked
+        Error::MutexLocked
     }
 }
 
-impl From<NulError> for AvahiError {
+impl From<NulError> for Error {
     fn from(error: NulError) -> Self {
-        AvahiError::NulError(error)
+        Error::NulError(error)
     }
 }
 
-impl From<io::Error> for AvahiError {
+impl From<io::Error> for Error {
     fn from(error: io::Error) -> Self {
-        AvahiError::IOError(error)
+        Error::IOError(error)
     }
 }
 
-impl From<SystemTimeError> for AvahiError {
+impl From<SystemTimeError> for Error {
     fn from(error: SystemTimeError) -> Self {
-        AvahiError::SystemTimeError(error)
+        Error::SystemTimeError(error)
     }
 }
 

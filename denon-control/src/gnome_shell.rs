@@ -1,6 +1,8 @@
 use dbus;
 use dbus::{BusType, Connection, Message};
 use std::convert::From;
+use std::error;
+use std::fmt;
 
 const EXTENSION_IFACE: &'static str = "org.gnome.Shell";
 const EXTENSION_PATH: &'static str  = "/org/gnome/Shell";
@@ -12,6 +14,18 @@ enum Error {
     MethodCall(String),
     EVAL,
     JAVASCRIPT(String),
+}
+
+impl fmt::Display for Error {
+    fn fmt(&self, format: &mut fmt::Formatter) -> Result<(), fmt::Error> {
+        write!(format, "{:?}", self)
+    }
+}
+
+impl error::Error for Error {
+    fn description(&self) -> &str {
+        "Error for Gnome Shell operations"
+    }
 }
 
 impl From<dbus::Error> for Error {

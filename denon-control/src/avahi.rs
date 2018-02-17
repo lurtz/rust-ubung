@@ -1,8 +1,8 @@
 use std::process::Command;
-use avahi_error::AvahiError;
+use avahi_error::Error;
 
 #[allow(dead_code)]
-pub fn get_receiver() -> Result<String, AvahiError> {
+pub fn get_receiver() -> Result<String, Error> {
     let output = Command::new("/usr/bin/avahi-browse")
         .arg("-p")
         .arg("-t")
@@ -25,7 +25,7 @@ pub fn get_receiver() -> Result<String, AvahiError> {
     }
 
     if denon_names.is_empty() {
-        return Err(AvahiError::NoHostsFound);
+        return Err(Error::NoHostsFound);
     } else {
         return Ok(String::from(denon_names[0]));
     }

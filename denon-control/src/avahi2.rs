@@ -1,6 +1,6 @@
 mod avahi {
     use avahi_sys;
-    pub use avahi_error::AvahiError;
+    pub use avahi_error::Error;
     use libc::{c_void, c_int, c_char, timeval};
     use std::{ffi, time, ptr};
     use std::sync::mpsc::Sender;
@@ -47,7 +47,7 @@ mod avahi {
         }}
     }
 
-    fn time_in(dur: Duration) -> Result<Duration, AvahiError> {
+    fn time_in(dur: Duration) -> Result<Duration, Error> {
         let now = SystemTime::now();
         let time_since_epoch = now.duration_since(time::UNIX_EPOCH)?;
         Ok(dur + time_since_epoch)
@@ -72,13 +72,13 @@ mod avahi {
     }
 
     impl Poller {
-        pub fn new() -> Result<Poller, AvahiError> {
+        pub fn new() -> Result<Poller, Error> {
             unsafe {
                 let poller = avahi_sys::avahi_simple_poll_new();
                 if ptr::null() != poller {
                     return Ok(Poller{poller: Cell::new(poller)});
                 } else {
-                    return Err(AvahiError::PollerNew);
+                    return Err(Error::PollerNew);
                 }
             }
         }
@@ -99,7 +99,7 @@ mod avahi {
             }
         }
 
-        pub fn timeout(&self, dur: Duration) -> Result<Timeout, AvahiError> {
+        pub fn timeout(&self, dur: Duration) -> Result<Timeout, Error> {
             let target = time_in(dur)?;
             let tv = create_timeval(target);
 
@@ -112,7 +112,7 @@ mod avahi {
                     return Ok(Timeout::new(atimeout, self));
                 }
             }
-            Err(AvahiError::Timeout)
+            Err(Error::Timeout)
         }
     }
 
@@ -161,7 +161,7 @@ mod avahi {
     }
 
     impl Client {
-        pub fn new(poller: Rc<Poller>) -> Result<Client, AvahiError> {
+        pub fn new(poller: Rc<Poller>) -> Result<Client, Error> {
             unsafe {
                 let mut err: c_int = 0;
                 let client = avahi_sys::avahi_client_new(
@@ -173,7 +173,7 @@ mod avahi {
                 if 0 == err {
                     return Ok(Client{_poller: poller, client, service_browser: None, service_resolver: None});
                 }
-                return Err(AvahiError::ClientNew);
+                return Err(Error::ClientNew);
             }
         }
 
@@ -183,7 +183,7 @@ mod avahi {
             }
         }
 
-        pub fn create_service_browser(&mut self, service_type: &str, callback: service_browser_callback::CallbackBoxed2) -> Result<(), AvahiError> {
+        pub fn create_service_browser(&mut self, service_type: &str, callback: service_browser_callback::CallbackBoxed2) -> Result<(), Error> {
             let service_browser = self.create_service_browser2(service_type, callback);
             match service_browser {
                 Ok(sb) => {
@@ -195,7 +195,7 @@ mod avahi {
             }
         }
 
-        fn create_service_browser2(&self, service_type: &str, user_callback: service_browser_callback::CallbackBoxed2) -> Result<ServiceBrowser, AvahiError> {
+        fn create_service_browser2(&self, service_type: &str, user_callback: service_browser_callback::CallbackBoxed2) -> Result<ServiceBrowser, Error> {
             let cb_option = Some(user_callback);
 
             unsafe {
@@ -207,7 +207,7 @@ mod avahi {
                 if ptr::null() != sb {
                     Ok(ServiceBrowser::new(sb, cb_option.unwrap()))
                 } else {
-                    Err(AvahiError::CreateServiceBrowser(String::from("error while creating service browser"), self.errno()))
+                    Err(Error::CreateServiceBrowser(String::from("error while creating service browser"), self.errno()))
                 }
             }
         }
@@ -459,7 +459,7 @@ use std::sync::Mutex;
 use std::time::Duration;
 use std::rc::Rc;
 
-pub fn get_hostname(type_: &str, filter: &str) -> Result<String, avahi::AvahiError> {
+pub fn get_hostname(type_: &str, filter: &str) -> Result<String, avahi::Error> {
     let poller = Rc::new(avahi::Poller::new()?);
     let client = Rc::new(Mutex::new(avahi::Client::new(poller.clone())?));
 
@@ -475,11 +475,11 @@ pub fn get_hostname(type_: &str, filter: &str) -> Result<String, avahi::AvahiErr
 
     match rx_host.try_recv() {
         Ok(hostname) => return Ok(hostname),
-        Err(_) => return Err(avahi::AvahiError::NoHostsFound),
+        Err(_) => return Err(avahi::Error::NoHostsFound),
     }
 }
 
-pub fn get_receiver() -> Result<String, avahi::AvahiError> {
+pub fn get_receiver() -> Result<String, avahi::Error> {
     get_hostname("_raop._tcp", "DENON")
 }
 
