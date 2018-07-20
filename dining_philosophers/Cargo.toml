@@ -1,0 +1,6 @@
+[package]
+
+name = "dining_philosophers"
+version = "0.0.1"
+authors = [ "Your name <you@example.com>" ]
+
