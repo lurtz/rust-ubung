@@ -7,3 +7,6 @@ target/release
 \.toml~
 \.py~
 .hgignore~
+.*~
+\.project
+Cargo.lock

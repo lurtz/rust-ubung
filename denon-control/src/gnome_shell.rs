@@ -9,7 +9,7 @@ const EXTENSION_PATH: &'static str  = "/org/gnome/Shell";
 const INTERFACE: &'static str = "org.gnome.Shell";
 
 #[derive(Debug)]
-enum Error {
+pub enum Error {
     DBUS(dbus::Error),
     MethodCall(String),
     EVAL,
@@ -40,16 +40,16 @@ impl From<String> for Error {
     }
 }
 
-struct GnomeShell {
+pub struct GnomeShell {
     connection: Connection,
 }
 
 impl GnomeShell {
-    fn new() -> Result<Self, Error> {
+    pub fn new() -> Result<Self, Error> {
         Ok(GnomeShell{connection: Connection::get_private(BusType::Session)?})
     }
 
-    fn eval(&self, js: &str) -> Result<String, Error> {
+    pub fn eval(&self, js: &str) -> Result<String, Error> {
         let m = Message::new_method_call(EXTENSION_IFACE, EXTENSION_PATH, INTERFACE, "Eval")?.append1(js);
         let r = self.connection.send_with_reply_and_block(m, 2000)?;
         let (return_code, result) = r.get2::<bool, &str>();
