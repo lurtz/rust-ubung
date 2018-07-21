@@ -1,7 +1,6 @@
 use std::process::Command;
 use avahi_error::Error;
 
-#[allow(dead_code)]
 pub fn get_receiver() -> Result<String, Error> {
     let output = Command::new("/usr/bin/avahi-browse")
         .arg("-p")

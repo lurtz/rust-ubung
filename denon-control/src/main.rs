@@ -38,6 +38,7 @@ fn parse_args() -> getopts::Matches {
     ops.optopt("p", "power", "Power ON, STANDBY or OFF", "POWER_MODE");
     ops.optopt("v", "volume", "set volume in range 30..50", "VOLUME");
     ops.optopt("i", "input", "set source input: DVD, GAME2", "SOURCE_INPUT");
+    ops.optflag("e", "extern-avahi", "use avahi-browser to find receiver instead of library");
     ops.optflag("l", "laptop", "move output to laptop");
     ops.optflag("r", "receiver", "move output to receiver and set volume");
     ops.optflag("s", "status", "print status of receiver");
@@ -72,8 +73,11 @@ fn get_receiver_and_port(args : &getopts::Matches) -> (String, u16) {
     if let Some(name) = args.opt_str("a") {
         denon_name = name;
     } else {
-        //denon_name = avahi::get_receiver();
-        let denon_name_option = avahi2::get_receiver();
+        let mut get_rec: fn() -> Result<String, avahi_error::Error> = avahi2::get_receiver;
+        if args.opt_present("e") {
+            get_rec = avahi::get_receiver;
+        }
+        let denon_name_option = get_rec();
         match denon_name_option {
             Ok(name) => denon_name = name,
             Err(_) => {denon_name = String::new(); println!("no receiver found, consider using the -a option");}
