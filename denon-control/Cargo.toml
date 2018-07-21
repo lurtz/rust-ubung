@@ -7,5 +7,4 @@ authors = ["Lutz"]
 getopts = "0.2"
 avahi-sys = { git = "https://github.com/tari/avahi-sys", rev = "5011a300ff208b36866736f3282c7a84c43a4c44" }
 libc = "*"
-dbus = "0.5"
 

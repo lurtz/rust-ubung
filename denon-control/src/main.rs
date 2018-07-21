@@ -5,7 +5,6 @@
 extern crate getopts;
 extern crate avahi_sys;
 extern crate libc;
-extern crate dbus;
 
 mod denon_connection;
 mod state;
@@ -15,7 +14,6 @@ mod pulseaudio;
 mod avahi;
 mod avahi2;
 mod avahi_error;
-mod gnome_shell;
 
 use denon_connection::{DenonConnection, State, Operation};
 use state::PowerState;
