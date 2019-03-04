@@ -366,7 +366,7 @@ mod avahi {
         use libc::c_void;
         use std::rc::Rc;
         use std::ptr;
-        use avahi2::avahi::service_browser_callback::{
+        use crate::avahi2::avahi::service_browser_callback::{
             get_callback_with_data, CallbackBoxed, CallbackBoxed2, CCallback, CALLBACK_FN};
 
         #[test]
@@ -399,8 +399,8 @@ mod avahi {
 
 #[cfg(test)]
 mod test {
-    use avahi2::avahi::{Client, Poller};
-    use avahi2;
+    use crate::avahi2::avahi::{Client, Poller};
+    use crate::avahi2;
 
     use std::rc::Rc;
     use std::sync::mpsc::channel;

@@ -187,7 +187,7 @@ impl Eq for State {}
 #[cfg(test)]
 mod test {
     use std::collections::HashSet;
-    use state::State;
+    use crate::state::State;
 
     fn check_value(hs: &HashSet<State>, expected: &State) {
         match *expected {
