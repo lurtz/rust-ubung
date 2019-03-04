@@ -1,7 +1,7 @@
 extern crate std;
 
-pub use parse::{State, Operation};
-use parse::parse;
+pub use crate::parse::{State, Operation};
+use crate::parse::parse;
 
 use std::collections::HashSet;
 use std::time::Duration;
