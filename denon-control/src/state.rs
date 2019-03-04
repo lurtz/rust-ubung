@@ -1,4 +1,3 @@
-extern crate std;
 use std::fmt::{Display, Formatter, Error};
 use std::slice::Iter;
 use std::hash::{Hash, Hasher};

@@ -2,9 +2,7 @@
 // MV53
 // MVMAX 86
 
-extern crate getopts;
 extern crate avahi_sys;
-extern crate libc;
 
 mod denon_connection;
 mod state;

@@ -1,5 +1,3 @@
-extern crate std;
-
 pub use crate::parse::{State, Operation};
 use crate::parse::parse;
 
