@@ -85,9 +85,9 @@ fn parse_response(response: &Vec<String>) -> Vec<State> {
 }
 
 fn print_io_error(e: &std::io::Error) {
-    println!("got error: {}, cause = {:?}, description = {}, kind = {:?}",
+    println!("got error: {}, source = {:?}, description = {}, kind = {:?}",
              e,
-             e.cause(),
+             e.source(),
              e.description(),
              e.kind());
     if let Some(raw_os_error) = e.raw_os_error() {
