@@ -242,7 +242,7 @@ mod avahi {
     callback_types![
         service_browser_callback,
         [crate::avahi_sys, crate::avahi2::avahi],
-        Fn(avahi::IfIndex, avahi::Protocol, avahi::BrowserEvent, &str, &str, &str, avahi::LookupResultFlags),
+        dyn Fn(avahi::IfIndex, avahi::Protocol, avahi::BrowserEvent, &str, &str, &str, avahi::LookupResultFlags),
         avahi_sys::AvahiServiceBrowserCallback,
         avahi::service_browser_callback_fn];
 
@@ -316,7 +316,7 @@ mod avahi {
     callback_types![
         resolver_callback,
         [crate::avahi2::avahi, crate::avahi_sys],
-        Fn(Option<String>),
+        dyn Fn(Option<String>),
         avahi_sys::AvahiServiceResolverCallback,
         avahi::callback_fn_resolver];
 
@@ -408,7 +408,7 @@ mod test {
 
     #[test]
     fn address_of_closures() {
-        type ClosureFn = Fn(u32);
+        type ClosureFn = dyn Fn(u32);
         type BoxedClosure = Box<ClosureFn>;
 
         let bla: Box<u32> = Box::new(42);

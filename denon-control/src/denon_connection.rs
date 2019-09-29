@@ -10,14 +10,14 @@ use std::thread;
 use std::error::Error;
 use std::io::{Read, Write};
 
-fn write(stream: &mut Write, input: String) -> Result<(), std::io::Error> {
+fn write(stream: &mut dyn Write, input: String) -> Result<(), std::io::Error> {
 //    println!("sending: {}", input);
     let volume_command = input.into_bytes();
     stream.write(&volume_command[..])?;
     Ok(())
 }
 
-fn read(stream: &mut Read, lines: u8) -> Result<Vec<String>, std::io::Error> {
+fn read(stream: &mut dyn Read, lines: u8) -> Result<Vec<String>, std::io::Error> {
     let mut string = String::new();
 
     for _ in 0..lines {
