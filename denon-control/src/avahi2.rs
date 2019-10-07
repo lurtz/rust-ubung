@@ -436,6 +436,33 @@ mod test {
     }
 
     #[test]
+    fn address_of_closures2() {
+        // tests indicate that solution following address_of_closures() can be
+        // simplified. There does not need to be a box
+        type ClosureFn = dyn Fn(u32);
+
+        let (tx, rx) = channel();
+        let cb: Rc<ClosureFn> = Rc::new(move |n| {
+            tx.send(n).unwrap();
+        });
+
+        println!("stack address of cb {:?}", &cb as * const Rc<ClosureFn>);
+        println!("pointer of callback on heap via :p {:p}", cb);
+
+        let cb_ref : &ClosureFn = &*cb;
+        let cb_ptr = cb_ref as * const ClosureFn;
+        println!("pointer of callback on heap via cast {:?}", cb_ptr);
+        println!("pointer of callback on heap casted without intermediaries {:?}",  &*cb as &ClosureFn as * const ClosureFn);
+        println!("pointer of callback on heap casted without intermediaries {:?}",  &*cb as &ClosureFn as * const ClosureFn as * const c_void);
+
+        unsafe {
+            (*cb_ptr)(3);
+        }
+
+        assert!(3 == rx.recv().unwrap());
+    }
+
+    #[test]
     fn constructor_without_callback_works() {
         let poller = Rc::new(Poller::new().ok().unwrap());
         let _ = Client::new(poller);
