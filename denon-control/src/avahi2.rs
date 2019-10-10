@@ -405,6 +405,7 @@ mod test {
     use std::rc::Rc;
     use std::sync::mpsc::channel;
     use libc::c_void;
+    use std::mem::transmute;
 
     #[test]
     fn address_of_closures() {
@@ -433,6 +434,15 @@ mod test {
         }
 
         assert!(3 == rx.recv().unwrap());
+
+        // saving closure as pointer and casting back to closure type
+        let cb_vptr = &*cb as &BoxedClosure as * const BoxedClosure as * const c_void;
+        unsafe {
+            let recasted_cb : * const BoxedClosure = transmute(cb_vptr);
+            (*recasted_cb)(5);
+        }
+
+        assert!(5 == rx.recv().unwrap());
     }
 
     #[test]
@@ -460,6 +470,17 @@ mod test {
         }
 
         assert!(3 == rx.recv().unwrap());
+
+        /*
+        // saving closure as pointer and casting back to closure type
+        let cb_vptr = &*cb as &ClosureFn as * const ClosureFn as * const c_void;
+        unsafe {
+            let recasted_cb : * const ClosureFn = transmute(cb_vptr);
+            (*recasted_cb)(5);
+        }
+
+        assert!(5 == rx.recv().unwrap());
+        */
     }
 
     #[test]
