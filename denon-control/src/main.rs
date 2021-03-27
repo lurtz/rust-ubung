@@ -4,23 +4,23 @@
 
 extern crate avahi_sys;
 
-mod denon_connection;
-mod state;
-mod operation;
-mod parse;
-mod pulseaudio;
 mod avahi;
 mod avahi2;
 mod avahi_error;
+mod denon_connection;
+mod operation;
+mod parse;
+mod pulseaudio;
+mod state;
 
-use denon_connection::{DenonConnection, State, Operation};
+use denon_connection::{DenonConnection, Operation, State};
 use state::PowerState;
 use state::SourceInputState;
 
-use std::error;
-use std::fmt;
 use getopts::Options;
 use std::env;
+use std::error;
+use std::fmt;
 
 // status object shall get the current status of the avr 1912
 // easiest way would be a map<Key, Value> where Value is an enum of u32 and String
@@ -34,16 +34,22 @@ fn parse_args() -> getopts::Matches {
     ops.optopt("p", "power", "Power ON, STANDBY or OFF", "POWER_MODE");
     ops.optopt("v", "volume", "set volume in range 30..50", "VOLUME");
     ops.optopt("i", "input", "set source input: DVD, GAME2", "SOURCE_INPUT");
-    ops.optflag("e", "extern-avahi", "use avahi-browser to find receiver instead of library");
+    ops.optflag(
+        "e",
+        "extern-avahi",
+        "use avahi-browser to find receiver instead of library",
+    );
     ops.optflag("l", "laptop", "move output to laptop");
     ops.optflag("r", "receiver", "move output to receiver and set volume");
     ops.optflag("s", "status", "print status of receiver");
     ops.optflag("h", "help", "print help");
 
-    let args : Vec<String> = env::args().collect();
+    let args: Vec<String> = env::args().collect();
     let arguments = match ops.parse(&args[1..]) {
-        Ok(m) => { m }
-        Err(f) => { panic!(f.to_string()) }
+        Ok(m) => m,
+        Err(f) => {
+            panic!(f.to_string())
+        }
     };
 
     if arguments.opt_present("h") {
@@ -55,7 +61,9 @@ fn parse_args() -> getopts::Matches {
     arguments
 }
 
-fn print_status(dc : &DenonConnection) -> Result<(), std::sync::mpsc::SendError<(Operation, State)>> {
+fn print_status(
+    dc: &DenonConnection,
+) -> Result<(), std::sync::mpsc::SendError<(Operation, State)>> {
     println!("Current status of receiver:");
     println!("\t{:?}", dc.get(State::power())?);
     println!("\t{:?}", dc.get(State::source_input())?);
@@ -64,7 +72,7 @@ fn print_status(dc : &DenonConnection) -> Result<(), std::sync::mpsc::SendError<
     Ok(())
 }
 
-fn get_receiver_and_port(args : &getopts::Matches) -> (String, u16) {
+fn get_receiver_and_port(args: &getopts::Matches) -> (String, u16) {
     let denon_name;
     if let Some(name) = args.opt_str("a") {
         denon_name = name;
@@ -76,7 +84,10 @@ fn get_receiver_and_port(args : &getopts::Matches) -> (String, u16) {
         let denon_name_option = get_rec();
         match denon_name_option {
             Ok(name) => denon_name = name,
-            Err(_) => {denon_name = String::new(); println!("no receiver found, consider using the -a option");}
+            Err(_) => {
+                denon_name = String::new();
+                println!("no receiver found, consider using the -a option");
+            }
         }
     }
     println!("using receiver: {}", denon_name);
@@ -101,19 +112,21 @@ impl error::Error for Error {
     }
 }
 
-impl std::convert::From<std::sync::mpsc::SendError<(operation::Operation, state::State)>> for Error {
-    fn from(send_error : std::sync::mpsc::SendError<(operation::Operation, state::State)>) -> Self {
+impl std::convert::From<std::sync::mpsc::SendError<(operation::Operation, state::State)>>
+    for Error
+{
+    fn from(send_error: std::sync::mpsc::SendError<(operation::Operation, state::State)>) -> Self {
         Error::SendError(send_error)
     }
 }
 
 impl std::convert::From<std::num::ParseIntError> for Error {
-    fn from(parse_error : std::num::ParseIntError) -> Self {
+    fn from(parse_error: std::num::ParseIntError) -> Self {
         Error::ParseIntError(parse_error)
     }
 }
 
-fn main2(args : getopts::Matches, denon_name : String, denon_port : u16 ) -> Result<(), Error> {
+fn main2(args: getopts::Matches, denon_name: String, denon_port: u16) -> Result<(), Error> {
     let dc = DenonConnection::new(denon_name.as_str(), denon_port);
 
     if args.opt_present("s") {
@@ -154,7 +167,7 @@ fn main2(args : getopts::Matches, denon_name : String, denon_port : u16 ) -> Res
     }
 
     if let Some(v) = args.opt_str("v") {
-        let mut vi : u32 = v.parse()?;
+        let mut vi: u32 = v.parse()?;
         // do not accidentally kill the ears
         if vi > 50 {
             vi = 50;
@@ -175,4 +188,3 @@ fn main() {
         Err(e) => println!("got error: {:?}", e),
     }
 }
-

@@ -2,10 +2,11 @@ use std::process::Command;
 
 // control pulseaudio to switch outputs
 
-pub const INTERNAL : &'static str = "alsa_output.pci-0000_00_1b.0.analog-stereo";
-pub const CUBIETRUCK : &'static str = "tunnel.cubietruck-2.local.alsa_output.platform-sound.analog-stereo";
+pub const INTERNAL: &'static str = "alsa_output.pci-0000_00_1b.0.analog-stereo";
+pub const CUBIETRUCK: &'static str =
+    "tunnel.cubietruck-2.local.alsa_output.platform-sound.analog-stereo";
 
-const PACTL : &'static str = "/usr/bin/pactl";
+const PACTL: &'static str = "/usr/bin/pactl";
 
 fn get_sink_inputs() -> Vec<u32> {
     let output = Command::new(PACTL)
@@ -43,7 +44,7 @@ fn move_output_to_default_sink(indexes: &Vec<u32>) {
     }
 }
 
-fn set_default_output(target_output : &str) {
+fn set_default_output(target_output: &str) {
     let _ = Command::new(PACTL)
         .arg("set-default-sink")
         .arg(target_output)
@@ -51,7 +52,7 @@ fn set_default_output(target_output : &str) {
         .expect("pactl failed");
 }
 
-pub fn switch_ouput(target_output : &str) {
+pub fn switch_ouput(target_output: &str) {
     set_default_output(target_output);
     let indexes = get_sink_inputs();
     move_output_to_default_sink(&indexes);

@@ -1,9 +1,9 @@
-use std::fmt::{Display, Formatter, Error};
-use std::slice::Iter;
-use std::hash::{Hash, Hasher};
 use std::cmp::{Eq, PartialEq};
+use std::fmt::{Display, Error, Formatter};
+use std::hash::{Hash, Hasher};
+use std::slice::Iter;
 
-#[derive(Debug,Clone,PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum PowerState {
     ON,
     STANDBY,
@@ -17,13 +17,12 @@ impl Display for PowerState {
 
 impl PowerState {
     pub fn iterator() -> Iter<'static, PowerState> {
-        static STATES: [PowerState; 2] = [PowerState::ON,
-                                                 PowerState::STANDBY];
+        static STATES: [PowerState; 2] = [PowerState::ON, PowerState::STANDBY];
         STATES.into_iter()
     }
 }
 
-#[derive(Debug,Clone,PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum SourceInputState {
     CD,
     Tuner,
@@ -61,36 +60,38 @@ impl Display for SourceInputState {
 
 impl SourceInputState {
     pub fn iterator() -> Iter<'static, SourceInputState> {
-        static STATES: [SourceInputState; 25] = [SourceInputState::CD,
-                                                 SourceInputState::Tuner,
-                                                 SourceInputState::DVD,
-                                                 SourceInputState::BD,
-                                                 SourceInputState::TV,
-                                                 SourceInputState::SATCBL,
-                                                 SourceInputState::GAME,
-                                                 SourceInputState::GAME2,
-                                                 SourceInputState::VAUX,
-                                                 SourceInputState::DOCK,
-                                                 SourceInputState::IPOD,
-                                                 SourceInputState::NETUSB,
-                                                 SourceInputState::RHAPSODY,
-                                                 SourceInputState::NAPSTER,
-                                                 SourceInputState::PANDORA,
-                                                 SourceInputState::LASTFM,
-                                                 SourceInputState::FLICKR,
-                                                 SourceInputState::FAVORITES,
-                                                 SourceInputState::IRADIO,
-                                                 SourceInputState::SERVER,
-                                                 SourceInputState::USBIPOD,
-                                                 SourceInputState::USB,
-                                                 SourceInputState::IPD,
-                                                 SourceInputState::IRP,
-                                                 SourceInputState::FVP];
+        static STATES: [SourceInputState; 25] = [
+            SourceInputState::CD,
+            SourceInputState::Tuner,
+            SourceInputState::DVD,
+            SourceInputState::BD,
+            SourceInputState::TV,
+            SourceInputState::SATCBL,
+            SourceInputState::GAME,
+            SourceInputState::GAME2,
+            SourceInputState::VAUX,
+            SourceInputState::DOCK,
+            SourceInputState::IPOD,
+            SourceInputState::NETUSB,
+            SourceInputState::RHAPSODY,
+            SourceInputState::NAPSTER,
+            SourceInputState::PANDORA,
+            SourceInputState::LASTFM,
+            SourceInputState::FLICKR,
+            SourceInputState::FAVORITES,
+            SourceInputState::IRADIO,
+            SourceInputState::SERVER,
+            SourceInputState::USBIPOD,
+            SourceInputState::USB,
+            SourceInputState::IPD,
+            SourceInputState::IRP,
+            SourceInputState::FVP,
+        ];
         STATES.into_iter()
     }
 }
 
-#[derive(Debug,Clone)]
+#[derive(Debug, Clone)]
 pub enum State {
     Power(PowerState),
     SourceInput(SourceInputState),
@@ -152,23 +153,23 @@ impl Hash for State {
 }
 
 macro_rules! equal_helper {
-	($first:ident, $second:ident, $enum_value:path) => {
+    ($first:ident, $second:ident, $enum_value:path) => {
         if let $enum_value(_) = *$first {
             if let $enum_value(_) = *$second {
                 return true;
             }
         }
-	}
+    };
 }
 
 macro_rules! equal_helper_no_args {
-	($first:ident, $second:ident, $enum_value:path) => {
+    ($first:ident, $second:ident, $enum_value:path) => {
         if let $enum_value = *$first {
             if let $enum_value = *$second {
                 return true;
             }
         }
-	}
+    };
 }
 
 impl PartialEq for State {
@@ -186,8 +187,8 @@ impl Eq for State {}
 
 #[cfg(test)]
 mod test {
-    use std::collections::HashSet;
     use crate::state::State;
+    use std::collections::HashSet;
 
     fn check_value(hs: &HashSet<State>, expected: &State) {
         match *expected {

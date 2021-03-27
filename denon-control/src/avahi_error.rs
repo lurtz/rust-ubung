@@ -1,11 +1,11 @@
-use std::ffi::NulError;
-use std::sync::{PoisonError, MutexGuard};
 use std::convert::From;
-use std::io;
-use std::time::SystemTimeError;
 use std::error;
+use std::ffi::NulError;
 use std::fmt;
 use std::fmt::{Display, Formatter};
+use std::io;
+use std::sync::{MutexGuard, PoisonError};
+use std::time::SystemTimeError;
 
 #[derive(Debug)]
 pub enum Error {
@@ -55,4 +55,3 @@ impl From<SystemTimeError> for Error {
         Error::SystemTimeError(error)
     }
 }
-

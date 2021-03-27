@@ -1,16 +1,16 @@
-pub use crate::state::State;
+pub use crate::operation::Operation;
 pub use crate::state::PowerState;
 pub use crate::state::SourceInputState;
-pub use crate::operation::Operation;
+pub use crate::state::State;
 
 macro_rules! parsehelper {
-	($trimmed:expr, $op:expr, $func:path) => {
-		if $trimmed.starts_with($op.value()) {
-          let value = get_value($trimmed, &$op);
-  		  let x = $func(value);
-  		  return Some(x);
-		}
-	};
+    ($trimmed:expr, $op:expr, $func:path) => {
+        if $trimmed.starts_with($op.value()) {
+            let value = get_value($trimmed, &$op);
+            let x = $func(value);
+            return Some(x);
+        }
+    };
 }
 
 fn get_value<'a>(trimmed: &'a str, op: &State) -> &'a str {

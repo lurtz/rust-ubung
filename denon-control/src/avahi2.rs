@@ -1,14 +1,14 @@
 mod avahi {
-    use avahi_sys;
     pub use crate::avahi_error::Error;
-    use libc::{c_void, c_int, c_char, timeval};
-    use std::{ffi, time, ptr};
+    use avahi_sys;
+    use libc::{c_char, c_int, c_void, timeval};
+    use std::cell::Cell;
+    use std::mem::transmute;
+    use std::rc::Rc;
     use std::sync::mpsc::Sender;
     use std::sync::Mutex;
-    use std::rc::Rc;
-    use std::cell::Cell;
     use std::time::{Duration, SystemTime};
-    use std::mem::transmute;
+    use std::{ffi, ptr, time};
 
     type ServiceResolverr = avahi_sys::AvahiServiceResolver;
     type IfIndex = avahi_sys::AvahiIfIndex;
@@ -56,10 +56,13 @@ mod avahi {
     fn create_timeval(time: Duration) -> timeval {
         let seconds = time.as_secs();
         let useconds = time.subsec_nanos() / 1000;
-        timeval{tv_sec: seconds as i64, tv_usec: useconds as i64}
+        timeval {
+            tv_sec: seconds as i64,
+            tv_usec: useconds as i64,
+        }
     }
 
-    unsafe fn init_if_not_null(cstr: * const c_char) -> String {
+    unsafe fn init_if_not_null(cstr: *const c_char) -> String {
         if ptr::null() != cstr {
             ffi::CStr::from_ptr(cstr).to_string_lossy().into_owned()
         } else {
@@ -68,7 +71,7 @@ mod avahi {
     }
 
     pub struct Poller {
-        poller : Cell<* mut avahi_sys::AvahiSimplePoll>,
+        poller: Cell<*mut avahi_sys::AvahiSimplePoll>,
     }
 
     impl Poller {
@@ -76,27 +79,25 @@ mod avahi {
             unsafe {
                 let poller = avahi_sys::avahi_simple_poll_new();
                 if ptr::null() != poller {
-                    return Ok(Poller{poller: Cell::new(poller)});
+                    return Ok(Poller {
+                        poller: Cell::new(poller),
+                    });
                 } else {
                     return Err(Error::PollerNew);
                 }
             }
         }
 
-        unsafe fn get(&self) -> * const avahi_sys::AvahiPoll {
+        unsafe fn get(&self) -> *const avahi_sys::AvahiPoll {
             avahi_sys::avahi_simple_poll_get(self.poller.get())
         }
 
         pub fn looop(&self) -> i32 {
-            unsafe {
-                avahi_sys::avahi_simple_poll_loop(self.poller.get())
-            }
+            unsafe { avahi_sys::avahi_simple_poll_loop(self.poller.get()) }
         }
 
         pub fn quit(&self) {
-            unsafe {
-                avahi_sys::avahi_simple_poll_quit(self.poller.get())
-            }
+            unsafe { avahi_sys::avahi_simple_poll_quit(self.poller.get()) }
         }
 
         pub fn timeout(&self, dur: Duration) -> Result<Timeout, Error> {
@@ -107,7 +108,12 @@ mod avahi {
                 let poll = self.get();
                 let timeout_new = (*poll).timeout_new;
                 if let Some(tn) = timeout_new {
-                    let atimeout = tn(poll, &tv, Some(timeout_fn), self.poller.get() as * mut c_void);
+                    let atimeout = tn(
+                        poll,
+                        &tv,
+                        Some(timeout_fn),
+                        self.poller.get() as *mut c_void,
+                    );
                     assert!(ptr::null() != atimeout);
                     return Ok(Timeout::new(atimeout, self));
                 }
@@ -125,13 +131,13 @@ mod avahi {
     }
 
     pub struct Timeout<'a> {
-        timeout: * mut avahi_sys::AvahiTimeout,
+        timeout: *mut avahi_sys::AvahiTimeout,
         poller: &'a Poller,
     }
 
     impl<'a> Timeout<'a> {
-        fn new(timeout: * mut avahi_sys::AvahiTimeout, poller: &Poller) -> Timeout {
-            Timeout{timeout, poller}
+        fn new(timeout: *mut avahi_sys::AvahiTimeout, poller: &Poller) -> Timeout {
+            Timeout { timeout, poller }
         }
     }
 
@@ -147,15 +153,14 @@ mod avahi {
         }
     }
 
-    unsafe extern "C" fn timeout_fn(_timeout: *mut avahi_sys::AvahiTimeout,
-                                  userdata: *mut c_void) {
-        let spoll: * mut avahi_sys::AvahiSimplePoll = transmute(userdata);
+    unsafe extern "C" fn timeout_fn(_timeout: *mut avahi_sys::AvahiTimeout, userdata: *mut c_void) {
+        let spoll: *mut avahi_sys::AvahiSimplePoll = transmute(userdata);
         avahi_sys::avahi_simple_poll_quit(spoll);
     }
 
     pub struct Client {
         _poller: Rc<Poller>,
-        client : * mut avahi_sys::AvahiClient,
+        client: *mut avahi_sys::AvahiClient,
         service_browser: Option<ServiceBrowser>,
         service_resolver: Option<ServiceResolver>,
     }
@@ -165,54 +170,89 @@ mod avahi {
             unsafe {
                 let mut err: c_int = 0;
                 let client = avahi_sys::avahi_client_new(
-                                      poller.get(),
-                                      avahi_sys::AvahiClientFlags(0),
-                                      None,
-                                      ptr::null_mut(),
-                                      &mut err);
+                    poller.get(),
+                    avahi_sys::AvahiClientFlags(0),
+                    None,
+                    ptr::null_mut(),
+                    &mut err,
+                );
                 if 0 == err {
-                    return Ok(Client{_poller: poller, client, service_browser: None, service_resolver: None});
+                    return Ok(Client {
+                        _poller: poller,
+                        client,
+                        service_browser: None,
+                        service_resolver: None,
+                    });
                 }
                 return Err(Error::ClientNew);
             }
         }
 
         fn errno(&self) -> i32 {
-            unsafe {
-                avahi_sys::avahi_client_errno(self.client)
-            }
+            unsafe { avahi_sys::avahi_client_errno(self.client) }
         }
 
-        pub fn create_service_browser(&mut self, service_type: &str, callback: service_browser_callback::CallbackBoxed2) -> Result<(), Error> {
+        pub fn create_service_browser(
+            &mut self,
+            service_type: &str,
+            callback: service_browser_callback::CallbackBoxed2,
+        ) -> Result<(), Error> {
             let service_browser = self.create_service_browser2(service_type, callback);
             match service_browser {
                 Ok(sb) => {
                     self.service_browser = Some(sb);
-                    Ok(())},
+                    Ok(())
+                }
                 Err(err) => {
                     self.service_browser = None;
-                    Err(err)},
+                    Err(err)
+                }
             }
         }
 
-        fn create_service_browser2(&self, service_type: &str, user_callback: service_browser_callback::CallbackBoxed2) -> Result<ServiceBrowser, Error> {
+        fn create_service_browser2(
+            &self,
+            service_type: &str,
+            user_callback: service_browser_callback::CallbackBoxed2,
+        ) -> Result<ServiceBrowser, Error> {
             let cb_option = Some(user_callback);
 
             unsafe {
                 let flag = transmute(0);
 
                 let ctype = ffi::CString::new(service_type)?;
-                let (callback, userdata) = service_browser_callback::get_callback_with_data(&cb_option);
-                let sb = avahi_sys::avahi_service_browser_new(self.client, -1, -1, ctype.as_ptr(), ptr::null(), flag, callback, userdata);
+                let (callback, userdata) =
+                    service_browser_callback::get_callback_with_data(&cb_option);
+                let sb = avahi_sys::avahi_service_browser_new(
+                    self.client,
+                    -1,
+                    -1,
+                    ctype.as_ptr(),
+                    ptr::null(),
+                    flag,
+                    callback,
+                    userdata,
+                );
                 if ptr::null() != sb {
                     Ok(ServiceBrowser::new(sb, cb_option.unwrap()))
                 } else {
-                    Err(Error::CreateServiceBrowser(String::from("error while creating service browser"), self.errno()))
+                    Err(Error::CreateServiceBrowser(
+                        String::from("error while creating service browser"),
+                        self.errno(),
+                    ))
                 }
             }
         }
 
-        pub fn create_service_resolver(&mut self, ifindex: IfIndex, prot: Protocol, name: &str, type_: &str, domain: &str, cb: resolver_callback::CallbackBoxed2) {
+        pub fn create_service_resolver(
+            &mut self,
+            ifindex: IfIndex,
+            prot: Protocol,
+            name: &str,
+            type_: &str,
+            domain: &str,
+            cb: resolver_callback::CallbackBoxed2,
+        ) {
             unsafe {
                 let cb_option = Some(cb);
                 let (callback, userdata) = resolver_callback::get_callback_with_data(&cb_option);
@@ -222,7 +262,18 @@ mod avahi {
                 let domain_string = ffi::CString::new(domain);
 
                 if name_string.is_ok() && type_string.is_ok() && domain_string.is_ok() {
-                    let sr = avahi_sys::avahi_service_resolver_new(self.client, ifindex, prot, name_string.unwrap().as_ptr(), type_string.unwrap().as_ptr(), domain_string.unwrap().as_ptr(), -1, transmute(0), callback, userdata);
+                    let sr = avahi_sys::avahi_service_resolver_new(
+                        self.client,
+                        ifindex,
+                        prot,
+                        name_string.unwrap().as_ptr(),
+                        type_string.unwrap().as_ptr(),
+                        domain_string.unwrap().as_ptr(),
+                        -1,
+                        transmute(0),
+                        callback,
+                        userdata,
+                    );
                     self.service_resolver = Some(ServiceResolver::new(sr, cb_option.unwrap()));
                 }
             }
@@ -242,9 +293,18 @@ mod avahi {
     callback_types![
         service_browser_callback,
         [crate::avahi_sys, crate::avahi2::avahi],
-        dyn Fn(avahi::IfIndex, avahi::Protocol, avahi::BrowserEvent, &str, &str, &str, avahi::LookupResultFlags),
+        dyn Fn(
+            avahi::IfIndex,
+            avahi::Protocol,
+            avahi::BrowserEvent,
+            &str,
+            &str,
+            &str,
+            avahi::LookupResultFlags,
+        ),
         avahi_sys::AvahiServiceBrowserCallback,
-        avahi::service_browser_callback_fn];
+        avahi::service_browser_callback_fn
+    ];
 
     unsafe extern "C" fn service_browser_callback_fn(
         _service_browser: *mut avahi_sys::AvahiServiceBrowser,
@@ -255,25 +315,39 @@ mod avahi {
         typee: *const c_char,
         domain: *const c_char,
         flags: avahi_sys::AvahiLookupResultFlags,
-        userdata: *mut c_void) {
-        let functor : &service_browser_callback::CallbackBoxed = transmute(userdata);
+        userdata: *mut c_void,
+    ) {
+        let functor: &service_browser_callback::CallbackBoxed = transmute(userdata);
 
         let name_string = init_if_not_null(name);
         let type_string = init_if_not_null(typee);
         let domain_string = init_if_not_null(domain);
 
-        functor(ifindex, protocol, event, &name_string, &type_string, &domain_string, flags);
+        functor(
+            ifindex,
+            protocol,
+            event,
+            &name_string,
+            &type_string,
+            &domain_string,
+            flags,
+        );
     }
 
     struct ServiceBrowser {
-        service_browser: * mut avahi_sys::AvahiServiceBrowser,
+        service_browser: *mut avahi_sys::AvahiServiceBrowser,
         _callback: service_browser_callback::CallbackBoxed2,
     }
 
     impl ServiceBrowser {
-        fn new(service_browser: * mut avahi_sys::AvahiServiceBrowser, callback: service_browser_callback::CallbackBoxed2
-            ) -> ServiceBrowser {
-            ServiceBrowser{service_browser, _callback: callback}
+        fn new(
+            service_browser: *mut avahi_sys::AvahiServiceBrowser,
+            callback: service_browser_callback::CallbackBoxed2,
+        ) -> ServiceBrowser {
+            ServiceBrowser {
+                service_browser,
+                _callback: callback,
+            }
         }
     }
 
@@ -298,13 +372,18 @@ mod avahi {
         _port: u16,
         _txt: *mut StringList,
         _flags: LookupResultFlags,
-        userdata: *mut c_void) {
+        userdata: *mut c_void,
+    ) {
         if avahi_sys::AvahiResolverEvent::AVAHI_RESOLVER_FOUND == event {
-            let functor : &resolver_callback::CallbackBoxed = transmute(userdata);
+            let functor: &resolver_callback::CallbackBoxed = transmute(userdata);
 
             let host_name_string;
             if ptr::null() != host_name {
-                host_name_string = Some(ffi::CStr::from_ptr(host_name).to_string_lossy().into_owned())
+                host_name_string = Some(
+                    ffi::CStr::from_ptr(host_name)
+                        .to_string_lossy()
+                        .into_owned(),
+                )
             } else {
                 host_name_string = None
             }
@@ -318,16 +397,23 @@ mod avahi {
         [crate::avahi2::avahi, crate::avahi_sys],
         dyn Fn(Option<String>),
         avahi_sys::AvahiServiceResolverCallback,
-        avahi::callback_fn_resolver];
+        avahi::callback_fn_resolver
+    ];
 
     struct ServiceResolver {
-        service_resolver: * mut ServiceResolverr,
+        service_resolver: *mut ServiceResolverr,
         _callback: resolver_callback::CallbackBoxed2,
     }
 
     impl ServiceResolver {
-        fn new(service_resolver: * mut ServiceResolverr, callback: resolver_callback::CallbackBoxed2) -> ServiceResolver {
-            ServiceResolver{service_resolver, _callback: callback}
+        fn new(
+            service_resolver: *mut ServiceResolverr,
+            callback: resolver_callback::CallbackBoxed2,
+        ) -> ServiceResolver {
+            ServiceResolver {
+                service_resolver,
+                _callback: callback,
+            }
         }
     }
 
@@ -339,7 +425,12 @@ mod avahi {
         }
     }
 
-    pub fn create_service_browser_callback(client: Rc<Mutex<Client>>, poller: Rc<Poller>, tx: Sender<String>, name_to_filter: &str) -> service_browser_callback::CallbackBoxed2 {
+    pub fn create_service_browser_callback(
+        client: Rc<Mutex<Client>>,
+        poller: Rc<Poller>,
+        tx: Sender<String>,
+        name_to_filter: &str,
+    ) -> service_browser_callback::CallbackBoxed2 {
         let filter_name = String::from(name_to_filter);
 
         let scrcb: resolver_callback::CallbackBoxed2 = Rc::new(Box::new(move |host_name| {
@@ -351,23 +442,34 @@ mod avahi {
 
         let sbcb: service_browser_callback::CallbackBoxed2 = Rc::new(Box::new(
             move |_ifindex, _protocol, _event, name_string, type_string, domain_string, _flags| {
-                if avahi_sys::AvahiBrowserEvent::AVAHI_BROWSER_NEW == _event && name_string.contains(&filter_name) {
+                if avahi_sys::AvahiBrowserEvent::AVAHI_BROWSER_NEW == _event
+                    && name_string.contains(&filter_name)
+                {
                     if let Ok(mut client_locked) = client.lock() {
-                        client_locked.create_service_resolver(_ifindex, _protocol, name_string, type_string, domain_string, scrcb.clone());
+                        client_locked.create_service_resolver(
+                            _ifindex,
+                            _protocol,
+                            name_string,
+                            type_string,
+                            domain_string,
+                            scrcb.clone(),
+                        );
                     }
                 }
-            }));
+            },
+        ));
 
         sbcb
     }
 
     #[cfg(test)]
     mod test {
-        use libc::c_void;
-        use std::rc::Rc;
-        use std::ptr;
         use crate::avahi2::avahi::service_browser_callback::{
-            get_callback_with_data, CallbackBoxed, CallbackBoxed2, CCallback, CALLBACK_FN};
+            get_callback_with_data, CCallback, CallbackBoxed, CallbackBoxed2, CALLBACK_FN,
+        };
+        use libc::c_void;
+        use std::ptr;
+        use std::rc::Rc;
 
         #[test]
         fn get_callback_with_data_without_callback_works() {
@@ -379,17 +481,17 @@ mod avahi {
 
         #[test]
         fn get_callback_with_data_with_callback_works() {
-            let cb: CallbackBoxed2 = Rc::new(Box::new(|_,_,_,_,_,_,_| {}));
-            let expected_userdata_cfn = &*cb as * const CallbackBoxed;
-            let expected_userdata_mfn = expected_userdata_cfn as * mut CallbackBoxed;
-            let expected_userdata_mv = expected_userdata_mfn as * mut c_void;
+            let cb: CallbackBoxed2 = Rc::new(Box::new(|_, _, _, _, _, _, _| {}));
+            let expected_userdata_cfn = &*cb as *const CallbackBoxed;
+            let expected_userdata_mfn = expected_userdata_cfn as *mut CallbackBoxed;
+            let expected_userdata_mv = expected_userdata_mfn as *mut c_void;
             assert!(0x0 != expected_userdata_mv as usize);
             assert!(0x1 != expected_userdata_mv as usize);
             let (c_callback, data) = get_callback_with_data(&Some(cb));
             assert!(c_callback.is_some());
 
-            let expected_callback = CALLBACK_FN.unwrap() as * const CCallback;
-            let actual_callback = c_callback.unwrap() as * const CCallback;
+            let expected_callback = CALLBACK_FN.unwrap() as *const CCallback;
+            let actual_callback = c_callback.unwrap() as *const CCallback;
             assert_eq!(expected_callback, actual_callback);
 
             assert_eq!(expected_userdata_mv, data);
@@ -399,13 +501,13 @@ mod avahi {
 
 #[cfg(test)]
 mod test {
-    use crate::avahi2::avahi::{Client, Poller};
     use crate::avahi2;
+    use crate::avahi2::avahi::{Client, Poller};
 
-    use std::rc::Rc;
-    use std::sync::mpsc::channel;
     use libc::c_void;
     use std::mem::transmute;
+    use std::rc::Rc;
+    use std::sync::mpsc::channel;
 
     #[test]
     fn address_of_closures() {
@@ -419,15 +521,24 @@ mod test {
             tx.send(n).unwrap();
         }));
 
-        println!("address of static function {:?}", address_of_closures as * const fn());
-        println!("stack address of cb {:?}", &cb as * const Rc<BoxedClosure>);
+        println!(
+            "address of static function {:?}",
+            address_of_closures as *const fn()
+        );
+        println!("stack address of cb {:?}", &cb as *const Rc<BoxedClosure>);
         println!("pointer of callback on heap via :p {:p}", cb);
 
-        let cb_ref : &BoxedClosure = &*cb;
-        let cb_ptr = cb_ref as * const BoxedClosure;
+        let cb_ref: &BoxedClosure = &*cb;
+        let cb_ptr = cb_ref as *const BoxedClosure;
         println!("pointer of callback on heap via cast {:?}", cb_ptr);
-        println!("pointer of callback on heap casted without intermediaries {:?}",  &*cb as &BoxedClosure as * const BoxedClosure);
-        println!("pointer of callback on heap casted without intermediaries {:?}",  &*cb as &BoxedClosure as * const BoxedClosure as * const c_void);
+        println!(
+            "pointer of callback on heap casted without intermediaries {:?}",
+            &*cb as &BoxedClosure as *const BoxedClosure
+        );
+        println!(
+            "pointer of callback on heap casted without intermediaries {:?}",
+            &*cb as &BoxedClosure as *const BoxedClosure as *const c_void
+        );
 
         unsafe {
             (*cb_ptr)(3);
@@ -436,9 +547,9 @@ mod test {
         assert!(3 == rx.recv().unwrap());
 
         // saving closure as pointer and casting back to closure type
-        let cb_vptr = &*cb as &BoxedClosure as * const BoxedClosure as * const c_void;
+        let cb_vptr = &*cb as &BoxedClosure as *const BoxedClosure as *const c_void;
         unsafe {
-            let recasted_cb : * const BoxedClosure = transmute(cb_vptr);
+            let recasted_cb: *const BoxedClosure = transmute(cb_vptr);
             (*recasted_cb)(5);
         }
 
@@ -456,14 +567,20 @@ mod test {
             tx.send(n).unwrap();
         });
 
-        println!("stack address of cb {:?}", &cb as * const Rc<ClosureFn>);
+        println!("stack address of cb {:?}", &cb as *const Rc<ClosureFn>);
         println!("pointer of callback on heap via :p {:p}", cb);
 
-        let cb_ref : &ClosureFn = &*cb;
-        let cb_ptr = cb_ref as * const ClosureFn;
+        let cb_ref: &ClosureFn = &*cb;
+        let cb_ptr = cb_ref as *const ClosureFn;
         println!("pointer of callback on heap via cast {:?}", cb_ptr);
-        println!("pointer of callback on heap casted without intermediaries {:?}",  &*cb as &ClosureFn as * const ClosureFn);
-        println!("pointer of callback on heap casted without intermediaries {:?}",  &*cb as &ClosureFn as * const ClosureFn as * const c_void);
+        println!(
+            "pointer of callback on heap casted without intermediaries {:?}",
+            &*cb as &ClosureFn as *const ClosureFn
+        );
+        println!(
+            "pointer of callback on heap casted without intermediaries {:?}",
+            &*cb as &ClosureFn as *const ClosureFn as *const c_void
+        );
 
         unsafe {
             (*cb_ptr)(3);
@@ -502,10 +619,10 @@ mod test {
     }
 }
 
+use std::rc::Rc;
 use std::sync::mpsc::channel;
 use std::sync::Mutex;
 use std::time::Duration;
-use std::rc::Rc;
 
 pub fn get_hostname(type_: &str, filter: &str) -> Result<String, avahi::Error> {
     let poller = Rc::new(avahi::Poller::new()?);
@@ -513,7 +630,8 @@ pub fn get_hostname(type_: &str, filter: &str) -> Result<String, avahi::Error> {
 
     let (tx_host, rx_host) = channel();
 
-    let sbcb = avahi::create_service_browser_callback(client.clone(), poller.clone(), tx_host, filter);
+    let sbcb =
+        avahi::create_service_browser_callback(client.clone(), poller.clone(), tx_host, filter);
 
     let sb1 = client.lock()?.create_service_browser(type_, sbcb);
     assert!(sb1.is_ok());
@@ -530,4 +648,3 @@ pub fn get_hostname(type_: &str, filter: &str) -> Result<String, avahi::Error> {
 pub fn get_receiver() -> Result<String, avahi::Error> {
     get_hostname("_raop._tcp", "DENON")
 }
-

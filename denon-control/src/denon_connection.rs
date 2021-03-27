@@ -1,17 +1,17 @@
-pub use crate::parse::{State, Operation};
 use crate::parse::parse;
+pub use crate::parse::{Operation, State};
 
 use std::collections::HashSet;
-use std::time::Duration;
-use std::net::TcpStream;
-use std::sync::mpsc::{channel, Sender, Receiver};
-use std::sync::{Arc, Mutex};
-use std::thread;
 use std::error::Error;
 use std::io::{Read, Write};
+use std::net::TcpStream;
+use std::sync::mpsc::{channel, Receiver, Sender};
+use std::sync::{Arc, Mutex};
+use std::thread;
+use std::time::Duration;
 
 fn write(stream: &mut dyn Write, input: String) -> Result<(), std::io::Error> {
-//    println!("sending: {}", input);
+    //    println!("sending: {}", input);
     let volume_command = input.into_bytes();
     stream.write(&volume_command[..])?;
     Ok(())
@@ -32,14 +32,15 @@ fn read(stream: &mut dyn Read, lines: u8) -> Result<Vec<String>, std::io::Error>
 
     let string_iter = string.split('\r').map(|x| String::from(x));
     let result = string_iter.collect();
-//    println!("{:?}", result);
+    //    println!("{:?}", result);
     Ok(result)
 }
 
-fn thread_func_impl(mut stream: TcpStream,
-                    state: Arc<Mutex<HashSet<State>>>,
-                    requests: &Receiver<(Operation, State)>)
-                    -> Result<(), std::io::Error> {
+fn thread_func_impl(
+    mut stream: TcpStream,
+    state: Arc<Mutex<HashSet<State>>>,
+    requests: &Receiver<(Operation, State)>,
+) -> Result<(), std::io::Error> {
     stream.set_read_timeout(Some(Duration::from_secs(1)))?;
 
     loop {
@@ -58,7 +59,7 @@ fn thread_func_impl(mut stream: TcpStream,
 
         match read(&mut stream, 1) {
             Ok(status_update) => {
-//                println!("received update {:?}", status_update);
+                //                println!("received update {:?}", status_update);
                 let parsed_response = parse_response(&status_update);
                 let mut locked_state = state.lock().unwrap();
                 for item in parsed_response {
@@ -67,8 +68,9 @@ fn thread_func_impl(mut stream: TcpStream,
             }
             // check for timeout error -> continue on timeout error, else abort
             Err(e) => {
-                if std::io::ErrorKind::TimedOut != e.kind() &&
-                   std::io::ErrorKind::WouldBlock != e.kind() {
+                if std::io::ErrorKind::TimedOut != e.kind()
+                    && std::io::ErrorKind::WouldBlock != e.kind()
+                {
                     return Err(e);
                 }
             }
@@ -77,7 +79,8 @@ fn thread_func_impl(mut stream: TcpStream,
 }
 
 fn parse_response(response: &Vec<String>) -> Vec<State> {
-    return response.iter()
+    return response
+        .iter()
         .map(|x| parse(x.as_str()))
         .filter(|x| x.is_some())
         .map(|x| x.unwrap())
@@ -85,11 +88,13 @@ fn parse_response(response: &Vec<String>) -> Vec<State> {
 }
 
 fn print_io_error(e: &std::io::Error) {
-    println!("got error: {}, source = {:?}, description = {}, kind = {:?}",
-             e,
-             e.source(),
-             e.description(),
-             e.kind());
+    println!(
+        "got error: {}, source = {:?}, description = {}, kind = {:?}",
+        e,
+        e.source(),
+        e.description(),
+        e.kind()
+    );
     if let Some(raw_os_error) = e.raw_os_error() {
         println!("raw_os_error = {}", raw_os_error);
     }
@@ -98,10 +103,12 @@ fn print_io_error(e: &std::io::Error) {
     }
 }
 
-fn thread_func(denon_name: String,
-               denon_port: u16,
-               state: Arc<Mutex<HashSet<State>>>,
-               requests: Receiver<(Operation, State)>) {
+fn thread_func(
+    denon_name: String,
+    denon_port: u16,
+    state: Arc<Mutex<HashSet<State>>>,
+    requests: Receiver<(Operation, State)>,
+) {
     for _ in 0..10 {
         match TcpStream::connect((denon_name.as_str(), denon_port)) {
             Ok(s) => {
@@ -159,10 +166,11 @@ impl DenonConnection {
         Ok(State::Unknown)
     }
 
-    fn query(&self,
-             state: State,
-             op: Operation)
-             -> Result<(), std::sync::mpsc::SendError<(Operation, State)>> {
+    fn query(
+        &self,
+        state: State,
+        op: Operation,
+    ) -> Result<(), std::sync::mpsc::SendError<(Operation, State)>> {
         self.requests.send((op, state))
     }
 
