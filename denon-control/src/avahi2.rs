@@ -1,7 +1,7 @@
 mod avahi {
     pub use crate::avahi_error::Error;
     use avahi_sys;
-    use libc::{c_char, c_int, c_void, timeval};
+    use libc::{c_char, c_int, c_void};
     use std::cell::Cell;
     use std::mem::transmute;
     use std::rc::Rc;
@@ -53,10 +53,10 @@ mod avahi {
         Ok(dur + time_since_epoch)
     }
 
-    fn create_timeval(time: Duration) -> timeval {
+    fn create_timeval(time: Duration) -> avahi_sys::timeval {
         let seconds = time.as_secs();
         let useconds = time.subsec_nanos() / 1000;
-        timeval {
+        avahi_sys::timeval {
             tv_sec: seconds as i64,
             tv_usec: useconds as i64,
         }
@@ -374,7 +374,7 @@ mod avahi {
         _flags: LookupResultFlags,
         userdata: *mut c_void,
     ) {
-        if avahi_sys::AvahiResolverEvent::AVAHI_RESOLVER_FOUND == event {
+        if avahi_sys::AvahiResolverEvent_AVAHI_RESOLVER_FOUND == event {
             let functor: &resolver_callback::CallbackBoxed = transmute(userdata);
 
             let host_name_string;
@@ -441,14 +441,14 @@ mod avahi {
         }));
 
         let sbcb: service_browser_callback::CallbackBoxed2 = Rc::new(Box::new(
-            move |_ifindex, _protocol, _event, name_string, type_string, domain_string, _flags| {
-                if avahi_sys::AvahiBrowserEvent::AVAHI_BROWSER_NEW == _event
+            move |ifindex, protocol, event, name_string, type_string, domain_string, _flags| {
+                if avahi_sys::AvahiBrowserEvent_AVAHI_BROWSER_NEW == event
                     && name_string.contains(&filter_name)
                 {
                     if let Ok(mut client_locked) = client.lock() {
                         client_locked.create_service_resolver(
-                            _ifindex,
-                            _protocol,
+                            ifindex,
+                            protocol,
                             name_string,
                             type_string,
                             domain_string,
