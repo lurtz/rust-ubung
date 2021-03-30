@@ -18,7 +18,7 @@ impl Display for PowerState {
 impl PowerState {
     pub fn iterator() -> Iter<'static, PowerState> {
         static STATES: [PowerState; 2] = [PowerState::ON, PowerState::STANDBY];
-        STATES.into_iter()
+        STATES.iter()
     }
 }
 
@@ -87,7 +87,7 @@ impl SourceInputState {
             SourceInputState::IRP,
             SourceInputState::FVP,
         ];
-        STATES.into_iter()
+        STATES.iter()
     }
 }
 

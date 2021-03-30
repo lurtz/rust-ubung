@@ -48,7 +48,7 @@ fn parse_args() -> getopts::Matches {
     let arguments = match ops.parse(&args[1..]) {
         Ok(m) => m,
         Err(f) => {
-            panic!(f.to_string())
+            panic!("{}", f.to_string())
         }
     };
 

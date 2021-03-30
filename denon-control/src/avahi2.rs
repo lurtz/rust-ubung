@@ -161,8 +161,8 @@ mod avahi {
     pub struct Client {
         _poller: Rc<Poller>,
         client: *mut avahi_sys::AvahiClient,
-        service_browser: Option<ServiceBrowser>,
-        service_resolver: Option<ServiceResolver>,
+        _service_browser: Option<ServiceBrowser>,
+        _service_resolver: Option<ServiceResolver>,
     }
 
     impl Client {
@@ -180,8 +180,8 @@ mod avahi {
                     return Ok(Client {
                         _poller: poller,
                         client,
-                        service_browser: None,
-                        service_resolver: None,
+                        _service_browser: None,
+                        _service_resolver: None,
                     });
                 }
                 return Err(Error::ClientNew);
@@ -200,11 +200,11 @@ mod avahi {
             let service_browser = self.create_service_browser2(service_type, callback);
             match service_browser {
                 Ok(sb) => {
-                    self.service_browser = Some(sb);
+                    self._service_browser = Some(sb);
                     Ok(())
                 }
                 Err(err) => {
-                    self.service_browser = None;
+                    self._service_browser = None;
                     Err(err)
                 }
             }
@@ -254,6 +254,7 @@ mod avahi {
             cb: resolver_callback::CallbackBoxed2,
         ) {
             unsafe {
+                #![allow(temporary_cstring_as_ptr)]
                 let cb_option = Some(cb);
                 let (callback, userdata) = resolver_callback::get_callback_with_data(&cb_option);
 
@@ -269,12 +270,12 @@ mod avahi {
                         name_string.unwrap().as_ptr(),
                         type_string.unwrap().as_ptr(),
                         domain_string.unwrap().as_ptr(),
-                        -1,
+                        avahi_sys::AVAHI_PROTO_UNSPEC,
                         transmute(0),
                         callback,
                         userdata,
                     );
-                    self.service_resolver = Some(ServiceResolver::new(sr, cb_option.unwrap()));
+                    self._service_resolver = Some(ServiceResolver::new(sr, cb_option.unwrap()));
                 }
             }
         }
@@ -282,8 +283,8 @@ mod avahi {
 
     impl Drop for Client {
         fn drop(&mut self) {
-            self.service_browser = None;
-            self.service_resolver = None;
+            self._service_browser = None;
+            self._service_resolver = None;
             unsafe {
                 avahi_sys::avahi_client_free(self.client);
             }

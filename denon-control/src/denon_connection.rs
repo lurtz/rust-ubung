@@ -92,7 +92,7 @@ fn print_io_error(e: &std::io::Error) {
         "got error: {}, source = {:?}, description = {}, kind = {:?}",
         e,
         e.source(),
-        e.description(),
+        e.to_string(),
         e.kind()
     );
     if let Some(raw_os_error) = e.raw_os_error() {
