@@ -1,91 +1,95 @@
 use std::cmp::{Eq, PartialEq};
-use std::fmt::{Display, Error, Formatter};
+use std::fmt::{Display, Error, Formatter, Write};
 use std::hash::{Hash, Hasher};
 use std::slice::Iter;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum PowerState {
-    ON,
-    STANDBY,
+    On,
+    Standby,
 }
 
 impl Display for PowerState {
     fn fmt(&self, format: &mut Formatter) -> Result<(), Error> {
-        write!(format, "{:?}", self)
+        let mut buffer = String::new();
+        write!(&mut buffer, "{:?}", self)?;
+        write!(format, "{}", buffer.to_ascii_uppercase())
     }
 }
 
 impl PowerState {
     pub fn iterator() -> Iter<'static, PowerState> {
-        static STATES: [PowerState; 2] = [PowerState::ON, PowerState::STANDBY];
+        static STATES: [PowerState; 2] = [PowerState::On, PowerState::Standby];
         STATES.iter()
     }
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum SourceInputState {
-    CD,
+    Cd,
     Tuner,
-    DVD,
-    BD,
-    TV,
-    SATCBL,
-    GAME,
-    GAME2,
-    VAUX,
-    DOCK,
-    IPOD,
-    NETUSB,
-    RHAPSODY,
-    NAPSTER,
-    PANDORA,
-    LASTFM,
-    FLICKR,
-    FAVORITES,
-    IRADIO,
-    SERVER,
-    USBIPOD,
-    USB,
-    IPD,
-    IRP,
-    FVP,
-    UNKNOWN,
+    Dvd,
+    Bd,
+    Tv,
+    Satcbl,
+    Game,
+    Game2,
+    Vaux,
+    Dock,
+    Ipod,
+    Netusb,
+    Rhapsody,
+    Napster,
+    Pandora,
+    Lastfm,
+    Flickr,
+    Favorites,
+    Iradio,
+    Server,
+    Usbipod,
+    Usb,
+    Ipd,
+    Irp,
+    Fvp,
+    Unknown,
 }
 
 impl Display for SourceInputState {
     fn fmt(&self, format: &mut Formatter) -> Result<(), Error> {
-        write!(format, "{:?}", self)
+        let mut buffer = String::new();
+        write!(&mut buffer, "{:?}", self)?;
+        write!(format, "{}", buffer.to_ascii_uppercase())
     }
 }
 
 impl SourceInputState {
     pub fn iterator() -> Iter<'static, SourceInputState> {
         static STATES: [SourceInputState; 25] = [
-            SourceInputState::CD,
+            SourceInputState::Cd,
             SourceInputState::Tuner,
-            SourceInputState::DVD,
-            SourceInputState::BD,
-            SourceInputState::TV,
-            SourceInputState::SATCBL,
-            SourceInputState::GAME,
-            SourceInputState::GAME2,
-            SourceInputState::VAUX,
-            SourceInputState::DOCK,
-            SourceInputState::IPOD,
-            SourceInputState::NETUSB,
-            SourceInputState::RHAPSODY,
-            SourceInputState::NAPSTER,
-            SourceInputState::PANDORA,
-            SourceInputState::LASTFM,
-            SourceInputState::FLICKR,
-            SourceInputState::FAVORITES,
-            SourceInputState::IRADIO,
-            SourceInputState::SERVER,
-            SourceInputState::USBIPOD,
-            SourceInputState::USB,
-            SourceInputState::IPD,
-            SourceInputState::IRP,
-            SourceInputState::FVP,
+            SourceInputState::Dvd,
+            SourceInputState::Bd,
+            SourceInputState::Tv,
+            SourceInputState::Satcbl,
+            SourceInputState::Game,
+            SourceInputState::Game2,
+            SourceInputState::Vaux,
+            SourceInputState::Dock,
+            SourceInputState::Ipod,
+            SourceInputState::Netusb,
+            SourceInputState::Rhapsody,
+            SourceInputState::Napster,
+            SourceInputState::Pandora,
+            SourceInputState::Lastfm,
+            SourceInputState::Flickr,
+            SourceInputState::Favorites,
+            SourceInputState::Iradio,
+            SourceInputState::Server,
+            SourceInputState::Usbipod,
+            SourceInputState::Usb,
+            SourceInputState::Ipd,
+            SourceInputState::Irp,
+            SourceInputState::Fvp,
         ];
         STATES.iter()
     }
@@ -103,20 +107,20 @@ pub enum State {
 impl State {
     pub fn value(&self) -> &'static str {
         match *self {
-            State::Power(_) => return "PW",
-            State::SourceInput(_) => return "SI",
-            State::MaxVolume(_) => return "MVMAX",
-            State::MainVolume(_) => return "MV",
-            State::Unknown => return "Unknown",
+            State::Power(_) => "PW",
+            State::SourceInput(_) => "SI",
+            State::MaxVolume(_) => "MVMAX",
+            State::MainVolume(_) => "MV",
+            State::Unknown => "Unknown",
         }
     }
 
     pub fn power() -> State {
-        State::Power(PowerState::ON)
+        State::Power(PowerState::On)
     }
 
     pub fn source_input() -> State {
-        State::SourceInput(SourceInputState::DVD)
+        State::SourceInput(SourceInputState::Dvd)
     }
 
     pub fn max_volume() -> State {
@@ -130,12 +134,12 @@ impl State {
 
 impl Display for State {
     fn fmt(&self, format: &mut Formatter) -> Result<(), Error> {
-        match self {
-            &State::Power(ref p) => write!(format, "{}{}", self.value(), p),
-            &State::SourceInput(ref si) => write!(format, "{}{}", self.value(), si),
-            &State::MaxVolume(i) => write!(format, "{}{}", self.value(), i),
-            &State::MainVolume(i) => write!(format, "{}{}", self.value(), i),
-            &State::Unknown => write!(format, "{}", self.value()),
+        match *self {
+            State::Power(ref p) => write!(format, "{}{}", self.value(), p),
+            State::SourceInput(ref si) => write!(format, "{}{}", self.value(), si),
+            State::MaxVolume(i) => write!(format, "{}{}", self.value(), i),
+            State::MainVolume(i) => write!(format, "{}{}", self.value(), i),
+            State::Unknown => write!(format, "{}", self.value()),
         }
     }
 }
@@ -179,7 +183,7 @@ impl PartialEq for State {
         equal_helper!(self, other, State::MaxVolume);
         equal_helper!(self, other, State::MainVolume);
         equal_helper_no_args!(self, other, State::Unknown);
-        return false;
+        false
     }
 }
 
@@ -187,7 +191,7 @@ impl Eq for State {}
 
 #[cfg(test)]
 mod test {
-    use crate::state::State;
+    use crate::state::{PowerState, SourceInputState, State};
     use std::collections::HashSet;
 
     fn check_value(hs: &HashSet<State>, expected: &State) {
@@ -232,5 +236,17 @@ mod test {
         assert_eq!(2, hs.len());
         check_value(&hs, &mv_129);
         check_value(&hs, &maxv_100);
+    }
+
+    #[test]
+    fn power_state_display() {
+        assert_eq!("ON", PowerState::On.to_string());
+        assert_eq!("STANDBY", PowerState::Standby.to_string());
+    }
+
+    #[test]
+    fn source_input_state_display() {
+        assert_eq!("DVD", SourceInputState::Dvd.to_string());
+        assert_eq!("FLICKR", SourceInputState::Flickr.to_string());
     }
 }

@@ -13,7 +13,7 @@ use std::time::Duration;
 fn write(stream: &mut dyn Write, input: String) -> Result<(), std::io::Error> {
     //    println!("sending: {}", input);
     let volume_command = input.into_bytes();
-    stream.write(&volume_command[..])?;
+    stream.write_all(&volume_command[..])?;
     Ok(())
 }
 
@@ -30,7 +30,7 @@ fn read(stream: &mut dyn Read, lines: u8) -> Result<Vec<String>, std::io::Error>
 
     string.pop();
 
-    let string_iter = string.split('\r').map(|x| String::from(x));
+    let string_iter = string.split('\r').map(String::from);
     let result = string_iter.collect();
     //    println!("{:?}", result);
     Ok(result)
@@ -78,7 +78,7 @@ fn thread_func_impl(
     }
 }
 
-fn parse_response(response: &Vec<String>) -> Vec<State> {
+fn parse_response(response: &[String]) -> Vec<State> {
     return response
         .iter()
         .map(|x| parse(x.as_str()))
@@ -139,11 +139,10 @@ impl DenonConnection {
         let _ = thread::spawn(move || {
             thread_func(denon_string, denon_port, cloned_state, rx);
         });
-        let dc = DenonConnection {
-            state: state,
+        DenonConnection {
+            state,
             requests: tx,
-        };
-        dc
+        }
     }
 
     pub fn get(&self, op: State) -> Result<State, std::sync::mpsc::SendError<(Operation, State)>> {

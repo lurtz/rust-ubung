@@ -139,10 +139,10 @@ fn main2(args: getopts::Matches, denon_name: String, denon_port: u16) -> Result<
 
     if args.opt_present("r") {
         if !args.opt_present("p") {
-            dc.set(State::Power(PowerState::ON))?;
+            dc.set(State::Power(PowerState::On))?;
         }
         if !args.opt_present("i") {
-            dc.set(State::SourceInput(SourceInputState::DVD))?;
+            dc.set(State::SourceInput(SourceInputState::Dvd))?;
         }
         if !args.opt_present("v") {
             dc.set(State::MainVolume(50))?;

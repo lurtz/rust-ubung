@@ -15,33 +15,32 @@ macro_rules! parsehelper {
 
 fn get_value<'a>(trimmed: &'a str, op: &State) -> &'a str {
     let to_skip = op.value().len();
-    let ref to_parse = trimmed[to_skip..].trim();
-    return to_parse;
+    &trimmed[to_skip..].trim()
 }
 
 fn parse_int(to_parse: &str) -> u32 {
     let mut value = to_parse.parse::<u32>().unwrap();
     if value < 100 {
-        value = value * 10;
+        value *= 10;
     }
     value
 }
 
 fn parse_main_volume(value: &str) -> State {
     let value = parse_int(value);
-    return State::MainVolume(value);
+    State::MainVolume(value)
 }
 
 fn parse_max_volume(value: &str) -> State {
     let value = parse_int(value);
-    return State::MaxVolume(value);
+    State::MaxVolume(value)
 }
 
 fn parse_power(value: &str) -> State {
     if "ON" == value {
-        return State::Power(PowerState::ON);
+        State::Power(PowerState::On)
     } else {
-        return State::Power(PowerState::STANDBY);
+        State::Power(PowerState::Standby)
     }
 }
 
@@ -52,7 +51,7 @@ fn parse_source_input(value: &str) -> State {
         }
     }
 
-    return State::SourceInput(SourceInputState::UNKNOWN);
+    State::SourceInput(SourceInputState::Unknown)
 }
 
 pub fn parse(str: &str) -> Option<State> {

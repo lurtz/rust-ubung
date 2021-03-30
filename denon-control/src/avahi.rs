@@ -12,10 +12,10 @@ pub fn get_receiver() -> Result<String, Error> {
     let output_stdout = String::from_utf8_lossy(&output.stdout);
     let lines = output_stdout.lines();
     let denon_names: Vec<&str> = lines
-        .filter(|&line| line.starts_with("="))
+        .filter(|&line| line.starts_with('='))
         .filter(|&line| line.contains("DENON"))
         .map(|line| line.split(';'))
-        .map(|iter| iter.skip(6).next().unwrap())
+        .map(|mut iter| iter.nth(6).unwrap())
         .collect();
 
     if denon_names.len() > 1 {
@@ -27,8 +27,8 @@ pub fn get_receiver() -> Result<String, Error> {
     }
 
     if denon_names.is_empty() {
-        return Err(Error::NoHostsFound);
+        Err(Error::NoHostsFound)
     } else {
-        return Ok(String::from(denon_names[0]));
+        Ok(String::from(denon_names[0]))
     }
 }

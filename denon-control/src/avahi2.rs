@@ -1,6 +1,5 @@
 mod avahi {
     pub use crate::avahi_error::Error;
-    use avahi_sys;
     use libc::{c_char, c_int, c_void};
     use std::cell::Cell;
     use std::mem::transmute;
@@ -55,7 +54,7 @@ mod avahi {
 
     fn create_timeval(time: Duration) -> avahi_sys::timeval {
         let seconds = time.as_secs();
-        let useconds = time.subsec_nanos() / 1000;
+        let useconds = time.subsec_micros();
         avahi_sys::timeval {
             tv_sec: seconds as i64,
             tv_usec: useconds as i64,
@@ -63,7 +62,7 @@ mod avahi {
     }
 
     unsafe fn init_if_not_null(cstr: *const c_char) -> String {
-        if ptr::null() != cstr {
+        if !cstr.is_null() {
             ffi::CStr::from_ptr(cstr).to_string_lossy().into_owned()
         } else {
             String::from("")
@@ -78,12 +77,12 @@ mod avahi {
         pub fn new() -> Result<Poller, Error> {
             unsafe {
                 let poller = avahi_sys::avahi_simple_poll_new();
-                if ptr::null() != poller {
-                    return Ok(Poller {
+                if !poller.is_null() {
+                    Ok(Poller {
                         poller: Cell::new(poller),
-                    });
+                    })
                 } else {
-                    return Err(Error::PollerNew);
+                    Err(Error::PollerNew)
                 }
             }
         }
@@ -114,7 +113,7 @@ mod avahi {
                         Some(timeout_fn),
                         self.poller.get() as *mut c_void,
                     );
-                    assert!(ptr::null() != atimeout);
+                    assert!(!atimeout.is_null());
                     return Ok(Timeout::new(atimeout, self));
                 }
             }
@@ -154,7 +153,7 @@ mod avahi {
     }
 
     unsafe extern "C" fn timeout_fn(_timeout: *mut avahi_sys::AvahiTimeout, userdata: *mut c_void) {
-        let spoll: *mut avahi_sys::AvahiSimplePoll = transmute(userdata);
+        let spoll: *mut avahi_sys::AvahiSimplePoll = userdata as *mut avahi_sys::AvahiSimplePoll;
         avahi_sys::avahi_simple_poll_quit(spoll);
     }
 
@@ -184,7 +183,7 @@ mod avahi {
                         _service_resolver: None,
                     });
                 }
-                return Err(Error::ClientNew);
+                Err(Error::ClientNew)
             }
         }
 
@@ -233,7 +232,7 @@ mod avahi {
                     callback,
                     userdata,
                 );
-                if ptr::null() != sb {
+                if !sb.is_null() {
                     Ok(ServiceBrowser::new(sb, cb_option.unwrap()))
                 } else {
                     Err(Error::CreateServiceBrowser(
@@ -258,24 +257,25 @@ mod avahi {
                 let cb_option = Some(cb);
                 let (callback, userdata) = resolver_callback::get_callback_with_data(&cb_option);
 
-                let name_string = ffi::CString::new(name);
-                let type_string = ffi::CString::new(type_);
-                let domain_string = ffi::CString::new(domain);
-
-                if name_string.is_ok() && type_string.is_ok() && domain_string.is_ok() {
-                    let sr = avahi_sys::avahi_service_resolver_new(
-                        self.client,
-                        ifindex,
-                        prot,
-                        name_string.unwrap().as_ptr(),
-                        type_string.unwrap().as_ptr(),
-                        domain_string.unwrap().as_ptr(),
-                        avahi_sys::AVAHI_PROTO_UNSPEC,
-                        transmute(0),
-                        callback,
-                        userdata,
-                    );
-                    self._service_resolver = Some(ServiceResolver::new(sr, cb_option.unwrap()));
+                if let Ok(name) = ffi::CString::new(name) {
+                    if let Ok(type_) = ffi::CString::new(type_) {
+                        if let Ok(domain) = ffi::CString::new(domain) {
+                            let sr = avahi_sys::avahi_service_resolver_new(
+                                self.client,
+                                ifindex,
+                                prot,
+                                name.as_ptr(),
+                                type_.as_ptr(),
+                                domain.as_ptr(),
+                                avahi_sys::AVAHI_PROTO_UNSPEC,
+                                transmute(0),
+                                callback,
+                                userdata,
+                            );
+                            self._service_resolver =
+                                Some(ServiceResolver::new(sr, cb_option.unwrap()));
+                        }
+                    }
                 }
             }
         }
@@ -318,7 +318,8 @@ mod avahi {
         flags: avahi_sys::AvahiLookupResultFlags,
         userdata: *mut c_void,
     ) {
-        let functor: &service_browser_callback::CallbackBoxed = transmute(userdata);
+        let functor: &service_browser_callback::CallbackBoxed =
+            &*(userdata as *const service_browser_callback::CallbackBoxed);
 
         let name_string = init_if_not_null(name);
         let type_string = init_if_not_null(typee);
@@ -376,10 +377,11 @@ mod avahi {
         userdata: *mut c_void,
     ) {
         if avahi_sys::AvahiResolverEvent_AVAHI_RESOLVER_FOUND == event {
-            let functor: &resolver_callback::CallbackBoxed = transmute(userdata);
+            let functor: &resolver_callback::CallbackBoxed =
+                &*(userdata as *const resolver_callback::CallbackBoxed);
 
             let host_name_string;
-            if ptr::null() != host_name {
+            if !host_name.is_null() {
                 host_name_string = Some(
                     ffi::CStr::from_ptr(host_name)
                         .to_string_lossy()
@@ -641,8 +643,8 @@ pub fn get_hostname(type_: &str, filter: &str) -> Result<String, avahi::Error> {
     poller.looop();
 
     match rx_host.try_recv() {
-        Ok(hostname) => return Ok(hostname),
-        Err(_) => return Err(avahi::Error::NoHostsFound),
+        Ok(hostname) => Ok(hostname),
+        Err(_) => Err(avahi::Error::NoHostsFound),
     }
 }
 
