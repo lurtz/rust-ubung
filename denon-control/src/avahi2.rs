@@ -616,9 +616,11 @@ mod test {
     }
 
     #[test]
-    fn get_hostname() {
-        let host = avahi2::get_hostname("_presence._tcp", "");
-        assert!("barcas.local" == host.unwrap());
+    fn get_denon_hostname() {
+        let host = avahi2::get_hostname("_raop._tcp", "");
+        assert!("DENON-AVR-1912.local" == host.unwrap());
+    }
+
     }
 }
 
