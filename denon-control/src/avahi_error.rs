@@ -14,9 +14,9 @@ pub enum Error {
     CreateServiceBrowser(String, i32),
     NoHostsFound,
     MutexLocked,
-    NulError(NulError),
-    IOError(io::Error),
-    SystemTimeError(SystemTimeError),
+    Nul(NulError),
+    IO(io::Error),
+    SystemTime(SystemTimeError),
     Timeout,
 }
 
@@ -40,18 +40,18 @@ impl<'a, T> From<PoisonError<MutexGuard<'a, T>>> for Error {
 
 impl From<NulError> for Error {
     fn from(error: NulError) -> Self {
-        Error::NulError(error)
+        Error::Nul(error)
     }
 }
 
 impl From<io::Error> for Error {
     fn from(error: io::Error) -> Self {
-        Error::IOError(error)
+        Error::IO(error)
     }
 }
 
 impl From<SystemTimeError> for Error {
     fn from(error: SystemTimeError) -> Self {
-        Error::SystemTimeError(error)
+        Error::SystemTime(error)
     }
 }

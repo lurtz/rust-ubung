@@ -82,8 +82,7 @@ fn parse_response(response: &[String]) -> Vec<State> {
     return response
         .iter()
         .map(|x| parse(x.as_str()))
-        .filter(|x| x.is_some())
-        .map(|x| x.unwrap())
+        .flatten()
         .collect();
 }
 
@@ -92,7 +91,7 @@ fn print_io_error(e: &std::io::Error) {
         "got error: {}, source = {:?}, description = {}, kind = {:?}",
         e,
         e.source(),
-        e.to_string(),
+        e,
         e.kind()
     );
     if let Some(raw_os_error) = e.raw_os_error() {

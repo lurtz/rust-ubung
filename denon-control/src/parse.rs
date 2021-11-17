@@ -15,7 +15,7 @@ macro_rules! parsehelper {
 
 fn get_value<'a>(trimmed: &'a str, op: &State) -> &'a str {
     let to_skip = op.value().len();
-    &trimmed[to_skip..].trim()
+    trimmed[to_skip..].trim()
 }
 
 fn parse_int(to_parse: &str) -> u32 {
