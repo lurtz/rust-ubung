@@ -620,8 +620,6 @@ mod test {
         let host = avahi2::get_hostname("_raop._tcp", "");
         assert!("DENON-AVR-1912.local" == host.unwrap());
     }
-
-    }
 }
 
 use std::rc::Rc;
