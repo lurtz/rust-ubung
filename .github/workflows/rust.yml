@@ -16,6 +16,8 @@ jobs:
 
     steps:
     - uses: actions/checkout@v2
+    - name: Install avahi headers
+      run: sudo apt install libavahi-client-dev
     - name: Build
       run: |
         cd denon-control
