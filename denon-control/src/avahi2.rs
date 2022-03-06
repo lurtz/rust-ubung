@@ -504,7 +504,6 @@ mod avahi {
 
 #[cfg(test)]
 mod test {
-    use crate::avahi2;
     use crate::avahi2::avahi::{Client, Poller};
 
     use libc::c_void;
