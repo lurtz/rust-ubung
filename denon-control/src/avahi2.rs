@@ -608,17 +608,17 @@ mod test {
         let _ = Client::new(poller);
     }
 
-//    #[test]
-//    fn create_service_browser_with_callback() {
-//        let receiver = avahi2::get_receiver();
-//        assert!("DENON-AVR-1912.local" == receiver.unwrap());
-//    }
+    //    #[test]
+    //    fn create_service_browser_with_callback() {
+    //        let receiver = avahi2::get_receiver();
+    //        assert!("DENON-AVR-1912.local" == receiver.unwrap());
+    //    }
 
-//    #[test]
-//    fn get_denon_hostname() {
-//        let host = avahi2::get_hostname("_raop._tcp", "");
-//        assert!("DENON-AVR-1912.local" == host.unwrap());
-//    }
+    //    #[test]
+    //    fn get_denon_hostname() {
+    //        let host = avahi2::get_hostname("_raop._tcp", "");
+    //        assert!("DENON-AVR-1912.local" == host.unwrap());
+    //    }
 }
 
 use std::rc::Rc;

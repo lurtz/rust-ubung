@@ -1,0 +1,17 @@
+[workspace]
+
+members = [
+        "adder",
+        "assoc_types",
+        "bla",
+        "denon-control",
+        "dining_philosophers",
+        "embed",
+        "error_handling",
+        "guessing_game",
+        "hello_world",
+        "makros",
+        "mandelbrot",
+        "matrix",
+        "romans"
+]

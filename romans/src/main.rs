@@ -1,5 +1,7 @@
-
-fn convert<VALUE, RESULT>(mut i: VALUE, values: fn(VALUE) -> Option<(VALUE, RESULT)>) -> Vec<RESULT> {
+fn convert<VALUE, RESULT>(
+    mut i: VALUE,
+    values: fn(VALUE) -> Option<(VALUE, RESULT)>,
+) -> Vec<RESULT> {
     let mut result = Vec::new();
     while let Some((new_i, appendix)) = values(i) {
         i = new_i;
@@ -8,16 +10,27 @@ fn convert<VALUE, RESULT>(mut i: VALUE, values: fn(VALUE) -> Option<(VALUE, RESU
     result
 }
 
-static VALUE_TO_STRING : [(u32, &'static str); 17] = [
-    (10000, "ↂ"), (9000, "ↁↂ"), (5000, "ↁ"), (4000, "Mↁ"),
-     (1000, "M"),  (900, "CM"),  (500, "D"),  (400, "CD"),
-      (100, "C"),   (90, "XC"),   (50, "L"),   (40, "XL"),
-       (10, "X"),    (9, "IX"),    (5, "V"),    (4, "IV"),
-        (1, "I")];
-
-static DIST_TO_STRING : [(u32, &'static str); 4] = [
-    (1000000, "km"), (1000, "m"), (10, "cm"), (1, "mm")
+static VALUE_TO_STRING: [(u32, &str); 17] = [
+    (10000, "ↂ"),
+    (9000, "ↁↂ"),
+    (5000, "ↁ"),
+    (4000, "Mↁ"),
+    (1000, "M"),
+    (900, "CM"),
+    (500, "D"),
+    (400, "CD"),
+    (100, "C"),
+    (90, "XC"),
+    (50, "L"),
+    (40, "XL"),
+    (10, "X"),
+    (9, "IX"),
+    (5, "V"),
+    (4, "IV"),
+    (1, "I"),
 ];
+
+static DIST_TO_STRING: [(u32, &str); 4] = [(1000000, "km"), (1000, "m"), (10, "cm"), (1, "mm")];
 
 #[test]
 fn positive_nonzero_numbers() {
@@ -28,39 +41,48 @@ fn positive_nonzero_numbers() {
     }
 }
 
-fn gen_impl<OP0, OP1, T, X, Y>(i: T, values: &[(T, Y)], ops: (OP0, OP1)) -> Option<(T, X)> where OP0: Fn(&T, &T) -> T, OP1: Fn(&T, &T, &Y) -> X, T: PartialOrd<T> {
+fn gen_impl<OP0, OP1, T, X, Y>(i: T, values: &[(T, Y)], ops: (OP0, OP1)) -> Option<(T, X)>
+where
+    OP0: Fn(&T, &T) -> T,
+    OP1: Fn(&T, &T, &Y) -> X,
+    T: PartialOrd<T>,
+{
     for item in values.iter() {
         if i >= item.0 {
             let next_i = ops.0(&i, &item.0);
             let string_i = ops.1(&i, &item.0, &item.1);
-            return Some((next_i, string_i))
+            return Some((next_i, string_i));
         }
     }
     None
 }
 
 fn roman_impl(i: u32) -> Option<(u32, String)> {
-    let ops = (|i: &u32, itemval: &u32| i - itemval,
-               |_: &u32, _: &u32, stringval: &&str| String::from(*stringval));
+    let ops = (
+        |i: &u32, itemval: &u32| i - itemval,
+        |_: &u32, _: &u32, stringval: &&str| String::from(*stringval),
+    );
     gen_impl(i, &VALUE_TO_STRING, ops)
 }
 
-fn to_roman(i: u32) -> String {
+pub fn to_roman(i: u32) -> String {
     if i == 0 {
-        return String::from("ø")
+        return String::from("ø");
     }
     convert(i, roman_impl).join("")
 }
 
 fn dist_impl(i: u32) -> Option<(u32, String)> {
-    let ops = (|i: &u32, itemval: &u32| i % itemval,
-               |i: &u32, itemval: &u32, stringval: &&str| (i / itemval).to_string() + *stringval);
+    let ops = (
+        |i: &u32, itemval: &u32| i % itemval,
+        |i: &u32, itemval: &u32, stringval: &&str| (i / itemval).to_string() + *stringval,
+    );
     gen_impl(i, &DIST_TO_STRING, ops)
 }
 
-fn with_distance_units(i: u32) -> String {
+pub fn with_distance_units(i: u32) -> String {
     if i == 0 {
-        return String::from("0m")
+        return String::from("0m");
     }
     convert(i, dist_impl).join(" ")
 }
@@ -115,5 +137,5 @@ fn test_with_distance_units() {
 
 fn main() {
     println!("Hello, world!");
-//    let value_to_string = vec![(100, "C"), (90, "XC")];
+    //    let value_to_string = vec![(100, "C"), (90, "XC")];
 }

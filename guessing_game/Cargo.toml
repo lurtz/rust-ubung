@@ -1,17 +1,8 @@
 [package]
 
-name = "matrix"
+name = "guessing_game"
 version = "0.0.1"
 authors = [ "Your name <you@example.com>" ]
-
-[[bin]]
-name = "matrix2"
-
-# This field points at where the crate is located, relative to the Cargo.toml.
-path = "src/matrix2.rs"
-
-# A flag for enabling unit tests for this target. This is used by `cargo test`.
-test = true
 
 [dependencies]
 

@@ -1,11 +1,12 @@
+#[macro_export]
 macro_rules! my_vec {
     () => ( Vec::new() );
     ( $( $x:expr ),+ ) => ({ let mut v = Vec::new(); $(v.push($x);)+ v });
 }
 
-fn skip_prefix<'a>(line: &'a str, prefix: & str) -> &'a str {
+pub fn skip_prefix<'a>(line: &'a str, prefix: &str) -> &'a str {
     if line.starts_with(prefix) {
-        let pref_len : usize = prefix.len();
+        let pref_len: usize = prefix.len();
         return &line[pref_len..];
     }
     line
@@ -15,7 +16,7 @@ fn skip_prefix<'a>(line: &'a str, prefix: & str) -> &'a str {
 mod tests {
     #[test]
     fn round_brackets() {
-        let x = my_vec!(1,2,3);
+        let x = my_vec!(1, 2, 3);
         assert_eq!(3, x.len());
         assert_eq!(1, x[0]);
         assert_eq!(2, x[1]);
@@ -24,7 +25,7 @@ mod tests {
 
     #[test]
     fn square_brackets() {
-        let x = my_vec![1,2,3];
+        let x = my_vec![1, 2, 3];
         assert_eq!(3, x.len());
         assert_eq!(1, x[0]);
         assert_eq!(2, x[1]);
@@ -33,7 +34,7 @@ mod tests {
 
     #[test]
     fn empty_vector() {
-        let x : Vec<u32> = my_vec![];
+        let x: Vec<u32> = my_vec![];
         assert_eq!(0, x.len());
     }
 
@@ -46,7 +47,7 @@ mod tests {
 
     #[test]
     fn vector_with_content() {
-        let x = my_vec![1,2,3,4,5];
+        let x = my_vec![1, 2, 3, 4, 5];
         assert_eq!(5, x.len());
         assert_eq!(1, x[0]);
         assert_eq!(2, x[1]);
