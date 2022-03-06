@@ -17,28 +17,26 @@
 /// ```
 
 pub fn bla(x: f32, y: f32, z: f32) -> f32 {
-  ((x*y)+z)/(y+z)
+    ((x * y) + z) / (y + z)
 }
-
 
 #[cfg(test)]
 mod tests {
-  use super::*;
+    use super::*;
 
-  #[test]
-  fn it_works() {
-    assert_eq!(0.0 , bla(0.0, 1.0, 0.0));
-  }
+    #[test]
+    fn it_works() {
+        assert_eq!(0.0, bla(0.0, 1.0, 0.0));
+    }
 
-  #[test]
-  fn it_works2() {
-    assert_eq!(1.0 , bla(0.0, 0.0, 1.0));
-  }
+    #[test]
+    fn it_works2() {
+        assert_eq!(1.0, bla(0.0, 0.0, 1.0));
+    }
 
-  #[test]
-  fn it_tests() {
-    let x = (1..111).collect::<Vec<_>>();
-    println!("{:?}", x);
-  }
+    #[test]
+    fn it_tests() {
+        let x = (1..111).collect::<Vec<_>>();
+        println!("{:?}", x);
+    }
 }
-
