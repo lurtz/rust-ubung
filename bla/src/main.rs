@@ -1,4 +1,5 @@
 use std::thread;
+use std::time::Duration;
 use std::sync::{Arc, Mutex, mpsc};
 
 fn main() {
@@ -42,7 +43,7 @@ fn main() {
   for i in 0..3 {
     let (data, tx) = (data.clone(), tx.clone());
     thread::spawn(move || {
-      thread::sleep_ms(500);
+      thread::sleep(Duration::from_millis(500));
       let mut data = data.lock().unwrap();
       data[i] += 1;
       match tx.send(42) {

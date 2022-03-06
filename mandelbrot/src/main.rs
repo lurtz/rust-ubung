@@ -1,24 +1,23 @@
-
 #[macro_use]
 extern crate conrod;
-extern crate piston_window;
+extern crate gfx_core;
 extern crate image;
 extern crate num;
-extern crate gfx_core;
+extern crate piston_window;
 
 mod image_with_mouse_interaction;
 
-use conrod::{Widget, UiCell, Positionable, Sizeable, UiBuilder};
-use conrod::widget::{Canvas, Image};
+use conrod::backend::piston_window::{convert_event, draw, GlyphCache};
 use conrod::image::Map;
-use conrod::backend::piston_window::{GlyphCache, convert_event, draw};
-use piston_window::{EventLoop, PistonWindow, UpdateEvent, WindowSettings};
-use piston_window::{ImageSize, G2dTexture, Texture, Size, Window, OpenGL};
-use piston_window::{Event, TextureSettings};
-use image::{ImageBuffer, Pixel};
-use num::complex::Complex;
+use conrod::widget::{Canvas, Image};
+use conrod::{Positionable, Sizeable, UiBuilder, UiCell, Widget};
 use gfx_core::Resources;
+use image::{ImageBuffer, Pixel};
 use image_with_mouse_interaction::ImageWithMouseInteraction;
+use num::complex::Complex;
+use piston_window::{Event, TextureSettings};
+use piston_window::{EventLoop, PistonWindow, UpdateEvent, WindowSettings};
+use piston_window::{G2dTexture, ImageSize, OpenGL, Size, Texture, Window};
 
 fn main() {
     const WIDTH: u32 = 800;
@@ -28,9 +27,12 @@ fn main() {
     let opengl = OpenGL::V3_3;
 
     // Construct the window.
-    let mut window: PistonWindow =
-        WindowSettings::new("Canvas Demo", [WIDTH, HEIGHT])
-            .opengl(opengl).exit_on_esc(true).vsync(true).build().unwrap();
+    let mut window: PistonWindow = WindowSettings::new("Canvas Demo", [WIDTH, HEIGHT])
+        .opengl(opengl)
+        .exit_on_esc(true)
+        .vsync(true)
+        .build()
+        .unwrap();
     window.set_ups(60);
 
     // construct our `Ui`.
@@ -50,7 +52,6 @@ fn main() {
 
     // Poll events from the window.
     while let Some(event) = window.next() {
-
         // Convert the piston event to a conrod event.
         if let Some(e) = convert_event(event.clone(), &window) {
             ui.handle_event(e);
@@ -66,33 +67,47 @@ fn main() {
         }
 
         event.update(|_| {
-          let uicell = ui.set_widgets();
-          set_widgets(uicell, ids, &image_map);
+            let uicell = ui.set_widgets();
+            set_widgets(uicell, ids, &image_map);
         });
 
         window.draw_2d(&event, |c, g| {
             if let Some(primitives) = ui.draw_if_changed() {
-                fn texture_from_image<T>(img: &T) -> &T { img };
-                draw(c, g, primitives,
-                     &mut text_texture_cache,
-                     &image_map,
-                     texture_from_image);
+                fn texture_from_image<T>(img: &T) -> &T {
+                    img
+                }
+                draw(
+                    c,
+                    g,
+                    primitives,
+                    &mut text_texture_cache,
+                    &image_map,
+                    texture_from_image,
+                );
             }
         });
     }
 }
 
-fn set_widgets<T>(ref mut uicell: UiCell, ids: &mut Ids, image_map: &Map<Texture<T>>) where T: Resources {
-      // Construct our main `Canvas` tree.
-      Canvas::new().set(ids.master, uicell);
+fn set_widgets<T>(ref mut uicell: UiCell, ids: &mut Ids, image_map: &Map<Texture<T>>)
+where
+    T: Resources,
+{
+    // Construct our main `Canvas` tree.
+    Canvas::new().set(ids.master, uicell);
 
-      let (w, h) = image_map.get(&ids.rust_logo).unwrap().get_size();
+    let (w, h) = image_map.get(&ids.rust_logo).unwrap().get_size();
 
-      // Instantiate the `Image` at its full size in the middle of the window.
-      Image::new().w_h(w as f64, h as f64).middle().set(ids.rust_logo, uicell);
+    // Instantiate the `Image` at its full size in the middle of the window.
+    Image::new()
+        .w_h(w as f64, h as f64)
+        .middle()
+        .set(ids.rust_logo, uicell);
 
-      ImageWithMouseInteraction::new().color(conrod::color::DARK_RED).set(ids.image_mouse, uicell);
-      ImageWithMouseInteraction::new().color(conrod::color::rgb(0.2, 0.5, 0.8));
+    ImageWithMouseInteraction::new()
+        .color(conrod::color::DARK_RED)
+        .set(ids.image_mouse, uicell);
+    ImageWithMouseInteraction::new().color(conrod::color::rgb(0.2, 0.5, 0.8));
 }
 
 // Load the Rust logo from our assets folder.
@@ -110,15 +125,15 @@ fn rust_logo(window: &mut PistonWindow) -> G2dTexture {
 fn px_func(x: u32, y: u32, size: Size) -> image::Rgba<u8> {
     let iterations = 20;
     let mut i: u32 = 0;
-    let cx = (x as f32 - size.width as f32/2.0) / (size.width as f32 / 4.0);
-    let cy = (y as f32 - size.height as f32/2.0) / (size.height as f32 / 4.0);
+    let cx = (x as f32 - size.width as f32 / 2.0) / (size.width as f32 / 4.0);
+    let cy = (y as f32 - size.height as f32 / 2.0) / (size.height as f32 / 4.0);
     let c = Complex::new(cx, cy);
     let mut z = c;
     while i < iterations && z.norm() < 1000.0 {
-        z = z*z + c;
-        i = i+1;
+        z = z * z + c;
+        i = i + 1;
     }
-    let (r,g,b,a) = taken_iterations_to_rgba(i, iterations);
+    let (r, g, b, a) = taken_iterations_to_rgba(i, iterations);
     image::Rgba::<u8>::from_channels(r, g, b, a)
 }
 
@@ -159,7 +174,7 @@ fn taken_iterations_to_rgba(i: u32, max_iterations: u32) -> (u8, u8, u8, u8) {
     }
 
     let a = 255;
-    (r,g,b,a)
+    (r, g, b, a)
 }
 
 // Generate a unique `WidgetId` for each widget.
@@ -174,4 +189,3 @@ widget_ids! {
     image_mouse,
     }
 }
-

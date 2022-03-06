@@ -1,5 +1,6 @@
 use std::thread;
 use std::sync::{Mutex, Arc};
+use std::time::Duration;
 
 struct Philosopher {
   name : String,
@@ -30,7 +31,7 @@ impl Philosopher {
 
     println!("{} starts eating", self.name);
 
-    thread::sleep_ms(1000);
+    thread::sleep(Duration::from_millis(1000));
 
     println!("{} is done eating", self.name);
   }

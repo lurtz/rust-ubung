@@ -1,13 +1,13 @@
-use conrod::{self, widget, Colorable, Dimensions, Labelable, Point, Positionable, Widget};
+use conrod::{self, widget, Widget};
 
 pub struct ImageWithMouseInteraction {
-//    image : conrod::widget::Image,
+    //    image : conrod::widget::Image,
     common: widget::CommonBuilder,
-    color : Option<conrod::Color>,
+    color: Option<conrod::Color>,
     style: Style,
 }
 
-widget_style!{
+widget_style! {
     /// Represents the unique styling for our CircularButton widget.
     style Style {
         /// Color of the button.
@@ -59,7 +59,9 @@ impl Widget for ImageWithMouseInteraction {
     }
 
     fn init_state(&self, id_gen: widget::id::Generator) -> Self::State {
-        State { ids: Ids::new(id_gen) }
+        State {
+            ids: Ids::new(id_gen),
+        }
     }
 
     fn style(&self) -> Self::Style {
@@ -67,14 +69,22 @@ impl Widget for ImageWithMouseInteraction {
     }
 
     fn update(self, args: widget::UpdateArgs<Self>) -> Self::Event {
-        let widget::UpdateArgs { id, state, rect, mut ui, style, .. } = args;
-        println!("id = {:?}, state.ids = {:?}, rect = {:?}, style = {:?}", id, state.ids, rect, style);
+        let widget::UpdateArgs {
+            id,
+            state,
+            rect,
+            ui,
+            style,
+            ..
+        } = args;
+        println!(
+            "id = {:?}, state.ids = {:?}, rect = {:?}, style = {:?}",
+            id, state.ids, rect, style
+        );
 
         let input = ui.widget_input(id);
         println!("input = {:?}", input.clicks().left().next().map(|_| ()));
 
         None
     }
-
-
 }
