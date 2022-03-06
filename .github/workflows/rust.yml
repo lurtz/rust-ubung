@@ -20,9 +20,7 @@ jobs:
       run: sudo apt install libavahi-client-dev
     - name: Build
       run: |
-        cd denon-control
         cargo build --verbose
     - name: Run tests
       run: |
-        cd denon-control
         cargo test --verbose
