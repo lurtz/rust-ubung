@@ -12,16 +12,8 @@ impl Philosopher {
     fn new(name: &str, left: usize, right: usize) -> Philosopher {
         Philosopher {
             name: name.to_string(),
-            left: left,
-            right: right,
-        }
-    }
-
-    fn new2(name: &String, left: usize, right: usize) -> Philosopher {
-        Philosopher {
-            name: name.clone(),
-            left: left,
-            right: right,
+            left,
+            right,
         }
     }
 
@@ -61,7 +53,7 @@ fn main() {
         Philosopher::new("Julian", 2, 3),
         Philosopher::new("Jan", 3, 4),
         Philosopher::new("Sebastian", 4, 5),
-        Philosopher::new2(&name, 0, 5),
+        Philosopher::new(&name, 0, 5),
     ];
 
     let handles: Vec<_> = philosophers

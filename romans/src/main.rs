@@ -10,7 +10,7 @@ fn convert<VALUE, RESULT>(
     result
 }
 
-static VALUE_TO_STRING: [(u32, &'static str); 17] = [
+static VALUE_TO_STRING: [(u32, &str); 17] = [
     (10000, "ↂ"),
     (9000, "ↁↂ"),
     (5000, "ↁ"),
@@ -30,8 +30,7 @@ static VALUE_TO_STRING: [(u32, &'static str); 17] = [
     (1, "I"),
 ];
 
-static DIST_TO_STRING: [(u32, &'static str); 4] =
-    [(1000000, "km"), (1000, "m"), (10, "cm"), (1, "mm")];
+static DIST_TO_STRING: [(u32, &str); 4] = [(1000000, "km"), (1000, "m"), (10, "cm"), (1, "mm")];
 
 #[test]
 fn positive_nonzero_numbers() {

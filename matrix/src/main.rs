@@ -13,8 +13,8 @@ impl<T: Clone + Default> Matrix<T> {
     pub fn new(rows: u32, cols: u32) -> Matrix<T> {
         let init = T::default();
         Matrix {
-            rows: rows,
-            cols: cols,
+            rows,
+            cols,
             data: vec![init; (rows * cols) as usize],
         }
     }
@@ -63,7 +63,7 @@ impl<T: Clone + Mul<Output = T> + Add<Output = T>> Mul for Matrix<T> {
         Matrix {
             rows: self.rows,
             cols: _rhs.cols,
-            data: data,
+            data,
         }
     }
 }

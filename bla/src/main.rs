@@ -37,7 +37,7 @@ fn main() {
         .collect::<Vec<_>>();
     println!("{:?}", t);
 
-    let xx = 3 as f32 * 2.0;
+    let xx = 3_f32 * 2.0;
     println!("{}", xx);
 
     let data = Arc::new(Mutex::new(vec![1, 2, 3]));
@@ -57,7 +57,7 @@ fn main() {
     }
 
     for _ in 0..3 {
-        println!("{}", rx.recv().ok().expect("fail at receive of 42"));
+        println!("{}", rx.recv().expect("fail at receive of 42"));
     }
 
     println!("{:?}", *data.lock().unwrap());

@@ -23,7 +23,7 @@ impl TraitWithAssocType for TestStruct {
     type Y = Vec<u32>;
 
     fn get_x(&self) -> Self::X {
-        self.i.clone()
+        self.i
     }
 
     fn get_y(&self) -> Self::Y {
