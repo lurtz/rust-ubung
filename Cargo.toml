@@ -11,7 +11,6 @@ members = [
         "guessing_game",
         "hello_world",
         "makros",
-        "mandelbrot",
         "matrix",
         "romans"
 ]
