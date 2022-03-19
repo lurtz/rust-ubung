@@ -2,10 +2,8 @@
 // MV53
 // MVMAX 86
 
-extern crate avahi_sys;
-
 mod avahi;
-mod avahi2;
+mod avahi3;
 mod avahi_error;
 mod denon_connection;
 mod operation;
@@ -76,7 +74,7 @@ fn get_avahi_impl(args: &getopts::Matches) -> fn() -> Result<String, avahi_error
     if args.opt_present("e") {
         avahi::get_receiver
     } else {
-        avahi2::get_receiver
+        avahi3::get_receiver
     }
 }
 

@@ -6,6 +6,4 @@ edition = '2021'
 
 [dependencies]
 getopts = "0.2"
-avahi-sys = "0.10.0"
-libc = "*"
-
+zeroconf = "0.10"
