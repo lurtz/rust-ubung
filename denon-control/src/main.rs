@@ -72,15 +72,20 @@ fn print_status(
     Ok(())
 }
 
+fn get_avahi_impl(args: &getopts::Matches) -> fn() -> Result<String, avahi_error::Error> {
+    if args.opt_present("e") {
+        avahi::get_receiver
+    } else {
+        avahi2::get_receiver
+    }
+}
+
 fn get_receiver_and_port(args: &getopts::Matches) -> (String, u16) {
     let denon_name;
     if let Some(name) = args.opt_str("a") {
         denon_name = name;
     } else {
-        let mut get_rec: fn() -> Result<String, avahi_error::Error> = avahi2::get_receiver;
-        if args.opt_present("e") {
-            get_rec = avahi::get_receiver;
-        }
+        let get_rec = get_avahi_impl(args);
         let denon_name_option = get_rec();
         match denon_name_option {
             Ok(name) => denon_name = name,
