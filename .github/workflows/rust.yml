@@ -17,7 +17,7 @@ jobs:
     steps:
     - uses: actions/checkout@v2
     - name: Install avahi headers
-      run: sudo apt install libavahi-client-dev
+      run: sudo apt install libavahi-client-dev avahi-daemon
     - name: Check formatting
       run: cargo fmt --check
     - name: Build
