@@ -74,8 +74,6 @@ mod test {
         let sn = ServiceType::new("does_not_exit", "tcp").unwrap();
         match get_hostname(sn) {
             Err(Error::NoHostsFound) => {}
-            // github action fails to initialize avahi
-            Err(Error::Zeroconf(_)) => {}
             _ => assert!(false),
         }
     }
