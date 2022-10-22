@@ -18,7 +18,6 @@ fn main() {
 
         io::stdin()
             .read_line(&mut guess)
-            .ok()
             .expect("Failed to read line");
 
         let guess: u32 = match guess.trim().parse() {

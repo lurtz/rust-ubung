@@ -3,7 +3,7 @@ use std::fmt::{Display, Error, Formatter, Write};
 use std::hash::{Hash, Hasher};
 use std::slice::Iter;
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum PowerState {
     On,
     Standby,
@@ -24,7 +24,7 @@ impl PowerState {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum SourceInputState {
     Cd,
     Tuner,

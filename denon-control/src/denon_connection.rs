@@ -48,12 +48,11 @@ fn thread_func_impl(
             if Operation::Stop == request {
                 return Ok(());
             }
-            let command;
-            if Operation::Set == request {
-                command = format!("{}\r", value);
+            let command = if Operation::Set == request {
+                format!("{}\r", value)
             } else {
-                command = format!("{}?\r", value.value());
-            }
+                format!("{}?\r", value.value())
+            };
             write(&mut stream, command)?;
         }
 
@@ -79,11 +78,7 @@ fn thread_func_impl(
 }
 
 fn parse_response(response: &[String]) -> Vec<State> {
-    return response
-        .iter()
-        .map(|x| parse(x.as_str()))
-        .flatten()
-        .collect();
+    return response.iter().filter_map(|x| parse(x.as_str())).collect();
 }
 
 fn print_io_error(e: &std::io::Error) {
