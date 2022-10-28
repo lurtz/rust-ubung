@@ -8,6 +8,7 @@ members = [
         "dining_philosophers",
         "embed",
         "error_handling",
+	"fourier_transform",
         "guessing_game",
         "hello_world",
         "makros",
