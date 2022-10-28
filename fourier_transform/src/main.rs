@@ -8,26 +8,49 @@ use std::f64::consts::PI;
 
 type Waveform = Vec<Complex<f64>>;
 
-// TODO add parameters for cos() functions
-fn create_waveform() -> Waveform {
-    let mut waveform = vec![];
-    let end = 100;
-    let w1 = 2.0 * (PI / (end as f64));
-    let a1 = 10 as f64;
-    let w2 = 4.0 * (PI / (end as f64));
-    let a2 = 5 as f64;
-    for i in 0..end {
-        let c1 = a1 * (i as f64 * w1).cos();
-        let c2 = a2 * (i as f64 * w2).cos();
-        waveform.push(Complex::new(c1 + c2, 0.0));
+struct CosParam {
+    amplitude: f64,
+    frequency: f64,
+    phase: f64,
+}
+
+impl CosParam {
+    fn new(amplitude: i32, frequency: i32, phase: i32) -> CosParam {
+        CosParam {
+            amplitude: amplitude as f64,
+            frequency: frequency as f64,
+            phase: phase as f64,
+        }
     }
-    waveform
+}
+
+fn calc_dcos(param: &CosParam, i: i32, rad_fac: f64) -> f64 {
+    // TODO math is really bogus / incoherent
+    param.amplitude * ((i as f64) * param.frequency * rad_fac + param.phase).cos()
+}
+
+fn create_waveform(cosparams: &[CosParam], resolution: i32) -> Waveform {
+    let rad_fac = PI / resolution as f64;
+    let calc_y = |i: i32| {
+        let calc_cos = |param: &CosParam| calc_dcos(param, i, rad_fac);
+        let re = cosparams.iter().map(calc_cos).sum::<f64>();
+        Complex::new(re, 0.0)
+    };
+    (0..resolution)
+        .into_iter()
+        .map(calc_y)
+        .collect::<Waveform>()
+}
+
+fn create_waveforms() -> Waveform {
+    let cps = vec![CosParam::new(10, 2, 0), CosParam::new(5, 4, 0)];
+    create_waveform(&cps, 100)
 }
 
 fn display_waveform(waveform: &Waveform) {
     let mut data_re = vec![];
     let mut data_im = vec![];
-    for c in waveform.into_iter().enumerate() {
+    for c in waveform.iter().enumerate() {
         data_re.push((c.0 as f64, c.1.re));
         data_im.push((c.0 as f64, c.1.im));
     }
@@ -47,10 +70,10 @@ fn fourier_transform(waveform: &Waveform) -> Waveform {
     let mut f = Waveform::new();
     for k in 0..waveform.len() {
         let mut sum = Complex::new(0.0, 0.0);
-        for n in 0..waveform.len() {
+        for (n, item) in waveform.iter().enumerate() {
             let var_fac = k as f64 * n as f64;
             let im = -const_fac * var_fac;
-            sum += waveform[n] * Complex::new(E, 0.0).powc(Complex::new(0.0, im));
+            sum += item * Complex::new(E, 0.0).powc(Complex::new(0.0, im));
         }
         f.push(sum);
     }
@@ -58,7 +81,7 @@ fn fourier_transform(waveform: &Waveform) -> Waveform {
 }
 
 fn main() {
-    let waveform = create_waveform();
+    let waveform = create_waveforms();
     display_waveform(&waveform);
     let f = fourier_transform(&waveform);
     display_waveform(&f);
