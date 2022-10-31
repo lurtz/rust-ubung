@@ -3,8 +3,7 @@ use plotlib::page::Page;
 use plotlib::repr::Plot;
 use plotlib::style::{PointMarker, PointStyle};
 use plotlib::view::ContinuousView;
-use std::f64::consts::E;
-use std::f64::consts::PI;
+use std::f64::consts::{E, PI};
 
 type Waveform = Vec<Complex<f64>>;
 
@@ -15,11 +14,11 @@ struct CosParam {
 }
 
 impl CosParam {
-    fn new(amplitude: i32, frequency: i32, phase: i32) -> CosParam {
+    fn new(amplitude: i32, frequency: i32, phase: f64) -> CosParam {
         CosParam {
             amplitude: amplitude as f64,
             frequency: frequency as f64,
-            phase: phase as f64,
+            phase,
         }
     }
 }
@@ -30,7 +29,7 @@ fn calc_dcos(param: &CosParam, i: i32, rad_fac: f64) -> f64 {
 }
 
 fn create_waveform(cosparams: &[CosParam], resolution: i32) -> Waveform {
-    let rad_fac = PI / resolution as f64;
+    let rad_fac = 2.0 * PI / resolution as f64;
     let calc_y = |i: i32| {
         let calc_cos = |param: &CosParam| calc_dcos(param, i, rad_fac);
         let re = cosparams.iter().map(calc_cos).sum::<f64>();
@@ -43,7 +42,7 @@ fn create_waveform(cosparams: &[CosParam], resolution: i32) -> Waveform {
 }
 
 fn create_waveforms() -> Waveform {
-    let cps = vec![CosParam::new(10, 2, 0), CosParam::new(5, 4, 0)];
+    let cps = vec![CosParam::new(10, 2, 0.0), CosParam::new(5, 4, 0.0)];
     create_waveform(&cps, 100)
 }
 
@@ -85,4 +84,116 @@ fn main() {
     display_waveform(&waveform);
     let f = fourier_transform(&waveform);
     display_waveform(&f);
+    println!("{:?}", f);
+}
+
+#[cfg(test)]
+mod test {
+    use crate::{create_waveform, CosParam};
+    use num_complex::Complex;
+    use num_complex::ComplexFloat;
+    use std::f64::consts::PI;
+
+    fn calc_open_end(resolution: i32) -> f64 {
+        ((resolution - 1) as f64 / resolution as f64 * PI * 2.0).cos()
+    }
+
+    #[test]
+    fn waveform() {
+        let cps = vec![CosParam::new(1, 1, 0.0)];
+        let resolution = 20;
+        let wf = create_waveform(&cps, resolution);
+
+        assert_eq!(resolution as usize, wf.len());
+        // cos(0) is 1
+        assert_eq!(Complex::new(1.0, 0.0), wf[0]);
+        // cos(pi) is -1
+        assert_eq!(Complex::new(-1.0, 0.0), wf[wf.len() / 2]);
+        // almost cos(2*pi) is 1
+        assert_eq!(
+            Complex::new(calc_open_end(resolution), 0.0),
+            wf[wf.len() - 1]
+        );
+        // cos(pi/2) is 0
+        assert!((Complex::new(0.0, 0.0) - wf[wf.len() / 4]).abs() < f64::EPSILON);
+        // cos(pi*3/2) is 0
+        assert!((Complex::new(0.0, 0.0) - wf[wf.len() / 4 * 3]).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn resolution_even() {
+        let cps = vec![CosParam::new(1, 1, 0.0)];
+        let resolution = 2;
+        let wf = create_waveform(&cps, resolution);
+        assert_eq!(resolution as usize, wf.len());
+        assert_eq!(Complex::new(1.0, 0.0), wf[0]);
+        assert_eq!(Complex::new(-1.0, 0.0), wf[wf.len() / 2]);
+        assert_eq!(
+            Complex::new(calc_open_end(resolution), 0.0),
+            wf[wf.len() - 1]
+        );
+    }
+
+    #[test]
+    fn resolution_odd() {
+        let cps = vec![CosParam::new(1, 1, 0.0)];
+        let resolution = 3;
+        let wf = create_waveform(&cps, resolution);
+        assert_eq!(resolution as usize, wf.len());
+        assert_eq!(Complex::new(1.0, 0.0), wf[0]);
+        assert_eq!(
+            Complex::new(calc_open_end(resolution), 0.0),
+            wf[wf.len() - 1]
+        );
+    }
+
+    #[test]
+    fn amplitude() {
+        let amplitude = 9;
+        let cps = vec![CosParam::new(amplitude, 1, 0.0)];
+        let resolution = 20;
+        let wf = create_waveform(&cps, resolution);
+        assert_eq!(Complex::new(amplitude as f64, 0.0), wf[0]);
+        assert_eq!(Complex::new(-amplitude as f64, 0.0), wf[wf.len() / 2]);
+        assert_eq!(
+            Complex::new(amplitude as f64 * calc_open_end(resolution), 0.0),
+            wf[wf.len() - 1]
+        );
+    }
+
+    #[test]
+    fn frequency() {
+        let frequency = 4;
+        let cps = vec![CosParam::new(1, frequency, 0.0)];
+        let resolution = 200;
+        let wf = create_waveform(&cps, resolution);
+        assert_eq!(Complex::new(1.0, 0.0), wf[0]);
+        assert_eq!(Complex::new(-1.0, 0.0), wf[wf.len() / 8]);
+        assert_eq!(Complex::new(1.0, 0.0), wf[wf.len() / 4]);
+        assert_eq!(Complex::new(-1.0, 0.0), wf[wf.len() * 3 / 8]);
+        assert_eq!(Complex::new(1.0, 0.0), wf[wf.len() / 2]);
+        assert_eq!(Complex::new(-1.0, 0.0), wf[wf.len() * 5 / 8]);
+        assert_eq!(Complex::new(1.0, 0.0), wf[wf.len() * 3 / 4]);
+        assert_eq!(Complex::new(-1.0, 0.0), wf[wf.len() * 7 / 8]);
+        assert_eq!(
+            Complex::new(calc_open_end(resolution / frequency), 0.0),
+            wf[wf.len() - 1]
+        );
+    }
+
+    #[test]
+    fn phase() {
+        let phase = std::f64::consts::PI;
+        let cps = vec![CosParam::new(1, 1, phase)];
+        let resolution = 200;
+        let wf = create_waveform(&cps, resolution);
+        assert_eq!(Complex::new(-1.0, 0.0), wf[0]);
+        assert!(f64::EPSILON > wf[wf.len() / 4].abs());
+        assert_eq!(Complex::new(1.0, 0.0), wf[wf.len() / 2]);
+        assert!(f64::EPSILON * 2.0 > wf[wf.len() * 3 / 4].abs());
+        assert_eq!(
+            Complex::new(-calc_open_end(resolution), 0.0),
+            wf[wf.len() - 1]
+        );
+    }
 }
