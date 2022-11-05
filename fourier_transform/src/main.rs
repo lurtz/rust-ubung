@@ -79,11 +79,28 @@ fn fourier_transform(waveform: &Waveform) -> Waveform {
     f
 }
 
+fn inverse_fourier_transform(freqform: &Waveform) -> Waveform {
+    let const_fac = 2.0 * PI / freqform.len() as f64;
+    let mut f = Waveform::new();
+    for k in 0..freqform.len() {
+        let mut sum = Complex::new(0.0, 0.0);
+        for (n, item) in freqform.iter().enumerate() {
+            let var_fac = k as f64 * n as f64;
+            let im = const_fac * var_fac;
+            sum += item * Complex::new(E, 0.0).powc(Complex::new(0.0, im));
+        }
+        f.push(sum / freqform.len() as f64);
+    }
+    f
+}
+
 fn main() {
     let waveform = create_waveforms();
     display_waveform(&waveform);
     let f = fourier_transform(&waveform);
     display_waveform(&f);
+    let waveform_reconstructed = inverse_fourier_transform(&f);
+    display_waveform(&waveform_reconstructed);
     println!("{:?}", f);
 }
 
