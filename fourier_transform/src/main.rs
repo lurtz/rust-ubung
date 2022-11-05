@@ -64,34 +64,28 @@ fn display_waveform(waveform: &Waveform) {
     println!("{}", Page::single(&v).dimensions(80, 30).to_text().unwrap());
 }
 
-fn fourier_transform(waveform: &Waveform) -> Waveform {
-    let const_fac = 2.0 * PI / waveform.len() as f64;
+fn gen_fourier_transform(waveform: &Waveform, negative_exponent: bool, divisor: usize) -> Waveform {
+    let neg_fac = if negative_exponent { -1.0 } else { 1.0 };
+    let const_fac = neg_fac * 2.0 * PI / waveform.len() as f64;
     let mut f = Waveform::new();
     for k in 0..waveform.len() {
         let mut sum = Complex::new(0.0, 0.0);
         for (n, item) in waveform.iter().enumerate() {
             let var_fac = k as f64 * n as f64;
-            let im = -const_fac * var_fac;
+            let im = const_fac * var_fac;
             sum += item * Complex::new(E, 0.0).powc(Complex::new(0.0, im));
         }
-        f.push(sum);
+        f.push(sum / divisor as f64);
     }
     f
 }
 
+fn fourier_transform(waveform: &Waveform) -> Waveform {
+    gen_fourier_transform(waveform, true, 1)
+}
+
 fn inverse_fourier_transform(freqform: &Waveform) -> Waveform {
-    let const_fac = 2.0 * PI / freqform.len() as f64;
-    let mut f = Waveform::new();
-    for k in 0..freqform.len() {
-        let mut sum = Complex::new(0.0, 0.0);
-        for (n, item) in freqform.iter().enumerate() {
-            let var_fac = k as f64 * n as f64;
-            let im = const_fac * var_fac;
-            sum += item * Complex::new(E, 0.0).powc(Complex::new(0.0, im));
-        }
-        f.push(sum / freqform.len() as f64);
-    }
-    f
+    gen_fourier_transform(freqform, false, freqform.len())
 }
 
 fn main() {
