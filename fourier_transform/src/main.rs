@@ -100,7 +100,9 @@ fn main() {
 
 #[cfg(test)]
 mod test {
-    use crate::{create_waveform, CosParam};
+    use crate::{
+        create_waveform, display_waveform, fourier_transform, inverse_fourier_transform, CosParam,
+    };
     use num_complex::Complex;
     use num_complex::ComplexFloat;
     use std::f64::consts::PI;
@@ -206,5 +208,23 @@ mod test {
             Complex::new(-calc_open_end(resolution), 0.0),
             wf[wf.len() - 1]
         );
+    }
+
+    #[test]
+    fn fourier_and_inverse() {
+        let cps = vec![CosParam::new(1, 1, 0.0)];
+        let resolution = 20;
+        let wf = create_waveform(&cps, resolution);
+        let freqs = fourier_transform(&wf);
+        display_waveform(&wf);
+        display_waveform(&freqs);
+        let wf_recon = inverse_fourier_transform(&freqs);
+        display_waveform(&wf_recon);
+
+        for (pos, (orig, recon)) in wf.iter().zip(wf_recon.iter()).enumerate() {
+            let diff = (orig - recon).abs();
+            println!("{} {}", pos, diff);
+            assert!(diff < 19.0 * f64::EPSILON);
+        }
     }
 }
