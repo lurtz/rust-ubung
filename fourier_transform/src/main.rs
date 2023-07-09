@@ -24,7 +24,6 @@ impl CosParam {
 }
 
 fn calc_dcos(param: &CosParam, i: i32, rad_fac: f64) -> f64 {
-    // TODO math is really bogus / incoherent
     param.amplitude * ((i as f64) * param.frequency * rad_fac + param.phase).cos()
 }
 
@@ -35,14 +34,18 @@ fn create_waveform(cosparams: &[CosParam], resolution: i32) -> Waveform {
         let re = cosparams.iter().map(calc_cos).sum::<f64>();
         Complex::new(re, 0.0)
     };
-    (0..resolution)
-        .into_iter()
-        .map(calc_y)
-        .collect::<Waveform>()
+    (0..resolution).map(calc_y).collect::<Waveform>()
 }
 
 fn create_waveforms() -> Waveform {
-    let cps = vec![CosParam::new(10, 2, 0.0), CosParam::new(5, 4, 0.0)];
+    let cps = vec![
+        CosParam::new(10, 2, 0.0),
+        CosParam::new(15, 3, PI),
+        CosParam::new(5, 4, 0.0),
+        CosParam::new(7, 5, PI / 2.0),
+        CosParam::new(12, 6, PI / 2.0),
+        CosParam::new(6, 7, -PI / 2.0),
+    ];
     create_waveform(&cps, 100)
 }
 
@@ -95,7 +98,7 @@ fn main() {
     display_waveform(&f);
     let waveform_reconstructed = inverse_fourier_transform(&f);
     display_waveform(&waveform_reconstructed);
-    println!("{:?}", f);
+    // println!("{:?}", f);
 }
 
 #[cfg(test)]
