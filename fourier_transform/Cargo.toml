@@ -7,4 +7,4 @@ edition = "2021"
 
 [dependencies]
 num-complex = "0.4.*"
-plotlib = "0.5.*"
+plotlib = { git = 'https://github.com/milliams/plotlib.git', branch = 'dependabot/cargo/svg-0.13.0' }
