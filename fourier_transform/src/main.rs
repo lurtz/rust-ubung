@@ -92,7 +92,7 @@ fn inverse_fourier_transform(freqform: &Waveform) -> Waveform {
 }
 
 fn main() {
-    let i = 3;
+    let _i = 3;
     let waveform = create_waveforms();
     display_waveform(&waveform);
     let f = fourier_transform(&waveform);
