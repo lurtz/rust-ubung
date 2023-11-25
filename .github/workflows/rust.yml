@@ -18,8 +18,11 @@ jobs:
     - uses: actions/checkout@v2
     - name: Install avahi headers
       run: sudo apt-get update && sudo apt-get install libavahi-client-dev avahi-daemon
+    - uses: r7kamura/rust-problem-matchers@v1
     - name: Check formatting
       run: cargo fmt --check
+    - name: Static code analysis
+      run: cargo clippy -- -D warnings
     - name: Build
       run: cargo build --verbose
     - name: Run tests
