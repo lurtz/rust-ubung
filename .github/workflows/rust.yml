@@ -33,6 +33,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v2
+    - name: Install avahi headers
+      run: sudo apt-get update && sudo apt-get install libavahi-client-dev avahi-daemon
     - uses: r7kamura/rust-problem-matchers@v1
     - name: Static code analysis
       run: cargo clippy -- -D warnings
