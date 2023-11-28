@@ -19,11 +19,7 @@ jobs:
     - name: Install avahi headers
       run: sudo apt-get update && sudo apt-get install libavahi-client-dev avahi-daemon
     - uses: r7kamura/rust-problem-matchers@v1
-    - name: Build
-      run: cargo build --verbose
-    - name: Run tests
-      run: cargo test --verbose
-    - name: Collect coverage
+    - name: Build, run tests and collect coverage
       run: cargo llvm-cov --lcov --output-path ${{github.workspace}}/lcov.info
     - name: Display coverage in pull request
       uses: romeovs/lcov-reporter-action@v0.3.1
