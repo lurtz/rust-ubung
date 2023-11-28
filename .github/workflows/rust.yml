@@ -14,13 +14,20 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v2
+    - name: Install cargo-llvm-cov
+      uses: taiki-e/install-action@cargo-llvm-cov
     - name: Install avahi headers
       run: sudo apt-get update && sudo apt-get install libavahi-client-dev avahi-daemon
     - uses: r7kamura/rust-problem-matchers@v1
-    - name: Build
-      run: cargo build --verbose
-    - name: Run tests
-      run: cargo test --verbose
+    - name: Build, run tests and collect coverage
+      run: cargo llvm-cov --lcov --output-path ${{github.workspace}}/lcov.info
+    - name: Display coverage in pull request
+      uses: romeovs/lcov-reporter-action@v0.3.1
+      if: ${{ github.event_name == 'pull_request' }}
+      with:
+        github-token: ${{ secrets.GITHUB_TOKEN }}
+        lcov-file: ${{github.workspace}}/lcov.info
+
 
   check-formatting:
     runs-on: ubuntu-latest
