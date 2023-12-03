@@ -32,3 +32,18 @@ pub fn get_receiver() -> Result<String, Error> {
         Ok(String::from(denon_names[0]))
     }
 }
+
+#[cfg(test)]
+mod test {
+    use super::get_receiver;
+    use crate::avahi_error::Error;
+    use std::net::TcpStream;
+
+    #[test]
+    fn get_receiver_may_return() {
+        match get_receiver() {
+            Ok(address) => assert!(TcpStream::connect((address, 23)).is_ok()),
+            Err(e) => assert!(matches!(e, Error::NoHostsFound)),
+        }
+    }
+}

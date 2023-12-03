@@ -63,8 +63,18 @@ pub fn get_receiver() -> Result<String, Error> {
 
 #[cfg(test)]
 mod test {
+    use super::get_receiver;
     use crate::{avahi3::get_hostname, avahi_error::Error};
+    use std::net::TcpStream;
     use zeroconf::ServiceType;
+
+    #[test]
+    fn get_receiver_may_return() {
+        match get_receiver() {
+            Ok(address) => assert!(TcpStream::connect((address, 23)).is_ok()),
+            Err(e) => assert!(matches!(e, Error::NoHostsFound)),
+        }
+    }
 
     #[test]
     fn timeout() {
