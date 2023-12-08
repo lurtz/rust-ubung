@@ -113,7 +113,7 @@ fn thread_func(
                 break;
             }
             Err(_) => {
-                thread::sleep(Duration::from_millis(500));
+                thread::sleep(Duration::from_millis(10));
             }
         }
     }
@@ -125,13 +125,12 @@ pub struct DenonConnection {
 }
 
 impl DenonConnection {
-    pub fn new(denon_name: &str, denon_port: u16) -> DenonConnection {
-        let denon_string = String::from(denon_name);
+    pub fn new(denon_name: String, denon_port: u16) -> DenonConnection {
         let state = Arc::new(Mutex::new(HashSet::new()));
         let cloned_state = state.clone();
         let (tx, rx) = channel();
         let _ = thread::spawn(move || {
-            thread_func(denon_string, denon_port, cloned_state, rx);
+            thread_func(denon_name, denon_port, cloned_state, rx);
         });
         DenonConnection {
             state,
@@ -150,7 +149,7 @@ impl DenonConnection {
         }
         self.query(op.clone(), Operation::Query)?;
         for _ in 0..50 {
-            thread::sleep(Duration::from_millis(100));
+            thread::sleep(Duration::from_millis(10));
             let locked_state = self.state.lock().unwrap();
             if let Some(state) = locked_state.get(&op) {
                 return Ok(state.clone());
@@ -179,7 +178,23 @@ impl DenonConnection {
 impl Drop for DenonConnection {
     fn drop(&mut self) {
         while Ok(()) == self.stop() {
-            thread::sleep(Duration::from_millis(100));
+            thread::sleep(Duration::from_millis(10));
         }
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::DenonConnection;
+    use crate::operation::Operation;
+    use crate::state::State;
+    use std::sync::mpsc::SendError;
+
+    #[test]
+    fn get_receiver_may_return() {
+        let dc = DenonConnection::new(String::from("value"), 0);
+        let rc = dc.get(State::main_volume());
+        let x: Result<State, SendError<(Operation, State)>> = Ok(State::Unknown);
+        assert_eq!(rc, x);
     }
 }
