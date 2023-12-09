@@ -43,7 +43,10 @@ mod test {
     fn get_receiver_may_return() {
         match get_receiver() {
             Ok(address) => assert!(TcpStream::connect((address, 23)).is_ok()),
-            Err(e) => assert!(matches!(e, Error::NoHostsFound)),
+            Err(e) => {
+                println!("{}", e.to_string());
+                assert!(matches!(e, Error::NoHostsFound))
+            }
         }
     }
 }
