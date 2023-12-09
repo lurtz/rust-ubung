@@ -78,14 +78,8 @@ mod test {
 
     #[test]
     fn timeout() {
-        println!("test start");
-        // ServiceType::new("http", "tcp").unwrap();
-        // ServiceType::new("roap", "tcp").unwrap();
         let sn = ServiceType::new("does_not_exit", "tcp").unwrap();
-        match get_hostname(sn) {
-            Err(Error::NoHostsFound) => {}
-            _ => assert!(false),
-        }
+        assert!(matches!(get_hostname(sn), Err(Error::NoHostsFound)));
     }
 
     // #[test]

@@ -62,3 +62,78 @@ pub fn parse(str: &str) -> Option<State> {
     parsehelper!(trimmed, State::source_input(), parse_source_input);
     None
 }
+
+#[cfg(test)]
+mod test {
+    use super::parse;
+    use crate::parse::{PowerState, SourceInputState, State};
+
+    #[test]
+    fn parse_with_unknown_string() {
+        assert_eq!(None, parse(""));
+        assert_eq!(None, parse("blub"));
+    }
+
+    #[test]
+    #[should_panic]
+    fn max_volume_without_value_panics() {
+        parse("MVMAX");
+    }
+
+    #[test]
+    fn max_volume() {
+        assert!(matches!(parse("MVMAX0"), Some(State::MaxVolume(0))));
+        assert!(matches!(parse("MVMAX23"), Some(State::MaxVolume(230))));
+        assert!(matches!(parse("MVMAX99"), Some(State::MaxVolume(990))));
+        assert!(matches!(parse("MVMAX100"), Some(State::MaxVolume(100))));
+        assert!(matches!(parse("MVMAX230"), Some(State::MaxVolume(230))));
+        assert!(matches!(parse("MVMAX999"), Some(State::MaxVolume(999))));
+        assert!(matches!(parse("MVMAX 999"), Some(State::MaxVolume(999))));
+    }
+
+    #[test]
+    #[should_panic]
+    fn main_voule_without_value_panics() {
+        parse("MV");
+    }
+
+    #[test]
+    fn main_voule() {
+        assert!(matches!(parse("MV 0"), Some(State::MainVolume(0))));
+        assert!(matches!(parse("MV 23"), Some(State::MainVolume(230))));
+        assert!(matches!(parse("MV 99"), Some(State::MainVolume(990))));
+        assert!(matches!(parse("MV 100"), Some(State::MainVolume(100))));
+        assert!(matches!(parse("MV 230"), Some(State::MainVolume(230))));
+        assert!(matches!(parse("MV 999"), Some(State::MainVolume(999))));
+        assert!(matches!(parse("MV999"), Some(State::MainVolume(999))));
+    }
+
+    #[test]
+    fn power() {
+        assert!(matches!(
+            parse("PW"),
+            Some(State::Power(PowerState::Standby))
+        ));
+        assert!(matches!(
+            parse("PWOFF"),
+            Some(State::Power(PowerState::Standby))
+        ));
+        assert!(matches!(parse("PWON"), Some(State::Power(PowerState::On))));
+    }
+
+    #[test]
+    fn source_input() {
+        assert!(matches!(
+            parse("SI"),
+            Some(State::SourceInput(SourceInputState::Unknown))
+        ));
+        assert!(matches!(
+            parse("SIblub"),
+            Some(State::SourceInput(SourceInputState::Unknown))
+        ));
+        assert!(matches!(
+            parse("SITV"),
+            Some(State::SourceInput(SourceInputState::Tv))
+        ));
+    }
+}
