@@ -130,7 +130,7 @@ impl std::convert::From<std::num::ParseIntError> for Error {
 }
 
 fn main2(args: getopts::Matches, denon_name: String, denon_port: u16) -> Result<(), Error> {
-    let dc = DenonConnection::new(denon_name.as_str(), denon_port);
+    let dc = DenonConnection::new(denon_name, denon_port);
 
     if args.opt_present("s") {
         print_status(&dc)?;

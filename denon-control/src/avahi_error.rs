@@ -27,3 +27,28 @@ impl From<zeroconf::error::Error> for Error {
         Error::Zeroconf(error)
     }
 }
+
+#[cfg(test)]
+mod test {
+    use crate::avahi_error::Error;
+    use std::io;
+
+    #[test]
+    fn format() {
+        assert_eq!("NoHostsFound", format!("{}", Error::NoHostsFound));
+    }
+
+    #[test]
+    fn from_io_error() {
+        let eio = io::Error::new(io::ErrorKind::Other, "");
+        let e = Error::from(eio);
+        assert!(matches!(e, Error::IO(_)));
+    }
+
+    #[test]
+    fn from_zeroconf_error() {
+        let ezc = zeroconf::error::Error::new(String::from(""));
+        let e = Error::from(ezc);
+        assert!(matches!(e, Error::Zeroconf(_)));
+    }
+}

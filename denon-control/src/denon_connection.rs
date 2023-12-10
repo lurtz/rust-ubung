@@ -43,6 +43,8 @@ fn thread_func_impl(
 ) -> Result<(), std::io::Error> {
     stream.set_read_timeout(Some(Duration::from_secs(1)))?;
 
+    // https://docs.rs/polling/latest/polling/
+    // maybe use poll() instead of this
     loop {
         if let Ok((request, value)) = requests.try_recv() {
             if Operation::Stop == request {
@@ -113,7 +115,7 @@ fn thread_func(
                 break;
             }
             Err(_) => {
-                thread::sleep(Duration::from_millis(500));
+                thread::sleep(Duration::from_millis(10));
             }
         }
     }
@@ -125,13 +127,12 @@ pub struct DenonConnection {
 }
 
 impl DenonConnection {
-    pub fn new(denon_name: &str, denon_port: u16) -> DenonConnection {
-        let denon_string = String::from(denon_name);
+    pub fn new(denon_name: String, denon_port: u16) -> DenonConnection {
         let state = Arc::new(Mutex::new(HashSet::new()));
         let cloned_state = state.clone();
         let (tx, rx) = channel();
         let _ = thread::spawn(move || {
-            thread_func(denon_string, denon_port, cloned_state, rx);
+            thread_func(denon_name, denon_port, cloned_state, rx);
         });
         DenonConnection {
             state,
@@ -150,7 +151,7 @@ impl DenonConnection {
         }
         self.query(op.clone(), Operation::Query)?;
         for _ in 0..50 {
-            thread::sleep(Duration::from_millis(100));
+            thread::sleep(Duration::from_millis(10));
             let locked_state = self.state.lock().unwrap();
             if let Some(state) = locked_state.get(&op) {
                 return Ok(state.clone());
@@ -179,7 +180,70 @@ impl DenonConnection {
 impl Drop for DenonConnection {
     fn drop(&mut self) {
         while Ok(()) == self.stop() {
-            thread::sleep(Duration::from_millis(100));
+            thread::sleep(Duration::from_millis(10));
         }
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::DenonConnection;
+    use crate::denon_connection::{read, write};
+    use crate::operation::Operation;
+    use crate::state::State;
+    use std::io;
+    use std::net::{TcpListener, TcpStream};
+    use std::sync::mpsc::SendError;
+
+    fn create_connected_connection() -> Result<(DenonConnection, TcpStream), io::Error> {
+        let listen_socket = TcpListener::bind("127.0.0.1:0")?;
+        let addr = listen_socket.local_addr()?;
+        let dc = DenonConnection::new(addr.ip().to_string(), addr.port());
+        let (to_denon_client, _) = listen_socket.accept()?;
+        Ok((dc, to_denon_client))
+    }
+
+    #[test]
+    fn get_receiver_may_return() {
+        let dc = DenonConnection::new(String::from("value"), 0);
+        let rc = dc.get(State::main_volume());
+        let x: Result<State, SendError<(Operation, State)>> = Ok(State::Unknown);
+        assert_eq!(rc, x);
+    }
+
+    #[test]
+    fn connection_sends_volume_to_receiver() -> Result<(), io::Error> {
+        let (dc, mut to_denon_client) = create_connected_connection()?;
+        dc.set(State::MainVolume(666)).unwrap();
+        let received = read(&mut to_denon_client, 1)?;
+        assert_eq!("MV666", received[0]);
+        Ok(())
+    }
+
+    #[test]
+    fn connection_receives_volume_from_receiver() -> Result<(), io::Error> {
+        let (dc, mut to_denon_client) = create_connected_connection()?;
+        write(&mut to_denon_client, "MV234".to_string())?;
+        assert_eq!(
+            State::MainVolume(234),
+            dc.get(State::MainVolume(666)).unwrap()
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn connection_keeps_first_after_second_receive() -> Result<(), io::Error> {
+        let (dc, mut to_denon_client) = create_connected_connection()?;
+        write(&mut to_denon_client, "MV234".to_string())?;
+        assert_eq!(
+            State::MainVolume(234),
+            dc.get(State::MainVolume(666)).unwrap()
+        );
+        write(&mut to_denon_client, "MV320".to_string())?;
+        assert_eq!(
+            State::MainVolume(234),
+            dc.get(State::MainVolume(666)).unwrap()
+        );
+        Ok(())
     }
 }
