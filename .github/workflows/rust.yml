@@ -17,7 +17,7 @@ jobs:
     - name: Install cargo-llvm-cov
       uses: taiki-e/install-action@cargo-llvm-cov
     - name: Install avahi headers and utils
-      run: sudo apt-get update && sudo apt-get install libavahi-client-dev avahi-daemon avahi-utils
+      run: sudo apt-get update && sudo apt-get install libavahi-client-dev avahi-daemon avahi-utils pulseaudio-utils
     - uses: r7kamura/rust-problem-matchers@v1
     - name: Build, run tests and collect coverage
       run: cargo llvm-cov --lcov --output-path ${{github.workspace}}/lcov.info
