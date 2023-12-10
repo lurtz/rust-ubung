@@ -54,3 +54,13 @@ pub fn switch_ouput(target_output: &str) {
     let indexes = get_sink_inputs();
     move_output_to_default_sink(&indexes);
 }
+
+#[cfg(test)]
+mod test {
+    use super::get_sink_inputs;
+
+    #[test]
+    fn get_sink_inputs_does_not_crash() {
+        let _input = get_sink_inputs();
+    }
+}
