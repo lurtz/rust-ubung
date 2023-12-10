@@ -26,7 +26,7 @@ use std::fmt;
 // the status object can be shared or the communication thread can be asked about a
 // status which queries the receiver if it is not set
 
-fn parse_args() -> getopts::Matches {
+fn parse_args(args: Vec<String>) -> getopts::Matches {
     let mut ops = Options::new();
     ops.optopt("a", "address", "Address of Denon AVR", "HOSTNAME");
     ops.optopt("p", "power", "Power ON, STANDBY or OFF", "POWER_MODE");
@@ -42,7 +42,6 @@ fn parse_args() -> getopts::Matches {
     ops.optflag("s", "status", "print status of receiver");
     ops.optflag("h", "help", "print help");
 
-    let args: Vec<String> = env::args().collect();
     let arguments = match ops.parse(&args[1..]) {
         Ok(m) => m,
         Err(f) => {
@@ -53,7 +52,8 @@ fn parse_args() -> getopts::Matches {
     if arguments.opt_present("h") {
         let brief = format!("Usage: {} [options]", args[0]);
         print!("{}", ops.usage(&brief));
-        std::process::exit(0);
+        let exit_success: i32 = 0;
+        std::process::exit(exit_success);
     }
 
     arguments
@@ -181,7 +181,7 @@ fn main2(args: getopts::Matches, denon_name: String, denon_port: u16) -> Result<
 }
 
 fn main() {
-    let args = parse_args();
+    let args = parse_args(env::args().collect());
     let (denon_name, denon_port) = get_receiver_and_port(&args);
     if denon_name.is_empty() {
         std::process::exit(1);
@@ -189,5 +189,58 @@ fn main() {
     match main2(args, denon_name, denon_port) {
         Ok(_) => println!("success"),
         Err(e) => println!("got error: {:?}", e),
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use crate::parse_args;
+
+    #[test]
+    #[should_panic]
+    fn parse_args_parnics_with_empty_vec() {
+        parse_args(vec![]);
+    }
+
+    #[test]
+    #[should_panic]
+    fn parse_args_parnics_with_unknown_option() {
+        let string_args = vec!["blub", "-w"];
+        parse_args(string_args.into_iter().map(|a| a.to_string()).collect());
+    }
+
+    #[test]
+    fn parse_args_works_with_empty_strings() {
+        parse_args(vec!["".to_string()]);
+        parse_args(vec!["blub".to_string()]);
+    }
+
+    #[test]
+    fn parse_args_short_options() {
+        let string_args = vec![
+            "blub",
+            "-a",
+            "some_host",
+            "-p",
+            "OFF",
+            "-v",
+            "20",
+            "-i",
+            "DVD",
+            "-e",
+            "-l",
+            "-r",
+            "-s",
+        ];
+        let args = parse_args(string_args.into_iter().map(|a| a.to_string()).collect());
+        assert!(matches!(args.opt_str("a"), Some(x) if x == "some_host"));
+        assert!(matches!(args.opt_str("p"), Some(x) if x == "OFF"));
+        assert!(matches!(args.opt_str("v"), Some(x) if x == "20"));
+        assert!(matches!(args.opt_get::<u32>("v"), Ok(Some(x)) if x == 20));
+        assert!(matches!(args.opt_str("i"), Some(x) if x == "DVD"));
+        assert!(args.opt_present("e"));
+        assert!(args.opt_present("l"));
+        assert!(args.opt_present("r"));
+        assert!(args.opt_present("s"));
     }
 }

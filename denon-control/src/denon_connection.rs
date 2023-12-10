@@ -204,11 +204,22 @@ mod test {
     }
 
     #[test]
-    fn get_receiver_may_return() {
+    fn fails_to_connect_and_returns_unknown() {
         let dc = DenonConnection::new(String::from("value"), 0);
         let rc = dc.get(State::main_volume());
         let x: Result<State, SendError<(Operation, State)>> = Ok(State::Unknown);
         assert_eq!(rc, x);
+    }
+
+    #[test]
+    fn connection_gets_no_reply_and_returns_unknown() -> Result<(), io::Error> {
+        let (dc, mut to_denon_client) = create_connected_connection()?;
+        let rc = dc.get(State::main_volume());
+        let query = read(&mut to_denon_client, 1)?;
+        let x: Result<State, SendError<(Operation, State)>> = Ok(State::Unknown);
+        assert_eq!(rc, x);
+        assert_eq!(query, vec!["MV?"]);
+        Ok(())
     }
 
     #[test]
