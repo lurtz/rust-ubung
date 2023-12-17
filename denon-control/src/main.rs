@@ -93,8 +93,8 @@ fn get_receiver_and_port(
 
 #[derive(Debug)]
 enum Error {
-    SendError(std::sync::mpsc::SendError<(Operation, State)>),
-    ParseIntError(std::num::ParseIntError),
+    Send(std::sync::mpsc::SendError<(Operation, State)>),
+    ParseInt(std::num::ParseIntError),
     Avahi(avahi_error::Error),
 }
 
@@ -114,13 +114,13 @@ impl std::convert::From<std::sync::mpsc::SendError<(operation::Operation, state:
     for Error
 {
     fn from(send_error: std::sync::mpsc::SendError<(operation::Operation, state::State)>) -> Self {
-        Error::SendError(send_error)
+        Error::Send(send_error)
     }
 }
 
 impl std::convert::From<std::num::ParseIntError> for Error {
     fn from(parse_error: std::num::ParseIntError) -> Self {
-        Error::ParseIntError(parse_error)
+        Error::ParseInt(parse_error)
     }
 }
 
