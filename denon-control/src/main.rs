@@ -82,28 +82,20 @@ fn get_avahi_impl(args: &getopts::Matches) -> fn() -> Result<String, avahi_error
 fn get_receiver_and_port(
     args: &getopts::Matches,
     get_rec: fn() -> Result<String, avahi_error::Error>,
-) -> (String, u16) {
-    let denon_name;
-    if let Some(name) = args.opt_str("a") {
-        denon_name = name;
-    } else {
-        let denon_name_option = get_rec();
-        match denon_name_option {
-            Ok(name) => denon_name = name,
-            Err(_) => {
-                denon_name = String::new();
-                println!("no receiver found, consider using the -a option");
-            }
-        }
-    }
+) -> Result<(String, u16), avahi_error::Error> {
+    let denon_name = match args.opt_str("a") {
+        Some(name) => name,
+        None => get_rec()?,
+    };
     println!("using receiver: {}", denon_name);
-    (denon_name, 23)
+    Ok((denon_name, 23))
 }
 
 #[derive(Debug)]
 enum Error {
     SendError(std::sync::mpsc::SendError<(Operation, State)>),
     ParseIntError(std::num::ParseIntError),
+    Avahi(avahi_error::Error),
 }
 
 impl fmt::Display for Error {
@@ -129,6 +121,12 @@ impl std::convert::From<std::sync::mpsc::SendError<(operation::Operation, state:
 impl std::convert::From<std::num::ParseIntError> for Error {
     fn from(parse_error: std::num::ParseIntError) -> Self {
         Error::ParseIntError(parse_error)
+    }
+}
+
+impl std::convert::From<avahi_error::Error> for Error {
+    fn from(avahi_error: avahi_error::Error) -> Self {
+        Error::Avahi(avahi_error)
     }
 }
 
@@ -183,16 +181,11 @@ fn main2(args: getopts::Matches, denon_name: String, denon_port: u16) -> Result<
     Ok(())
 }
 
-fn main() {
+fn main() -> Result<(), Error> {
     let args = parse_args(env::args().collect());
-    let (denon_name, denon_port) = get_receiver_and_port(&args, get_avahi_impl(&args));
-    if denon_name.is_empty() {
-        std::process::exit(1);
-    }
-    match main2(args, denon_name, denon_port) {
-        Ok(_) => println!("success"),
-        Err(e) => println!("got error: {:?}", e),
-    }
+    let (denon_name, denon_port) = get_receiver_and_port(&args, get_avahi_impl(&args))?;
+    main2(args, denon_name, denon_port)?;
+    Ok(())
 }
 
 #[cfg(test)]
@@ -202,6 +195,7 @@ mod test {
     use crate::avahi_error;
     use crate::get_avahi_impl;
     use crate::get_receiver_and_port;
+    use crate::Error;
     use crate::PowerState;
     use crate::SourceInputState;
     use crate::{
@@ -329,35 +323,37 @@ mod test {
     }
 
     #[test]
-    fn get_receiver_and_port_using_avahi_test() {
+    fn get_receiver_and_port_using_avahi_test() -> Result<(), Error> {
         let string_args = vec!["blub"];
         let args = parse_args(string_args.into_iter().map(|a| a.to_string()).collect());
         let receiver_address = String::from("some_receiver");
         assert_eq!(
             (receiver_address, 23),
-            get_receiver_and_port(&args, || Ok(String::from("some_receiver")))
+            get_receiver_and_port(&args, || Ok(String::from("some_receiver")))?
         );
+        Ok(())
     }
 
     #[test]
-    fn get_receiver_and_port_using_avahi_fails_test() {
+    fn get_receiver_and_port_using_avahi_fails_test() -> Result<(), Error> {
         let string_args = vec!["blub"];
         let args = parse_args(string_args.into_iter().map(|a| a.to_string()).collect());
-        let receiver_address = String::from("");
-        assert_eq!(
-            (receiver_address, 23),
-            get_receiver_and_port(&args, || Err(avahi_error::Error::NoHostsFound))
-        );
+        assert!(matches!(
+            get_receiver_and_port(&args, || Err(avahi_error::Error::NoHostsFound)),
+            Err(avahi_error::Error::NoHostsFound)
+        ));
+        Ok(())
     }
 
     #[test]
-    fn get_receiver_and_port_using_args_test() {
+    fn get_receiver_and_port_using_args_test() -> Result<(), Error> {
         let string_args = vec!["blub", "-a", "blub_receiver"];
         let args = parse_args(string_args.into_iter().map(|a| a.to_string()).collect());
         let receiver_address = String::from("blub_receiver");
         assert_eq!(
             (receiver_address, 23),
-            get_receiver_and_port(&args, || Ok(String::from("some_receiver")))
+            get_receiver_and_port(&args, || Ok(String::from("some_receiver")))?
         );
+        Ok(())
     }
 }
