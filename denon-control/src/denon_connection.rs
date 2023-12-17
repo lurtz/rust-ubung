@@ -17,7 +17,7 @@ fn write(stream: &mut dyn Write, input: String) -> Result<(), std::io::Error> {
     Ok(())
 }
 
-fn read(stream: &mut dyn Read, lines: u8) -> Result<Vec<String>, std::io::Error> {
+pub fn read(stream: &mut dyn Read, lines: u8) -> Result<Vec<String>, std::io::Error> {
     let mut string = String::new();
 
     for _ in 0..lines {

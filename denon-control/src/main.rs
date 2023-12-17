@@ -193,8 +193,10 @@ mod test {
     use crate::avahi;
     use crate::avahi3;
     use crate::avahi_error;
+    use crate::denon_connection::read;
     use crate::get_avahi_impl;
     use crate::get_receiver_and_port;
+    use crate::main2;
     use crate::Error;
     use crate::PowerState;
     use crate::SourceInputState;
@@ -202,6 +204,8 @@ mod test {
         denon_connection::test::create_connected_connection, parse::State, parse_args, print_status,
     };
     use std::io::{self, Write};
+    use std::net::TcpListener;
+    use std::thread;
 
     fn write(stream: &mut dyn Write, input: State) -> Result<(), std::io::Error> {
         // println!("sending: {}", input);
@@ -353,6 +357,48 @@ mod test {
         assert_eq!(
             (receiver_address, 23),
             get_receiver_and_port(&args, || Ok(String::from("some_receiver")))?
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn main2_test() -> Result<(), io::Error> {
+        let listen_socket = TcpListener::bind("127.0.0.1:0")?;
+        let local_port = listen_socket.local_addr()?.port();
+        let string_args = vec![
+            "blub",
+            "-a",
+            "localhost",
+            "-s",
+            "-p",
+            "OFF",
+            "-i",
+            "CD",
+            "-v",
+            "127",
+        ];
+        let args = parse_args(string_args.into_iter().map(|a| a.to_string()).collect());
+
+        let acceptor = thread::spawn(move || -> Result<Vec<String>, io::Error> {
+            let mut to_receiver = listen_socket.accept()?.0;
+
+            write(&mut to_receiver, State::Power(PowerState::On))?;
+            write(&mut to_receiver, State::SourceInput(SourceInputState::Cd))?;
+            write(&mut to_receiver, State::MainVolume(230))?;
+            write(&mut to_receiver, State::MaxVolume(666))?;
+            read(&mut to_receiver, 3)
+        });
+
+        main2(args, String::from("localhost"), local_port).unwrap();
+
+        let received_data = acceptor.join().unwrap()?;
+        assert_eq!(
+            vec![
+                format!("{}?", State::Power(PowerState::On).value()),
+                State::SourceInput(SourceInputState::Cd).to_string(),
+                State::MainVolume(50).to_string()
+            ],
+            received_data
         );
         Ok(())
     }
