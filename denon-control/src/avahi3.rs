@@ -58,7 +58,7 @@ fn on_service_discovered(
 }
 
 pub fn get_receiver() -> Result<String, Error> {
-    get_hostname(ServiceType::new("roap", "tcp").unwrap())
+    get_hostname(ServiceType::new("raop", "tcp").unwrap())
 }
 
 #[cfg(test)]
@@ -86,7 +86,7 @@ mod test {
     // fn found_service() {
     //     println!("test start");
     //     // ServiceType::new("http", "tcp").unwrap();
-    //     // ServiceType::new("roap", "tcp").unwrap();
+    //     // ServiceType::new("raop", "tcp").unwrap();
     //     println!(
     //         "{:?}",
     //         get_hostname(ServiceType::new("googlecast", "tcp").unwrap())
