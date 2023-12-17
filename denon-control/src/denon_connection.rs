@@ -17,7 +17,7 @@ fn write(stream: &mut dyn Write, input: String) -> Result<(), std::io::Error> {
     Ok(())
 }
 
-fn read(stream: &mut dyn Read, lines: u8) -> Result<Vec<String>, std::io::Error> {
+pub fn read(stream: &mut dyn Read, lines: u8) -> Result<Vec<String>, std::io::Error> {
     let mut string = String::new();
 
     for _ in 0..lines {
@@ -186,7 +186,7 @@ impl Drop for DenonConnection {
 }
 
 #[cfg(test)]
-mod test {
+pub mod test {
     use super::DenonConnection;
     use crate::denon_connection::{read, write};
     use crate::operation::Operation;
@@ -195,7 +195,7 @@ mod test {
     use std::net::{TcpListener, TcpStream};
     use std::sync::mpsc::SendError;
 
-    fn create_connected_connection() -> Result<(DenonConnection, TcpStream), io::Error> {
+    pub fn create_connected_connection() -> Result<(DenonConnection, TcpStream), io::Error> {
         let listen_socket = TcpListener::bind("127.0.0.1:0")?;
         let addr = listen_socket.local_addr()?;
         let dc = DenonConnection::new(addr.ip().to_string(), addr.port());
@@ -204,11 +204,22 @@ mod test {
     }
 
     #[test]
-    fn get_receiver_may_return() {
+    fn fails_to_connect_and_returns_unknown() {
         let dc = DenonConnection::new(String::from("value"), 0);
         let rc = dc.get(State::main_volume());
         let x: Result<State, SendError<(Operation, State)>> = Ok(State::Unknown);
         assert_eq!(rc, x);
+    }
+
+    #[test]
+    fn connection_gets_no_reply_and_returns_unknown() -> Result<(), io::Error> {
+        let (dc, mut to_denon_client) = create_connected_connection()?;
+        let rc = dc.get(State::main_volume());
+        let query = read(&mut to_denon_client, 1)?;
+        let x: Result<State, SendError<(Operation, State)>> = Ok(State::Unknown);
+        assert_eq!(rc, x);
+        assert_eq!(query, vec!["MV?"]);
+        Ok(())
     }
 
     #[test]
