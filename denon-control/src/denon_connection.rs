@@ -186,7 +186,7 @@ impl Drop for DenonConnection {
 }
 
 #[cfg(test)]
-mod test {
+pub mod test {
     use super::DenonConnection;
     use crate::denon_connection::{read, write};
     use crate::operation::Operation;
@@ -195,7 +195,7 @@ mod test {
     use std::net::{TcpListener, TcpStream};
     use std::sync::mpsc::SendError;
 
-    fn create_connected_connection() -> Result<(DenonConnection, TcpStream), io::Error> {
+    pub fn create_connected_connection() -> Result<(DenonConnection, TcpStream), io::Error> {
         let listen_socket = TcpListener::bind("127.0.0.1:0")?;
         let addr = listen_socket.local_addr()?;
         let dc = DenonConnection::new(addr.ip().to_string(), addr.port());

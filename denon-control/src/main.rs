@@ -61,13 +61,14 @@ fn parse_args(args: Vec<String>) -> getopts::Matches {
 
 fn print_status(
     dc: &DenonConnection,
-) -> Result<(), std::sync::mpsc::SendError<(Operation, State)>> {
-    println!("Current status of receiver:");
-    println!("\t{:?}", dc.get(State::power())?);
-    println!("\t{:?}", dc.get(State::source_input())?);
-    println!("\t{:?}", dc.get(State::main_volume())?);
-    println!("\t{:?}", dc.get(State::max_volume())?);
-    Ok(())
+) -> Result<String, std::sync::mpsc::SendError<(Operation, State)>> {
+    Ok(format!(
+        "Current status of receiver:\n\t{:?}\n\t{:?}\n\t{:?}\n\t{:?}\n",
+        dc.get(State::power())?,
+        dc.get(State::source_input())?,
+        dc.get(State::main_volume())?,
+        dc.get(State::max_volume())?
+    ))
 }
 
 fn get_avahi_impl(args: &getopts::Matches) -> fn() -> Result<String, avahi_error::Error> {
@@ -133,7 +134,7 @@ fn main2(args: getopts::Matches, denon_name: String, denon_port: u16) -> Result<
     let dc = DenonConnection::new(denon_name, denon_port);
 
     if args.opt_present("s") {
-        print_status(&dc)?;
+        println!("{}", print_status(&dc)?);
     }
 
     if args.opt_present("l") {
@@ -194,7 +195,19 @@ fn main() {
 
 #[cfg(test)]
 mod test {
-    use crate::parse_args;
+    use crate::PowerState;
+    use crate::SourceInputState;
+    use crate::{
+        denon_connection::test::create_connected_connection, parse::State, parse_args, print_status,
+    };
+    use std::io::{self, Write};
+
+    fn write(stream: &mut dyn Write, input: State) -> Result<(), std::io::Error> {
+        // println!("sending: {}", input);
+        let volume_command = format!("{}\r\n", input).into_bytes();
+        stream.write_all(&volume_command[..])?;
+        Ok(())
+    }
 
     #[test]
     #[should_panic]
@@ -242,5 +255,47 @@ mod test {
         assert!(args.opt_present("l"));
         assert!(args.opt_present("r"));
         assert!(args.opt_present("s"));
+    }
+
+    #[test]
+    fn parse_args_long_options() {
+        let string_args = vec![
+            "blub",
+            "--address",
+            "some_host",
+            "--power",
+            "OFF",
+            "--volume",
+            "20",
+            "--input",
+            "DVD",
+            "--extern-avahi",
+            "--laptop",
+            "--receiver",
+            "--status",
+        ];
+        let args = parse_args(string_args.into_iter().map(|a| a.to_string()).collect());
+        assert!(matches!(args.opt_str("a"), Some(x) if x == "some_host"));
+        assert!(matches!(args.opt_str("p"), Some(x) if x == "OFF"));
+        assert!(matches!(args.opt_str("v"), Some(x) if x == "20"));
+        assert!(matches!(args.opt_get::<u32>("v"), Ok(Some(x)) if x == 20));
+        assert!(matches!(args.opt_str("i"), Some(x) if x == "DVD"));
+        assert!(args.opt_present("e"));
+        assert!(args.opt_present("l"));
+        assert!(args.opt_present("r"));
+        assert!(args.opt_present("s"));
+    }
+
+    #[test]
+    fn print_status_test() -> Result<(), io::Error> {
+        let (dc, mut to_receiver) = create_connected_connection()?;
+        write(&mut to_receiver, State::Power(PowerState::On))?;
+        write(&mut to_receiver, State::SourceInput(SourceInputState::Cd))?;
+        write(&mut to_receiver, State::MainVolume(230))?;
+        write(&mut to_receiver, State::MaxVolume(666))?;
+
+        let expected = "Current status of receiver:\n\tPower(On)\n\tSourceInput(Cd)\n\tMainVolume(230)\n\tMaxVolume(666)\n";
+        assert_eq!(expected, print_status(&dc).unwrap());
+        Ok(())
     }
 }
