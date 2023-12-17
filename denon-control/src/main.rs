@@ -79,12 +79,14 @@ fn get_avahi_impl(args: &getopts::Matches) -> fn() -> Result<String, avahi_error
     }
 }
 
-fn get_receiver_and_port(args: &getopts::Matches) -> (String, u16) {
+fn get_receiver_and_port(
+    args: &getopts::Matches,
+    get_rec: fn() -> Result<String, avahi_error::Error>,
+) -> (String, u16) {
     let denon_name;
     if let Some(name) = args.opt_str("a") {
         denon_name = name;
     } else {
-        let get_rec = get_avahi_impl(args);
         let denon_name_option = get_rec();
         match denon_name_option {
             Ok(name) => denon_name = name,
@@ -183,7 +185,7 @@ fn main2(args: getopts::Matches, denon_name: String, denon_port: u16) -> Result<
 
 fn main() {
     let args = parse_args(env::args().collect());
-    let (denon_name, denon_port) = get_receiver_and_port(&args);
+    let (denon_name, denon_port) = get_receiver_and_port(&args, get_avahi_impl(&args));
     if denon_name.is_empty() {
         std::process::exit(1);
     }
@@ -195,6 +197,11 @@ fn main() {
 
 #[cfg(test)]
 mod test {
+    use crate::avahi;
+    use crate::avahi3;
+    use crate::avahi_error;
+    use crate::get_avahi_impl;
+    use crate::get_receiver_and_port;
     use crate::PowerState;
     use crate::SourceInputState;
     use crate::{
@@ -297,5 +304,60 @@ mod test {
         let expected = "Current status of receiver:\n\tPower(On)\n\tSourceInput(Cd)\n\tMainVolume(230)\n\tMaxVolume(666)\n";
         assert_eq!(expected, print_status(&dc).unwrap());
         Ok(())
+    }
+
+    #[test]
+    fn get_avahi_impl_extern_test() {
+        let string_args = vec!["blub", "--extern-avahi"];
+        let args = parse_args(string_args.into_iter().map(|a| a.to_string()).collect());
+
+        assert_eq!(
+            avahi::get_receiver as fn() -> Result<String, crate::avahi_error::Error>,
+            get_avahi_impl(&args)
+        );
+    }
+
+    #[test]
+    fn get_avahi_impl_intern_test() {
+        let string_args = vec!["blub"];
+        let args = parse_args(string_args.into_iter().map(|a| a.to_string()).collect());
+
+        assert_eq!(
+            avahi3::get_receiver as fn() -> Result<String, crate::avahi_error::Error>,
+            get_avahi_impl(&args)
+        );
+    }
+
+    #[test]
+    fn get_receiver_and_port_using_avahi_test() {
+        let string_args = vec!["blub"];
+        let args = parse_args(string_args.into_iter().map(|a| a.to_string()).collect());
+        let receiver_address = String::from("some_receiver");
+        assert_eq!(
+            (receiver_address, 23),
+            get_receiver_and_port(&args, || Ok(String::from("some_receiver")))
+        );
+    }
+
+    #[test]
+    fn get_receiver_and_port_using_avahi_fails_test() {
+        let string_args = vec!["blub"];
+        let args = parse_args(string_args.into_iter().map(|a| a.to_string()).collect());
+        let receiver_address = String::from("");
+        assert_eq!(
+            (receiver_address, 23),
+            get_receiver_and_port(&args, || Err(avahi_error::Error::NoHostsFound))
+        );
+    }
+
+    #[test]
+    fn get_receiver_and_port_using_args_test() {
+        let string_args = vec!["blub", "-a", "blub_receiver"];
+        let args = parse_args(string_args.into_iter().map(|a| a.to_string()).collect());
+        let receiver_address = String::from("blub_receiver");
+        assert_eq!(
+            (receiver_address, 23),
+            get_receiver_and_port(&args, || Ok(String::from("some_receiver")))
+        );
     }
 }
