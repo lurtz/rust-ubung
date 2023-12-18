@@ -3,7 +3,7 @@ pub use crate::parse::{Operation, State};
 
 use std::collections::HashSet;
 use std::error::Error;
-use std::io::{Read, Write};
+use std::io::{self, Read, Write};
 use std::net::TcpStream;
 use std::sync::mpsc::{channel, Receiver, Sender};
 use std::sync::{Arc, Mutex};
@@ -100,24 +100,13 @@ fn print_io_error(e: &std::io::Error) {
 }
 
 fn thread_func(
-    denon_name: String,
-    denon_port: u16,
+    s: TcpStream,
     state: Arc<Mutex<HashSet<State>>>,
     requests: Receiver<(Operation, State)>,
 ) {
-    for _ in 0..10 {
-        match TcpStream::connect((denon_name.as_str(), denon_port)) {
-            Ok(s) => {
-                match thread_func_impl(s, state, &requests) {
-                    Ok(_) => println!("thread success"),
-                    Err(e) => print_io_error(&e),
-                }
-                break;
-            }
-            Err(_) => {
-                thread::sleep(Duration::from_millis(10));
-            }
-        }
+    match thread_func_impl(s, state, &requests) {
+        Ok(_) => println!("thread success"),
+        Err(e) => print_io_error(&e),
     }
 }
 
@@ -127,17 +116,19 @@ pub struct DenonConnection {
 }
 
 impl DenonConnection {
-    pub fn new(denon_name: String, denon_port: u16) -> DenonConnection {
+    pub fn new(denon_name: String, denon_port: u16) -> Result<DenonConnection, io::Error> {
         let state = Arc::new(Mutex::new(HashSet::new()));
         let cloned_state = state.clone();
         let (tx, rx) = channel();
+        let s = TcpStream::connect((denon_name.as_str(), denon_port))?;
         let _ = thread::spawn(move || {
-            thread_func(denon_name, denon_port, cloned_state, rx);
+            thread_func(s, cloned_state, rx);
         });
-        DenonConnection {
+
+        Ok(DenonConnection {
             state,
             requests: tx,
-        }
+        })
     }
 
     pub fn get(&self, op: State) -> Result<State, std::sync::mpsc::SendError<(Operation, State)>> {
@@ -198,7 +189,7 @@ pub mod test {
     pub fn create_connected_connection() -> Result<(DenonConnection, TcpStream), io::Error> {
         let listen_socket = TcpListener::bind("127.0.0.1:0")?;
         let addr = listen_socket.local_addr()?;
-        let dc = DenonConnection::new(addr.ip().to_string(), addr.port());
+        let dc = DenonConnection::new(addr.ip().to_string(), addr.port())?;
         let (to_denon_client, _) = listen_socket.accept()?;
         Ok((dc, to_denon_client))
     }
@@ -206,9 +197,7 @@ pub mod test {
     #[test]
     fn fails_to_connect_and_returns_unknown() {
         let dc = DenonConnection::new(String::from("value"), 0);
-        let rc = dc.get(State::main_volume());
-        let x: Result<State, SendError<(Operation, State)>> = Ok(State::Unknown);
-        assert_eq!(rc, x);
+        assert!(matches!(dc, Err(_)));
     }
 
     #[test]

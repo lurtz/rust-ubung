@@ -96,6 +96,7 @@ enum Error {
     Send(std::sync::mpsc::SendError<(Operation, State)>),
     ParseInt(std::num::ParseIntError),
     Avahi(avahi_error::Error),
+    IO(std::io::Error),
 }
 
 impl fmt::Display for Error {
@@ -130,8 +131,14 @@ impl std::convert::From<avahi_error::Error> for Error {
     }
 }
 
+impl std::convert::From<std::io::Error> for Error {
+    fn from(io_error: std::io::Error) -> Self {
+        Error::IO(io_error)
+    }
+}
+
 fn main2(args: getopts::Matches, denon_name: String, denon_port: u16) -> Result<(), Error> {
-    let dc = DenonConnection::new(denon_name, denon_port);
+    let dc = DenonConnection::new(denon_name, denon_port)?;
 
     if args.opt_present("s") {
         println!("{}", print_status(&dc)?);
