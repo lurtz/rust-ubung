@@ -125,10 +125,10 @@ impl DenonConnection {
             thread_func(s, cloned_state, rx);
         });
 
-        return Ok(DenonConnection {
+        Ok(DenonConnection {
             state,
             requests: tx,
-        });
+        })
     }
 
     pub fn get(&self, op: State) -> Result<State, std::sync::mpsc::SendError<(Operation, State)>> {
