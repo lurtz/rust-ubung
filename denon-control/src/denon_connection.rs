@@ -5,9 +5,10 @@ use std::collections::HashSet;
 use std::error::Error;
 use std::io::{self, Read, Write};
 use std::net::TcpStream;
+use std::panic;
 use std::sync::mpsc::{channel, Receiver, Sender};
 use std::sync::{Arc, Mutex};
-use std::thread;
+use std::thread::{self, JoinHandle};
 use std::time::Duration;
 
 fn write(stream: &mut dyn Write, input: String) -> Result<(), std::io::Error> {
@@ -99,20 +100,10 @@ fn print_io_error(e: &std::io::Error) {
     }
 }
 
-fn thread_func(
-    s: TcpStream,
-    state: Arc<Mutex<HashSet<State>>>,
-    requests: Receiver<(Operation, State)>,
-) {
-    match thread_func_impl(s, state, &requests) {
-        Ok(_) => println!("thread success"),
-        Err(e) => print_io_error(&e),
-    }
-}
-
 pub struct DenonConnection {
     state: Arc<Mutex<HashSet<State>>>,
     requests: Sender<(Operation, State)>,
+    thread_handle: Option<JoinHandle<Result<(), io::Error>>>,
 }
 
 impl DenonConnection {
@@ -121,13 +112,12 @@ impl DenonConnection {
         let cloned_state = state.clone();
         let (tx, rx) = channel();
         let s = TcpStream::connect((denon_name.as_str(), denon_port))?;
-        let _ = thread::spawn(move || {
-            thread_func(s, cloned_state, rx);
-        });
+        let threadhandle = thread::spawn(move || thread_func_impl(s, cloned_state, &rx));
 
         Ok(DenonConnection {
             state,
             requests: tx,
+            thread_handle: Some(threadhandle),
         })
     }
 
@@ -170,8 +160,19 @@ impl DenonConnection {
 
 impl Drop for DenonConnection {
     fn drop(&mut self) {
-        while Ok(()) == self.stop() {
-            thread::sleep(Duration::from_millis(10));
+        let _ = self.stop();
+        let thread_result = self
+            .thread_handle
+            .take()
+            .expect("Non running thread is a bug")
+            .join();
+        match thread_result {
+            Ok(result) => {
+                if let Err(e) = result {
+                    print_io_error(&e)
+                }
+            }
+            Err(e) => panic::resume_unwind(e),
         }
     }
 }
