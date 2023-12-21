@@ -2,7 +2,6 @@ use crate::parse::parse;
 pub use crate::parse::{Operation, State};
 
 use std::collections::HashSet;
-use std::error::Error;
 use std::io::{self, Read, Write};
 use std::net::TcpStream;
 use std::panic;
@@ -84,22 +83,6 @@ fn parse_response(response: &[String]) -> Vec<State> {
     return response.iter().filter_map(|x| parse(x.as_str())).collect();
 }
 
-fn print_io_error(e: &std::io::Error) {
-    println!(
-        "got error: {}, source = {:?}, description = {}, kind = {:?}",
-        e,
-        e.source(),
-        e,
-        e.kind()
-    );
-    if let Some(raw_os_error) = e.raw_os_error() {
-        println!("raw_os_error = {}", raw_os_error);
-    }
-    if let Some(inner) = e.get_ref() {
-        println!("inner = {}", inner);
-    }
-}
-
 pub struct DenonConnection {
     state: Arc<Mutex<HashSet<State>>>,
     requests: Sender<(Operation, State)>,
@@ -169,7 +152,7 @@ impl Drop for DenonConnection {
         match thread_result {
             Ok(result) => {
                 if let Err(e) = result {
-                    print_io_error(&e)
+                    println!("got error: {}", e)
                 }
             }
             Err(e) => panic::resume_unwind(e),
