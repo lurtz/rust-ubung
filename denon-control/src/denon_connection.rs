@@ -2,7 +2,6 @@ use crate::parse::parse;
 pub use crate::parse::{Operation, State};
 
 use std::collections::HashSet;
-use std::error::Error;
 use std::io::{self, Read, Write};
 use std::net::TcpStream;
 use std::panic;
@@ -84,22 +83,6 @@ fn parse_response(response: &[String]) -> Vec<State> {
     return response.iter().filter_map(|x| parse(x.as_str())).collect();
 }
 
-fn print_io_error(e: &std::io::Error) {
-    println!(
-        "got error: {}, source = {:?}, description = {}, kind = {:?}",
-        e,
-        e.source(),
-        e,
-        e.kind()
-    );
-    if let Some(raw_os_error) = e.raw_os_error() {
-        println!("raw_os_error = {}", raw_os_error);
-    }
-    if let Some(inner) = e.get_ref() {
-        println!("inner = {}", inner);
-    }
-}
-
 pub struct DenonConnection {
     state: Arc<Mutex<HashSet<State>>>,
     requests: Sender<(Operation, State)>,
@@ -169,7 +152,7 @@ impl Drop for DenonConnection {
         match thread_result {
             Ok(result) => {
                 if let Err(e) = result {
-                    print_io_error(&e)
+                    println!("got error: {}", e)
                 }
             }
             Err(e) => panic::resume_unwind(e),
@@ -187,12 +170,12 @@ pub mod test {
     use std::net::{TcpListener, TcpStream};
     use std::sync::mpsc::SendError;
 
-    pub fn create_connected_connection() -> Result<(DenonConnection, TcpStream), io::Error> {
+    pub fn create_connected_connection() -> Result<(TcpStream, DenonConnection), io::Error> {
         let listen_socket = TcpListener::bind("127.0.0.1:0")?;
         let addr = listen_socket.local_addr()?;
         let dc = DenonConnection::new(addr.ip().to_string(), addr.port())?;
         let (to_denon_client, _) = listen_socket.accept()?;
-        Ok((dc, to_denon_client))
+        Ok((to_denon_client, dc))
     }
 
     #[test]
@@ -203,7 +186,7 @@ pub mod test {
 
     #[test]
     fn connection_gets_no_reply_and_returns_unknown() -> Result<(), io::Error> {
-        let (dc, mut to_denon_client) = create_connected_connection()?;
+        let (mut to_denon_client, dc) = create_connected_connection()?;
         let rc = dc.get(State::main_volume());
         let query = read(&mut to_denon_client, 1)?;
         let x: Result<State, SendError<(Operation, State)>> = Ok(State::Unknown);
@@ -214,7 +197,7 @@ pub mod test {
 
     #[test]
     fn connection_sends_volume_to_receiver() -> Result<(), io::Error> {
-        let (dc, mut to_denon_client) = create_connected_connection()?;
+        let (mut to_denon_client, dc) = create_connected_connection()?;
         dc.set(State::MainVolume(666)).unwrap();
         let received = read(&mut to_denon_client, 1)?;
         assert_eq!("MV666", received[0]);
@@ -223,7 +206,7 @@ pub mod test {
 
     #[test]
     fn connection_receives_volume_from_receiver() -> Result<(), io::Error> {
-        let (dc, mut to_denon_client) = create_connected_connection()?;
+        let (mut to_denon_client, dc) = create_connected_connection()?;
         write(&mut to_denon_client, "MV234".to_string())?;
         assert_eq!(
             State::MainVolume(234),
@@ -234,7 +217,7 @@ pub mod test {
 
     #[test]
     fn connection_keeps_first_after_second_receive() -> Result<(), io::Error> {
-        let (dc, mut to_denon_client) = create_connected_connection()?;
+        let (mut to_denon_client, dc) = create_connected_connection()?;
         write(&mut to_denon_client, "MV234".to_string())?;
         assert_eq!(
             State::MainVolume(234),

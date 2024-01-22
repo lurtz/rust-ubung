@@ -300,7 +300,7 @@ mod test {
 
     #[test]
     fn print_status_test() -> Result<(), io::Error> {
-        let (dc, mut to_receiver) = create_connected_connection()?;
+        let (mut to_receiver, dc) = create_connected_connection()?;
         write(&mut to_receiver, State::Power(PowerState::On))?;
         write(&mut to_receiver, State::SourceInput(SourceInputState::Cd))?;
         write(&mut to_receiver, State::MainVolume(230))?;
