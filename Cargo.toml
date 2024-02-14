@@ -16,6 +16,3 @@ members = [
         "matrix",
         "romans"
 ]
-
-[replace]
-"avahi-sys:0.10.0" = { git = 'https://github.com/maxjoehnk/avahi-sys.git', branch = 'update-bindgen-0.64' }
