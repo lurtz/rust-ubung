@@ -7,32 +7,64 @@ use std::net::TcpStream;
 use std::panic;
 use std::sync::mpsc::{channel, Receiver, Sender};
 use std::sync::{Arc, Mutex};
-use std::thread::{self, JoinHandle};
+use std::thread::{self, sleep, JoinHandle};
 use std::time::Duration;
 
 fn write(stream: &mut dyn Write, input: String) -> Result<(), std::io::Error> {
-    //    println!("sending: {}", input);
     let volume_command = input.into_bytes();
     stream.write_all(&volume_command[..])?;
     Ok(())
 }
 
-pub fn read(stream: &mut dyn Read, lines: u8) -> Result<Vec<String>, std::io::Error> {
+pub fn read(stream: &mut TcpStream, lines: u8) -> Result<Vec<String>, std::io::Error> {
     let mut string = String::new();
+    let mut read_lines = 0u8;
+    let mut slept = false;
+    let read_timeout = stream.read_timeout()?;
 
-    for _ in 0..lines {
+    // guarantee to read a full line. check that read content ends with \r
+    while lines != read_lines {
         let mut buffer = [0; 100];
-        let read_bytes = stream.read(&mut buffer)?;
-        if let Ok(tmp) = std::str::from_utf8(&buffer[0..read_bytes]) {
+        let read_bytes = stream.peek(&mut buffer)?;
+
+        // no data to read. stream is supposed to block for 1s in this case, but does not
+        if 0 == read_bytes && (string.is_empty() || string.ends_with('\r')) {
+            if slept {
+                break;
+            }
+            slept = true;
+            sleep(read_timeout.unwrap_or(Duration::from_millis(1)));
+            continue;
+        }
+
+        slept = false;
+
+        // search for first \r in buffer
+        let first_cariage_return = buffer[0..read_bytes]
+            .iter()
+            .position(|&c| '\r' == (c as char));
+
+        if let Some(_) = first_cariage_return {
+            read_lines += 1;
+        }
+
+        let bytes_to_extract = first_cariage_return
+            // include cariage return in read_exact()
+            .and_then(|x| Some(x + 1))
+            .unwrap_or(read_bytes);
+
+        if let Ok(tmp) = std::str::from_utf8(&buffer[0..bytes_to_extract]) {
             string += tmp;
         }
+
+        stream.read_exact(&mut buffer[0..bytes_to_extract])?;
     }
 
+    // remove last \r from string
     string.pop();
 
     let string_iter = string.split('\r').map(String::from);
     let result = string_iter.collect();
-    //    println!("{:?}", result);
     Ok(result)
 }
 
@@ -41,10 +73,13 @@ fn thread_func_impl(
     state: Arc<Mutex<HashSet<State>>>,
     requests: &Receiver<(Operation, State)>,
 ) -> Result<(), std::io::Error> {
-    stream.set_read_timeout(Some(Duration::from_secs(1)))?;
+    let read_timeout = Some(Duration::from_millis(100));
+    stream.set_read_timeout(read_timeout)?;
+    stream.set_nonblocking(false)?;
+    assert_eq!(read_timeout, stream.read_timeout().unwrap());
 
     // https://docs.rs/polling/latest/polling/
-    // maybe use poll() instead of this
+    // maybe use poll() instead of this, will require to use something else than mpsc
     loop {
         if let Ok((request, value)) = requests.try_recv() {
             if Operation::Stop == request {
@@ -60,7 +95,6 @@ fn thread_func_impl(
 
         match read(&mut stream, 1) {
             Ok(status_update) => {
-                //                println!("received update {:?}", status_update);
                 let parsed_response = parse_response(&status_update);
                 let mut locked_state = state.lock().unwrap();
                 for item in parsed_response {
@@ -152,6 +186,7 @@ impl Drop for DenonConnection {
         match thread_result {
             Ok(result) => {
                 if let Err(e) = result {
+                    // TODO only one test should trigger this
                     println!("got error: {}", e)
                 }
             }
@@ -207,7 +242,7 @@ pub mod test {
     #[test]
     fn connection_receives_volume_from_receiver() -> Result<(), io::Error> {
         let (mut to_denon_client, dc) = create_connected_connection()?;
-        write(&mut to_denon_client, "MV234".to_string())?;
+        write(&mut to_denon_client, "MV234\r".to_string())?;
         assert_eq!(
             State::MainVolume(234),
             dc.get(State::MainVolume(666)).unwrap()
@@ -218,16 +253,29 @@ pub mod test {
     #[test]
     fn connection_keeps_first_after_second_receive() -> Result<(), io::Error> {
         let (mut to_denon_client, dc) = create_connected_connection()?;
-        write(&mut to_denon_client, "MV234".to_string())?;
+        write(&mut to_denon_client, "MV234\r".to_string())?;
         assert_eq!(
             State::MainVolume(234),
             dc.get(State::MainVolume(666)).unwrap()
         );
-        write(&mut to_denon_client, "MV320".to_string())?;
+        write(&mut to_denon_client, "MV320\r".to_string())?;
         assert_eq!(
             State::MainVolume(234),
             dc.get(State::MainVolume(666)).unwrap()
         );
+        Ok(())
+    }
+
+    #[test]
+    fn destroying_socket_before_connection_prints_warning() -> Result<(), io::Error> {
+        let (to_denon_client, dc) = create_connected_connection()?;
+        {
+            let _denon_client_destroy_socket = to_denon_client;
+        }
+        {
+            let _dc_destroy = dc;
+        }
+        // TODO test still does not work, should print error
         Ok(())
     }
 }

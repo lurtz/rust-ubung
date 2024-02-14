@@ -71,7 +71,13 @@ mod test {
     #[test]
     fn get_receiver_may_return() {
         match get_receiver() {
-            Ok(address) => assert!(TcpStream::connect((address, 23)).is_ok()),
+            // TODO test sometimes gets address but fails to connect, why?
+            // - one reason: not all computers with roap mDNS service have telnet (port 23) running
+            Ok(address) => {
+                let stream = TcpStream::connect((address.clone(), 23));
+                println!("address == {}, stream == {:?}", address, stream);
+                assert!(matches!(stream, Ok(_)))
+            }
             Err(e) => assert!(matches!(e, Error::NoHostsFound)),
         }
     }
