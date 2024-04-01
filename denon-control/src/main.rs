@@ -92,6 +92,7 @@ fn get_receiver_and_port(
 }
 
 #[derive(Debug)]
+#[allow(dead_code)] // Fields will be used when an error is printed
 enum Error {
     Send(std::sync::mpsc::SendError<(Operation, State)>),
     ParseInt(std::num::ParseIntError),
