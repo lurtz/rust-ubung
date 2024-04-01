@@ -44,13 +44,13 @@ pub fn read(stream: &mut TcpStream, lines: u8) -> Result<Vec<String>, std::io::E
             .iter()
             .position(|&c| '\r' == (c as char));
 
-        if let Some(_) = first_cariage_return {
+        if first_cariage_return.is_some() {
             read_lines += 1;
         }
 
         let bytes_to_extract = first_cariage_return
             // include cariage return in read_exact()
-            .and_then(|x| Some(x + 1))
+            .map(|x| x + 1)
             .unwrap_or(read_bytes);
 
         if let Ok(tmp) = std::str::from_utf8(&buffer[0..bytes_to_extract]) {
