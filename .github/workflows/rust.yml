@@ -11,9 +11,11 @@ env:
 
 jobs:
   build:
+    permissions:
+      pull-requests: write
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v2
+    - uses: actions/checkout@v4
     - name: Install cargo-llvm-cov
       uses: taiki-e/install-action@cargo-llvm-cov
     - name: Install avahi headers and utils
@@ -28,18 +30,17 @@ jobs:
         github-token: ${{ secrets.GITHUB_TOKEN }}
         lcov-file: ${{github.workspace}}/lcov.info
 
-
   check-formatting:
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v2
+    - uses: actions/checkout@v4
     - name: Check formatting
       run: cargo fmt --check
 
   check-static-code-analysis:
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v2
+    - uses: actions/checkout@v4
     - name: Install avahi headers
       run: sudo apt-get update && sudo apt-get install libavahi-client-dev avahi-daemon
     - uses: r7kamura/rust-problem-matchers@v1
