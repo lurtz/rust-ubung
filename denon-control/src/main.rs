@@ -216,7 +216,6 @@ mod test {
     use std::thread;
 
     fn write(stream: &mut dyn Write, input: State) -> Result<(), std::io::Error> {
-        // println!("sending: {}", input);
         let volume_command = format!("{}\r\n", input).into_bytes();
         stream.write_all(&volume_command[..])?;
         Ok(())

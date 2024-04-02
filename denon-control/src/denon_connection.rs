@@ -200,6 +200,8 @@ pub mod test {
     use super::DenonConnection;
     use crate::denon_connection::{read, write};
     use crate::operation::Operation;
+    use crate::parse::PowerState;
+    use crate::parse::SourceInputState;
     use crate::state::State;
     use std::io;
     use std::net::{TcpListener, TcpStream};
@@ -247,6 +249,22 @@ pub mod test {
             State::MainVolume(234),
             dc.get(State::MainVolume(666)).unwrap()
         );
+        Ok(())
+    }
+
+    #[test]
+    fn connection_receives_multiple_values_volume_from_receiver() -> Result<(), io::Error> {
+        let (mut to_denon_client, dc) = create_connected_connection()?;
+        assert_eq!(Ok(State::Unknown), dc.get(State::main_volume()));
+        assert_eq!(Ok(State::Unknown), dc.get(State::source_input()));
+        assert_eq!(Ok(State::Unknown), dc.get(State::power()));
+        write(&mut to_denon_client, "MV234\rSICD\rPWON\r".to_string())?;
+        assert_eq!(Ok(State::MainVolume(234)), dc.get(State::main_volume()));
+        assert_eq!(
+            Ok(State::SourceInput(SourceInputState::Cd)),
+            dc.get(State::source_input())
+        );
+        assert_eq!(Ok(State::Power(PowerState::On)), dc.get(State::power()));
         Ok(())
     }
 
