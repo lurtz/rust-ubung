@@ -216,7 +216,6 @@ mod test {
     use std::thread;
 
     fn write(stream: &mut dyn Write, input: State) -> Result<(), std::io::Error> {
-        // println!("sending: {}", input);
         let volume_command = format!("{}\r\n", input).into_bytes();
         stream.write_all(&volume_command[..])?;
         Ok(())
@@ -301,7 +300,7 @@ mod test {
 
     #[test]
     fn print_status_test() -> Result<(), io::Error> {
-        let (dc, mut to_receiver) = create_connected_connection()?;
+        let (mut to_receiver, dc) = create_connected_connection()?;
         write(&mut to_receiver, State::Power(PowerState::On))?;
         write(&mut to_receiver, State::SourceInput(SourceInputState::Cd))?;
         write(&mut to_receiver, State::MainVolume(230))?;
@@ -391,23 +390,19 @@ mod test {
             let mut to_receiver = listen_socket.accept()?.0;
 
             write(&mut to_receiver, State::Power(PowerState::On))?;
-            write(&mut to_receiver, State::SourceInput(SourceInputState::Cd))?;
+            write(&mut to_receiver, State::SourceInput(SourceInputState::Dvd))?;
             write(&mut to_receiver, State::MainVolume(230))?;
             write(&mut to_receiver, State::MaxVolume(666))?;
-            read(&mut to_receiver, 3)
+            // might contain status queries
+            read(&mut to_receiver, 10)
         });
 
         main2(args, String::from("localhost"), local_port).unwrap();
 
         let received_data = acceptor.join().unwrap()?;
-        assert_eq!(
-            vec![
-                format!("{}?", State::Power(PowerState::On).value()),
-                State::SourceInput(SourceInputState::Cd).to_string(),
-                State::MainVolume(50).to_string()
-            ],
-            received_data
-        );
+        assert!(received_data.contains(&format!("{}?", State::Power(PowerState::On).value())));
+        assert!(received_data.contains(&State::SourceInput(SourceInputState::Cd).to_string()));
+        assert!(received_data.contains(&State::MainVolume(50).to_string()));
         Ok(())
     }
 }

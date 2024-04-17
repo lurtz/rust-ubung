@@ -57,7 +57,11 @@ pub enum SourceInputState {
 impl Display for SourceInputState {
     fn fmt(&self, format: &mut Formatter) -> Result<(), Error> {
         let mut buffer = String::new();
-        write!(&mut buffer, "{:?}", self)?;
+        match *self {
+            SourceInputState::Netusb => write!(&mut buffer, "NET/USB")?,
+            SourceInputState::Usbipod => write!(&mut buffer, "USB/IPOD")?,
+            _ => write!(&mut buffer, "{:?}", self)?,
+        }
         write!(format, "{}", buffer.to_ascii_uppercase())
     }
 }
