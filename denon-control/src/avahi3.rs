@@ -3,14 +3,15 @@ use std::any::Any;
 use std::sync::{Arc, Mutex, PoisonError};
 use std::time::{Duration, Instant};
 use zeroconf::prelude::{TEventLoop, TMdnsBrowser};
+use zeroconf::txt_record::TTxtRecord;
 use zeroconf::{MdnsBrowser, ServiceDiscovery, ServiceType};
 
 #[derive(Default, Debug)]
 pub struct Context {
-    hostname: Option<String>,
+    service_discovery: Option<ServiceDiscovery>,
 }
 
-fn get_hostname(service_type: ServiceType) -> Result<String, Error> {
+fn get_hostname(service_type: ServiceType) -> Result<ServiceDiscovery, Error> {
     let context: Arc<Mutex<Context>> = Arc::default();
     let mut browser = MdnsBrowser::new(service_type);
     browser.set_service_discovered_callback(Box::new(on_service_discovered));
@@ -22,7 +23,7 @@ fn get_hostname(service_type: ServiceType) -> Result<String, Error> {
 
     while context
         .lock()
-        .and_then(|res| match res.hostname {
+        .and_then(|res| match res.service_discovery {
             Some(_) => Ok(()),
             _ => Err(PoisonError::new(res)),
         })
@@ -35,7 +36,7 @@ fn get_hostname(service_type: ServiceType) -> Result<String, Error> {
         }
     }
 
-    let result = match &context.lock().unwrap().hostname {
+    let result = match &context.lock().unwrap().service_discovery {
         Some(x) => Ok(x.clone()),
         None => Err(Error::NoHostsFound),
     };
@@ -50,7 +51,7 @@ fn on_service_discovered(
         if let Some(ctx) = context {
             if let Some(m) = ctx.downcast_ref::<Arc<Mutex<Context>>>() {
                 if let Ok(mut ctx) = m.lock() {
-                    ctx.hostname = Some(sd.host_name().clone());
+                    ctx.service_discovery = Some(sd);
                 }
             }
         }
@@ -58,7 +59,15 @@ fn on_service_discovered(
 }
 
 pub fn get_receiver() -> Result<String, Error> {
-    get_hostname(ServiceType::new("raop", "tcp").unwrap())
+    let sd = get_hostname(ServiceType::new("raop", "tcp").unwrap())?;
+    if let Some(txt) = sd.txt() {
+        for (_type, value) in txt.iter() {
+            if value.contains("DENON") {
+                return Ok(sd.host_name().clone());
+            }
+        }
+    }
+    Err(Error::NoHostsFound)
 }
 
 #[cfg(test)]
@@ -74,9 +83,26 @@ mod test {
             // TODO test sometimes gets address but fails to connect, why?
             // - one reason: not all computers with raop mDNS service have telnet (port 23) running
             Ok(address) => {
-                // is 7000 raop standard port? verify at home
-                let stream = TcpStream::connect((address.clone(), 7000));
+                let stream = TcpStream::connect((address.clone(), 23));
                 println!("address == {}, stream == {:?}", address, stream);
+                assert!(matches!(stream, Ok(_)))
+            }
+            Err(e) => assert!(matches!(e, Error::NoHostsFound)),
+        }
+    }
+
+    #[test]
+    fn get_hostname_returns() {
+        let sn = ServiceType::new("raop", "tcp").unwrap();
+        match get_hostname(sn) {
+            Ok(address) => {
+                let stream = TcpStream::connect((address.host_name().clone(), *address.port()));
+                println!(
+                    "address == {}, port == {}, stream == {:?}",
+                    address.host_name(),
+                    address.port(),
+                    stream
+                );
                 assert!(matches!(stream, Ok(_)))
             }
             Err(e) => assert!(matches!(e, Error::NoHostsFound)),
@@ -88,15 +114,4 @@ mod test {
         let sn = ServiceType::new("does_not_exit", "tcp").unwrap();
         assert!(matches!(get_hostname(sn), Err(Error::NoHostsFound)));
     }
-
-    // #[test]
-    // fn found_service() {
-    //     println!("test start");
-    //     // ServiceType::new("http", "tcp").unwrap();
-    //     // ServiceType::new("raop", "tcp").unwrap();
-    //     println!(
-    //         "{:?}",
-    //         get_hostname(ServiceType::new("googlecast", "tcp").unwrap())
-    //     );
-    // }
 }
