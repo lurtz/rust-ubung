@@ -7,7 +7,7 @@ use zeroconf::txt_record::TTxtRecord;
 use zeroconf::{MdnsBrowser, ServiceDiscovery, ServiceType};
 
 #[derive(Default, Debug)]
-pub struct Context {
+struct Context {
     service_discovery: Option<ServiceDiscovery>,
 }
 
@@ -58,8 +58,12 @@ fn on_service_discovered(
     }
 }
 
+fn get_roap_service_type() -> ServiceType {
+    ServiceType::new("raop", "tcp").unwrap()
+}
+
 pub fn get_receiver() -> Result<String, Error> {
-    let sd = get_hostname(ServiceType::new("raop", "tcp").unwrap())?;
+    let sd = get_hostname(get_roap_service_type())?;
     if let Some(txt) = sd.txt() {
         for (_type, value) in txt.iter() {
             if value.contains("DENON") {
@@ -72,7 +76,7 @@ pub fn get_receiver() -> Result<String, Error> {
 
 #[cfg(test)]
 mod test {
-    use super::get_receiver;
+    use super::{get_receiver, get_roap_service_type};
     use crate::{avahi3::get_hostname, avahi_error::Error};
     use std::net::TcpStream;
     use zeroconf::ServiceType;
@@ -93,8 +97,7 @@ mod test {
 
     #[test]
     fn get_hostname_returns() {
-        let sn = ServiceType::new("raop", "tcp").unwrap();
-        match get_hostname(sn) {
+        match get_hostname(get_roap_service_type()) {
             Ok(address) => {
                 let stream = TcpStream::connect((address.host_name().clone(), *address.port()));
                 println!(
