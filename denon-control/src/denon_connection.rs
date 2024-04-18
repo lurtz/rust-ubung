@@ -10,7 +10,6 @@ use std::panic;
 use std::pin::pin;
 use std::sync::mpsc::{channel, Receiver, Sender};
 use std::sync::{Arc, Mutex};
-use std::task::Context;
 use std::task::Poll;
 use std::thread::{self, sleep, JoinHandle};
 use std::time::Duration;
@@ -30,8 +29,11 @@ pub fn read(mut stream: &TcpStream, lines: u8) -> Result<Vec<String>, std::io::E
     // guarantee to read a full line. check that read content ends with \r
     while lines != read_lines {
         let mut buffer = [0; 100];
+        println!("peek");
         let read_bytes = stream.peek(&mut buffer)?;
+        println!("peek - done");
 
+        // actually peek() returns error after timeout if there is no data, TODO check who needs this
         // no data to read. stream is supposed to block for 1s in this case, but does not
         if 0 == read_bytes && (string.is_empty() || string.ends_with('\r')) {
             if slept {
@@ -62,7 +64,9 @@ pub fn read(mut stream: &TcpStream, lines: u8) -> Result<Vec<String>, std::io::E
             string += tmp;
         }
 
+        println!("read_exact");
         stream.read_exact(&mut buffer[0..bytes_to_extract])?;
+        println!("read_exact - done");
     }
 
     // remove last \r from string
@@ -97,53 +101,30 @@ enum AsyncResult {
     StatusUpdate(Result<Vec<String>, std::io::Error>),
 }
 
-struct StatusUpdateFuture<'a> {
-    stream: &'a mut TcpStream,
-}
-
-impl<'a> StatusUpdateFuture<'a> {
-    fn new(stream: &'a mut TcpStream) -> Self {
-        Self { stream }
-    }
-}
-
-impl<'a> Future for StatusUpdateFuture<'a> {
-    type Output = AsyncResult;
-
-    fn poll(self: std::pin::Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Self::Output> {
-        match read(&mut self.get_mut().stream, 1) {
-            Ok(status_update) => {
-                if status_update.is_empty() {
-                    return Poll::Pending;
-                } else {
-                    return Poll::Ready(AsyncResult::StatusUpdate(Ok(status_update)));
-                }
+fn status_update(stream: &mut TcpStream) -> Poll<AsyncResult> {
+    match read(stream, 1) {
+        Ok(status_update) => {
+            if status_update.is_empty() {
+                return Poll::Pending;
+            } else {
+                return Poll::Ready(AsyncResult::StatusUpdate(Ok(status_update)));
             }
-            Err(err) => {
-                return Poll::Ready(AsyncResult::StatusUpdate(Err(err)));
-            }
+        }
+        Err(err) => {
+            // this is not really correct. This function will now almost always return Poll::Ready.
+            // Thus the main thread will be kept spinning even though there is no data. A proper
+            // implementation would go to sleep if there is no data and be woken up once data
+            // arrives.
+            // status_update() should return Poll::Pending() if err.kind() == EWOULDBLOCK or TIMEDOUT
+            return Poll::Ready(AsyncResult::StatusUpdate(Err(err)));
         }
     }
 }
 
-struct UserRequestFuture<'a> {
-    requests: &'a Receiver<(Operation, State)>,
-}
-
-impl<'a> UserRequestFuture<'a> {
-    fn new(requests: &'a Receiver<(Operation, State)>) -> Self {
-        Self { requests }
-    }
-}
-
-impl<'a> Future for UserRequestFuture<'a> {
-    type Output = AsyncResult;
-
-    fn poll(self: std::pin::Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Self::Output> {
-        match self.requests.try_recv() {
-            Ok(result) => Poll::Ready(AsyncResult::UserRequest(result)),
-            Err(_) => Poll::Pending,
-        }
+fn user_request(requests: &Receiver<(Operation, State)>) -> Poll<AsyncResult> {
+    match requests.try_recv() {
+        Ok(result) => Poll::Ready(AsyncResult::UserRequest(result)),
+        Err(_) => Poll::Pending,
     }
 }
 
@@ -152,16 +133,16 @@ fn thread_func_impl(
     state: Arc<Mutex<HashSet<State>>>,
     requests: &Receiver<(Operation, State)>,
 ) -> Result<(), std::io::Error> {
-    // this makes the stream non blocking, for whatever reason
+    // block for the specified timeout
     let read_timeout = Some(Duration::from_millis(100));
     stream.set_read_timeout(read_timeout)?;
     stream.set_nonblocking(false)?;
     assert_eq!(read_timeout, stream.read_timeout().unwrap());
 
     loop {
-        let suf = UserRequestFuture::new(&requests);
-        let urf = StatusUpdateFuture::new(&mut stream);
-        let select_future = naive_select(suf, urf);
+        let get_status_update = poll_fn(|_ctx| status_update(&mut stream));
+        let get_user_request = poll_fn(|_ctx| user_request(requests));
+        let select_future = naive_select(get_user_request, get_status_update);
         match block_on(select_future) {
             AsyncResult::UserRequest((request, value)) => {
                 if Operation::Stop == request {
@@ -174,23 +155,21 @@ fn thread_func_impl(
                 };
                 write(&mut stream, command)?;
             }
-            AsyncResult::StatusUpdate(read_result) => {
-                match read_result {
-                    Ok(status_update) => {
-                        let parsed_response = parse_response(&status_update);
-                        let mut locked_state = state.lock().unwrap();
-                        for item in parsed_response {
-                            locked_state.replace(item);
-                        }
-                    }
-                    // check for timeout error -> continue on timeout error, else abort
-                    Err(e) => {
-                        if ErrorKind::TimedOut != e.kind() && ErrorKind::WouldBlock != e.kind() {
-                            return Err(e);
-                        }
+            AsyncResult::StatusUpdate(read_result) => match read_result {
+                Ok(status_update) => {
+                    let parsed_response = parse_response(&status_update);
+                    let mut locked_state = state.lock().unwrap();
+                    for item in parsed_response {
+                        locked_state.replace(item);
                     }
                 }
-            }
+                // check for timeout error -> continue on timeout error, else abort
+                Err(e) => {
+                    if ErrorKind::TimedOut != e.kind() && ErrorKind::WouldBlock != e.kind() {
+                        return Err(e);
+                    }
+                }
+            },
         }
     }
 }
@@ -311,6 +290,7 @@ pub mod test {
         let x: Result<State, SendError<(Operation, State)>> = Ok(State::Unknown);
         assert_eq!(rc, x);
         assert_eq!(query, vec!["MV?"]);
+        println!("test done");
         Ok(())
     }
 
