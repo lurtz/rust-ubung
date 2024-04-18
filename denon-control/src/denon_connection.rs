@@ -1,12 +1,17 @@
 use crate::parse::parse;
 pub use crate::parse::{Operation, State};
 
+use smol::block_on;
 use std::collections::HashSet;
-use std::io::{self, Read, Write};
+use std::future::{poll_fn, Future};
+use std::io::{self, ErrorKind, Read, Write};
 use std::net::TcpStream;
 use std::panic;
+use std::pin::pin;
 use std::sync::mpsc::{channel, Receiver, Sender};
 use std::sync::{Arc, Mutex};
+use std::task::Context;
+use std::task::Poll;
 use std::thread::{self, sleep, JoinHandle};
 use std::time::Duration;
 
@@ -16,7 +21,7 @@ fn write(stream: &mut dyn Write, input: String) -> Result<(), std::io::Error> {
     Ok(())
 }
 
-pub fn read(stream: &mut TcpStream, lines: u8) -> Result<Vec<String>, std::io::Error> {
+pub fn read(mut stream: &TcpStream, lines: u8) -> Result<Vec<String>, std::io::Error> {
     let mut string = String::new();
     let mut read_lines = 0u8;
     let mut slept = false;
@@ -68,45 +73,122 @@ pub fn read(stream: &mut TcpStream, lines: u8) -> Result<Vec<String>, std::io::E
     Ok(result)
 }
 
+fn naive_select<T>(
+    a: impl Future<Output = T>,
+    b: impl Future<Output = T>,
+) -> impl Future<Output = T> {
+    async {
+        let (mut a, mut b) = (pin!(a), pin!(b));
+        poll_fn(move |cx| {
+            if let Poll::Ready(r) = a.as_mut().poll(cx) {
+                Poll::Ready(r)
+            } else if let Poll::Ready(r) = b.as_mut().poll(cx) {
+                Poll::Ready(r)
+            } else {
+                Poll::Pending
+            }
+        })
+        .await
+    }
+}
+
+enum AsyncResult {
+    UserRequest((Operation, State)),
+    StatusUpdate(Result<Vec<String>, std::io::Error>),
+}
+
+struct StatusUpdateFuture<'a> {
+    stream: &'a mut TcpStream,
+}
+
+impl<'a> StatusUpdateFuture<'a> {
+    fn new(stream: &'a mut TcpStream) -> Self {
+        Self { stream }
+    }
+}
+
+impl<'a> Future for StatusUpdateFuture<'a> {
+    type Output = AsyncResult;
+
+    fn poll(self: std::pin::Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Self::Output> {
+        match read(&mut self.get_mut().stream, 1) {
+            Ok(status_update) => {
+                if status_update.is_empty() {
+                    return Poll::Pending;
+                } else {
+                    return Poll::Ready(AsyncResult::StatusUpdate(Ok(status_update)));
+                }
+            }
+            Err(err) => {
+                return Poll::Ready(AsyncResult::StatusUpdate(Err(err)));
+            }
+        }
+    }
+}
+
+struct UserRequestFuture<'a> {
+    requests: &'a Receiver<(Operation, State)>,
+}
+
+impl<'a> UserRequestFuture<'a> {
+    fn new(requests: &'a Receiver<(Operation, State)>) -> Self {
+        Self { requests }
+    }
+}
+
+impl<'a> Future for UserRequestFuture<'a> {
+    type Output = AsyncResult;
+
+    fn poll(self: std::pin::Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Self::Output> {
+        match self.requests.try_recv() {
+            Ok(result) => Poll::Ready(AsyncResult::UserRequest(result)),
+            Err(_) => Poll::Pending,
+        }
+    }
+}
+
 fn thread_func_impl(
     mut stream: TcpStream,
     state: Arc<Mutex<HashSet<State>>>,
     requests: &Receiver<(Operation, State)>,
 ) -> Result<(), std::io::Error> {
+    // this makes the stream non blocking, for whatever reason
     let read_timeout = Some(Duration::from_millis(100));
     stream.set_read_timeout(read_timeout)?;
     stream.set_nonblocking(false)?;
     assert_eq!(read_timeout, stream.read_timeout().unwrap());
 
-    // https://docs.rs/polling/latest/polling/
-    // maybe use poll() instead of this, will require to use something else than mpsc
     loop {
-        if let Ok((request, value)) = requests.try_recv() {
-            if Operation::Stop == request {
-                return Ok(());
-            }
-            let command = if Operation::Set == request {
-                format!("{}\r", value)
-            } else {
-                format!("{}?\r", value.value())
-            };
-            write(&mut stream, command)?;
-        }
-
-        match read(&mut stream, 1) {
-            Ok(status_update) => {
-                let parsed_response = parse_response(&status_update);
-                let mut locked_state = state.lock().unwrap();
-                for item in parsed_response {
-                    locked_state.replace(item);
+        let suf = UserRequestFuture::new(&requests);
+        let urf = StatusUpdateFuture::new(&mut stream);
+        let select_future = naive_select(suf, urf);
+        match block_on(select_future) {
+            AsyncResult::UserRequest((request, value)) => {
+                if Operation::Stop == request {
+                    return Ok(());
                 }
+                let command = if Operation::Set == request {
+                    format!("{}\r", value)
+                } else {
+                    format!("{}?\r", value.value())
+                };
+                write(&mut stream, command)?;
             }
-            // check for timeout error -> continue on timeout error, else abort
-            Err(e) => {
-                if std::io::ErrorKind::TimedOut != e.kind()
-                    && std::io::ErrorKind::WouldBlock != e.kind()
-                {
-                    return Err(e);
+            AsyncResult::StatusUpdate(read_result) => {
+                match read_result {
+                    Ok(status_update) => {
+                        let parsed_response = parse_response(&status_update);
+                        let mut locked_state = state.lock().unwrap();
+                        for item in parsed_response {
+                            locked_state.replace(item);
+                        }
+                    }
+                    // check for timeout error -> continue on timeout error, else abort
+                    Err(e) => {
+                        if ErrorKind::TimedOut != e.kind() && ErrorKind::WouldBlock != e.kind() {
+                            return Err(e);
+                        }
+                    }
                 }
             }
         }
