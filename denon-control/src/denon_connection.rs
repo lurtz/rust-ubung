@@ -77,23 +77,18 @@ pub fn read(mut stream: &TcpStream, lines: u8) -> Result<Vec<String>, std::io::E
     Ok(result)
 }
 
-fn naive_select<T>(
-    a: impl Future<Output = T>,
-    b: impl Future<Output = T>,
-) -> impl Future<Output = T> {
-    async {
-        let (mut a, mut b) = (pin!(a), pin!(b));
-        poll_fn(move |cx| {
-            if let Poll::Ready(r) = a.as_mut().poll(cx) {
-                Poll::Ready(r)
-            } else if let Poll::Ready(r) = b.as_mut().poll(cx) {
-                Poll::Ready(r)
-            } else {
-                Poll::Pending
-            }
-        })
-        .await
-    }
+async fn naive_select<T>(a: impl Future<Output = T>, b: impl Future<Output = T>) -> T {
+    let (mut a, mut b) = (pin!(a), pin!(b));
+    poll_fn(move |cx| {
+        if let Poll::Ready(r) = a.as_mut().poll(cx) {
+            Poll::Ready(r)
+        } else if let Poll::Ready(r) = b.as_mut().poll(cx) {
+            Poll::Ready(r)
+        } else {
+            Poll::Pending
+        }
+    })
+    .await
 }
 
 enum AsyncResult {
@@ -105,9 +100,9 @@ fn status_update(stream: &mut TcpStream) -> Poll<AsyncResult> {
     match read(stream, 1) {
         Ok(status_update) => {
             if status_update.is_empty() {
-                return Poll::Pending;
+                Poll::Pending
             } else {
-                return Poll::Ready(AsyncResult::StatusUpdate(Ok(status_update)));
+                Poll::Ready(AsyncResult::StatusUpdate(Ok(status_update)))
             }
         }
         Err(err) => {
@@ -116,7 +111,7 @@ fn status_update(stream: &mut TcpStream) -> Poll<AsyncResult> {
             // implementation would go to sleep if there is no data and be woken up once data
             // arrives.
             // status_update() should return Poll::Pending() if err.kind() == EWOULDBLOCK or TIMEDOUT
-            return Poll::Ready(AsyncResult::StatusUpdate(Err(err)));
+            Poll::Ready(AsyncResult::StatusUpdate(Err(err)))
         }
     }
 }
