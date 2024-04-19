@@ -330,4 +330,24 @@ pub mod test {
         // TODO test still does not work, should print error
         Ok(())
     }
+
+    #[test]
+    fn read_without_valid_content_returns_empty_vec() -> Result<(), io::Error> {
+        let listen_socket = TcpListener::bind("127.0.0.1:0")?;
+        let addr = listen_socket.local_addr()?;
+        let mut client = TcpStream::connect(addr)?;
+        let (mut to_client, _) = listen_socket.accept()?;
+
+        // as \r is missing, read() does not read or extract anything
+        write(&mut to_client, "blub".to_string())?;
+        let lines = read(&mut client, 1)?;
+        assert_eq!(lines, Vec::<String>::new());
+
+        // read() reads until \r and leaves other data in the stream
+        write(&mut to_client, "bla\rfoo".to_string())?;
+        let lines = read(&mut client, 2)?;
+        assert_eq!(lines, vec!["blubbla".to_owned()]);
+
+        Ok(())
+    }
 }
