@@ -23,7 +23,6 @@ fn write(stream: &mut dyn Write, input: String) -> Result<(), std::io::Error> {
 pub fn read(mut stream: &TcpStream, lines: u8) -> Result<Vec<String>, std::io::Error> {
     let mut string = String::new();
     let mut read_lines = 0u8;
-    let read_timeout = stream.read_timeout()?;
 
     // guarantee to read a full line. check that read content ends with \r
     while lines != read_lines {
@@ -40,26 +39,21 @@ pub fn read(mut stream: &TcpStream, lines: u8) -> Result<Vec<String>, std::io::E
             }
         }
 
-        // actually peek() returns error after timeout if there is no data and a timeout is configured
-        // otherwise it will return with 0 bytes read, also when the peer has disconnected
-        if 0 == read_bytes {
-            assert!(read_timeout.is_none());
-            break;
-        }
-
         // search for first \r in buffer
         let first_cariage_return = buffer[0..read_bytes]
             .iter()
             .position(|&c| '\r' == (c as char));
 
-        if first_cariage_return.is_some() {
-            read_lines += 1;
+        if first_cariage_return.is_none() {
+            break;
         }
+
+        read_lines += 1;
 
         let bytes_to_extract = first_cariage_return
             // include cariage return in read_exact()
             .map(|x| x + 1)
-            .unwrap_or(read_bytes);
+            .unwrap();
 
         if let Ok(tmp) = std::str::from_utf8(&buffer[0..bytes_to_extract]) {
             string += tmp;
