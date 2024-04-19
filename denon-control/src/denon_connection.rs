@@ -7,7 +7,7 @@ use std::net::TcpStream;
 use std::panic;
 use std::sync::mpsc::{channel, Receiver, Sender};
 use std::sync::{Arc, Mutex};
-use std::thread::{self, sleep, JoinHandle};
+use std::thread::{self, JoinHandle};
 use std::time::Duration;
 
 fn write(stream: &mut dyn Write, input: String) -> Result<(), std::io::Error> {
@@ -16,55 +16,44 @@ fn write(stream: &mut dyn Write, input: String) -> Result<(), std::io::Error> {
     Ok(())
 }
 
-pub fn read(stream: &mut TcpStream, lines: u8) -> Result<Vec<String>, std::io::Error> {
-    let mut string = String::new();
-    let mut read_lines = 0u8;
-    let mut slept = false;
-    let read_timeout = stream.read_timeout()?;
+pub fn read(mut stream: &TcpStream, lines: u8) -> Result<Vec<String>, std::io::Error> {
+    let mut result = Vec::<String>::new();
 
     // guarantee to read a full line. check that read content ends with \r
-    while lines != read_lines {
+    while (lines as usize) != result.len() {
         let mut buffer = [0; 100];
-        let read_bytes = stream.peek(&mut buffer)?;
-
-        // no data to read. stream is supposed to block for 1s in this case, but does not
-        if 0 == read_bytes && (string.is_empty() || string.ends_with('\r')) {
-            if slept {
-                break;
+        let read_bytes;
+        match stream.peek(&mut buffer) {
+            Ok(rb) => read_bytes = rb,
+            Err(e) => {
+                if result.is_empty() {
+                    return Err(e);
+                } else {
+                    break;
+                }
             }
-            slept = true;
-            sleep(read_timeout.unwrap_or(Duration::from_millis(1)));
-            continue;
         }
-
-        slept = false;
 
         // search for first \r in buffer
         let first_cariage_return = buffer[0..read_bytes]
             .iter()
             .position(|&c| '\r' == (c as char));
 
-        if first_cariage_return.is_some() {
-            read_lines += 1;
+        if first_cariage_return.is_none() {
+            break;
         }
 
-        let bytes_to_extract = first_cariage_return
-            // include cariage return in read_exact()
-            .map(|x| x + 1)
-            .unwrap_or(read_bytes);
+        // include cariage return in read_exact()
+        let bytes_to_extract = first_cariage_return.unwrap() + 1;
 
-        if let Ok(tmp) = std::str::from_utf8(&buffer[0..bytes_to_extract]) {
-            string += tmp;
+        // do not add \r to string
+        if let Ok(tmp) = std::str::from_utf8(&buffer[0..first_cariage_return.unwrap()]) {
+            result.push(tmp.trim().to_owned());
         }
 
         stream.read_exact(&mut buffer[0..bytes_to_extract])?;
     }
 
-    // remove last \r from string
-    string.pop();
-
-    let string_iter = string.split('\r').map(String::from);
-    let result = string_iter.collect();
     Ok(result)
 }
 
