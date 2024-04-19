@@ -21,19 +21,18 @@ fn write(stream: &mut dyn Write, input: String) -> Result<(), std::io::Error> {
 }
 
 pub fn read(mut stream: &TcpStream, lines: u8) -> Result<Vec<String>, std::io::Error> {
-    let mut string = String::new();
-    let mut read_lines = 0u8;
+    let mut result = Vec::<String>::new();
     println!("read() - start");
 
     // guarantee to read a full line. check that read content ends with \r
-    while lines != read_lines {
+    while (lines as usize) != result.len() {
         let mut buffer = [0; 100];
         let read_bytes;
         println!("peek() start");
         match stream.peek(&mut buffer) {
             Ok(rb) => read_bytes = rb,
             Err(e) => {
-                if string.is_empty() {
+                if result.is_empty() {
                     return Err(e);
                 } else {
                     break;
@@ -57,26 +56,24 @@ pub fn read(mut stream: &TcpStream, lines: u8) -> Result<Vec<String>, std::io::E
             break;
         }
 
-        read_lines += 1;
+        // include cariage return in read_exact()
+        let bytes_to_extract = first_cariage_return.unwrap() + 1;
 
-        let bytes_to_extract = first_cariage_return
-            // include cariage return in read_exact()
-            .map(|x| x + 1)
-            .unwrap();
-
-        if let Ok(tmp) = std::str::from_utf8(&buffer[0..bytes_to_extract]) {
-            string += tmp;
+        // do not add \r to string
+        if let Ok(tmp) = std::str::from_utf8(&buffer[0..first_cariage_return.unwrap()]) {
+            result.push(tmp.to_owned());
         }
 
         stream.read_exact(&mut buffer[0..bytes_to_extract])?;
     }
 
-    // remove last \r from string
-    string.pop();
+    // add at least one item to be bug compatible with old version
+    if result.is_empty() {
+        result.push(String::new());
+    }
 
-    let string_iter = string.split('\r').map(String::from);
-    let result = string_iter.collect();
-    println!("read() - end");
+    println!("read() - end, result_debug == {:?}", result);
+
     Ok(result)
 }
 
