@@ -82,7 +82,7 @@ fn thread_func_impl(
             write(&mut stream, command)?;
         }
 
-        match read(&mut stream, 1) {
+        match read(&stream, 1) {
             Ok(status_update) => {
                 let parsed_response = parse_response(&status_update);
                 let mut locked_state = state.lock().unwrap();
