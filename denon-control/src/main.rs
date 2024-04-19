@@ -394,12 +394,16 @@ mod test {
             write(&mut to_receiver, State::MainVolume(230))?;
             write(&mut to_receiver, State::MaxVolume(666))?;
             // might contain status queries
-            read(&mut to_receiver, 10)
+            println!("calling read");
+            let x = read(&mut to_receiver, 10);
+            println!("read has returned");
+            x
         });
 
         main2(args, String::from("localhost"), local_port).unwrap();
 
         let received_data = acceptor.join().unwrap()?;
+        println!("acceptor has been joined");
         assert!(received_data.contains(&format!("{}?", State::Power(PowerState::On).value())));
         assert!(received_data.contains(&State::SourceInput(SourceInputState::Cd).to_string()));
         assert!(received_data.contains(&State::MainVolume(50).to_string()));

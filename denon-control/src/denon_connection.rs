@@ -23,11 +23,13 @@ fn write(stream: &mut dyn Write, input: String) -> Result<(), std::io::Error> {
 pub fn read(mut stream: &TcpStream, lines: u8) -> Result<Vec<String>, std::io::Error> {
     let mut string = String::new();
     let mut read_lines = 0u8;
+    println!("read() - start");
 
     // guarantee to read a full line. check that read content ends with \r
     while lines != read_lines {
         let mut buffer = [0; 100];
         let read_bytes;
+        println!("peek() start");
         match stream.peek(&mut buffer) {
             Ok(rb) => read_bytes = rb,
             Err(e) => {
@@ -38,6 +40,13 @@ pub fn read(mut stream: &TcpStream, lines: u8) -> Result<Vec<String>, std::io::E
                 }
             }
         }
+
+        println!(
+            "peek done, read_bytes == {}, buffer == {:?}, result == {:?}",
+            read_bytes,
+            std::str::from_utf8(&buffer[0..read_bytes]),
+            result
+        );
 
         // search for first \r in buffer
         let first_cariage_return = buffer[0..read_bytes]
@@ -67,6 +76,7 @@ pub fn read(mut stream: &TcpStream, lines: u8) -> Result<Vec<String>, std::io::E
 
     let string_iter = string.split('\r').map(String::from);
     let result = string_iter.collect();
+    println!("read() - end");
     Ok(result)
 }
 
