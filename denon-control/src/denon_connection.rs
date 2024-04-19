@@ -61,15 +61,10 @@ pub fn read(mut stream: &TcpStream, lines: u8) -> Result<Vec<String>, std::io::E
 
         // do not add \r to string
         if let Ok(tmp) = std::str::from_utf8(&buffer[0..first_cariage_return.unwrap()]) {
-            result.push(tmp.to_owned());
+            result.push(tmp.trim().to_owned());
         }
 
         stream.read_exact(&mut buffer[0..bytes_to_extract])?;
-    }
-
-    // add at least one item to be bug compatible with old version
-    if result.is_empty() {
-        result.push(String::new());
     }
 
     println!("read() - end, result_debug == {:?}", result);
@@ -97,22 +92,15 @@ enum AsyncResult {
 }
 
 fn status_update(stream: &mut TcpStream) -> Poll<AsyncResult> {
+    // this is not really correct. This function will now always return Poll::Ready.
+    // Thus the main thread will be kept spinning even though there is no data. A proper
+    // implementation would go to sleep if there is no data and be woken up once data
+    // arrives.
+    // status_update() should return Poll::Pending() if err.kind() == EWOULDBLOCK or TIMEDOUT
+    // or no data has been read.
     match read(stream, 1) {
-        Ok(status_update) => {
-            if status_update.is_empty() {
-                Poll::Pending
-            } else {
-                Poll::Ready(AsyncResult::StatusUpdate(Ok(status_update)))
-            }
-        }
-        Err(err) => {
-            // this is not really correct. This function will now almost always return Poll::Ready.
-            // Thus the main thread will be kept spinning even though there is no data. A proper
-            // implementation would go to sleep if there is no data and be woken up once data
-            // arrives.
-            // status_update() should return Poll::Pending() if err.kind() == EWOULDBLOCK or TIMEDOUT
-            Poll::Ready(AsyncResult::StatusUpdate(Err(err)))
-        }
+        Ok(status_update) => Poll::Ready(AsyncResult::StatusUpdate(Ok(status_update))),
+        Err(err) => Poll::Ready(AsyncResult::StatusUpdate(Err(err))),
     }
 }
 
