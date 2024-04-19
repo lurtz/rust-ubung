@@ -11,7 +11,7 @@ use std::pin::pin;
 use std::sync::mpsc::{channel, Receiver, Sender};
 use std::sync::{Arc, Mutex};
 use std::task::Poll;
-use std::thread::{self, sleep, JoinHandle};
+use std::thread::{self, JoinHandle};
 use std::time::Duration;
 
 fn write(stream: &mut dyn Write, input: String) -> Result<(), std::io::Error> {
@@ -23,28 +23,29 @@ fn write(stream: &mut dyn Write, input: String) -> Result<(), std::io::Error> {
 pub fn read(mut stream: &TcpStream, lines: u8) -> Result<Vec<String>, std::io::Error> {
     let mut string = String::new();
     let mut read_lines = 0u8;
-    let mut slept = false;
     let read_timeout = stream.read_timeout()?;
 
     // guarantee to read a full line. check that read content ends with \r
     while lines != read_lines {
         let mut buffer = [0; 100];
-        println!("peek");
-        let read_bytes = stream.peek(&mut buffer)?;
-        println!("peek - done");
-
-        // actually peek() returns error after timeout if there is no data, TODO check who needs this
-        // no data to read. stream is supposed to block for 1s in this case, but does not
-        if 0 == read_bytes && (string.is_empty() || string.ends_with('\r')) {
-            if slept {
-                break;
+        let read_bytes;
+        match stream.peek(&mut buffer) {
+            Ok(rb) => read_bytes = rb,
+            Err(e) => {
+                if string.is_empty() {
+                    return Err(e);
+                } else {
+                    break;
+                }
             }
-            slept = true;
-            sleep(read_timeout.unwrap_or(Duration::from_millis(1)));
-            continue;
         }
 
-        slept = false;
+        // actually peek() returns error after timeout if there is no data and a timeout is configured
+        // otherwise it will return with 0 bytes read, also when the peer has disconnected
+        if 0 == read_bytes {
+            assert!(read_timeout.is_none());
+            break;
+        }
 
         // search for first \r in buffer
         let first_cariage_return = buffer[0..read_bytes]
@@ -64,9 +65,7 @@ pub fn read(mut stream: &TcpStream, lines: u8) -> Result<Vec<String>, std::io::E
             string += tmp;
         }
 
-        println!("read_exact");
         stream.read_exact(&mut buffer[0..bytes_to_extract])?;
-        println!("read_exact - done");
     }
 
     // remove last \r from string
