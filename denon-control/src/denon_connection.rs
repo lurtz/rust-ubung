@@ -112,14 +112,12 @@ impl DenonConnection {
 
         let s = TcpStream::connect((denon_name.as_str(), denon_port))?;
 
-        let read_timeout = Some(Duration::from_millis(10000));
+        let read_timeout = None;
         s.set_read_timeout(read_timeout)?;
         s.set_nonblocking(false)?;
         assert_eq!(read_timeout, s.read_timeout().unwrap());
 
         let s2 = s.try_clone()?;
-
-        assert_eq!(read_timeout, s2.read_timeout().unwrap());
 
         let threadhandle = thread::spawn(move || thread_func_impl(&s2, cloned_state));
 
