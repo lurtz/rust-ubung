@@ -204,18 +204,6 @@ pub mod test {
         Ok((to_denon_client, dc))
     }
 
-    fn cmp(left: Result<State, io::Error>, right: Result<State, io::Error>) -> bool {
-        if left.is_ok() && right.is_ok() {
-            return left.unwrap() == right.unwrap();
-        }
-        if left.is_err() && right.is_err() {
-            let left_error = left.unwrap_err();
-            let right_error = right.unwrap_err();
-            return format!("{}", left_error) == format!("{}", right_error);
-        }
-        false
-    }
-
     #[test]
     fn fails_to_connect_and_returns_unknown() {
         let dc = DenonConnection::new(String::from("value"), 0);
@@ -225,10 +213,9 @@ pub mod test {
     #[test]
     fn connection_gets_no_reply_and_returns_unknown() -> Result<(), io::Error> {
         let (mut to_denon_client, mut dc) = create_connected_connection()?;
-        let rc = dc.get(State::main_volume());
+        let rc = dc.get(State::main_volume())?;
         let query = read(&mut to_denon_client, 1)?;
-        let x: Result<State, io::Error> = Ok(State::Unknown);
-        assert!(cmp(rc, x));
+        assert_eq!(rc, State::Unknown);
         assert_eq!(query, vec!["MV?"]);
         Ok(())
     }
@@ -256,22 +243,16 @@ pub mod test {
     #[test]
     fn connection_receives_multiple_values_volume_from_receiver() -> Result<(), io::Error> {
         let (mut to_denon_client, mut dc) = create_connected_connection()?;
-        assert!(cmp(Ok(State::Unknown), dc.get(State::main_volume())));
-        assert!(cmp(Ok(State::Unknown), dc.get(State::source_input())));
-        assert!(cmp(Ok(State::Unknown), dc.get(State::power())));
+        assert_eq!(State::Unknown, dc.get(State::main_volume())?);
+        assert_eq!(State::Unknown, dc.get(State::source_input())?);
+        assert_eq!(State::Unknown, dc.get(State::power())?);
         write(&mut to_denon_client, "MV234\rSICD\rPWON\r".to_string())?;
-        assert!(cmp(
-            Ok(State::MainVolume(234)),
-            dc.get(State::main_volume())
-        ));
-        assert!(cmp(
-            Ok(State::SourceInput(SourceInputState::Cd)),
-            dc.get(State::source_input())
-        ));
-        assert!(cmp(
-            Ok(State::Power(PowerState::On)),
-            dc.get(State::power())
-        ));
+        assert_eq!(State::MainVolume(234), dc.get(State::main_volume())?);
+        assert_eq!(
+            State::SourceInput(SourceInputState::Cd),
+            dc.get(State::source_input())?
+        );
+        assert_eq!(State::Power(PowerState::On), dc.get(State::power())?);
         Ok(())
     }
 
