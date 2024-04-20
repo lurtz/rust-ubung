@@ -8,7 +8,6 @@ mod avahi_error;
 mod denon_connection;
 mod operation;
 mod parse;
-mod pulseaudio;
 mod state;
 
 use denon_connection::{DenonConnection, Operation, State};
@@ -37,8 +36,6 @@ fn parse_args(args: Vec<String>) -> getopts::Matches {
         "extern-avahi",
         "use avahi-browser to find receiver instead of library",
     );
-    ops.optflag("l", "laptop", "move output to laptop");
-    ops.optflag("r", "receiver", "move output to receiver and set volume");
     ops.optflag("s", "status", "print status of receiver");
     ops.optflag("h", "help", "print help");
 
@@ -145,23 +142,6 @@ fn main2(args: getopts::Matches, denon_name: String, denon_port: u16) -> Result<
         println!("{}", print_status(&dc)?);
     }
 
-    if args.opt_present("l") {
-        pulseaudio::switch_ouput(pulseaudio::INTERNAL);
-    }
-
-    if args.opt_present("r") {
-        if !args.opt_present("p") {
-            dc.set(State::Power(PowerState::On))?;
-        }
-        if !args.opt_present("i") {
-            dc.set(State::SourceInput(SourceInputState::Dvd))?;
-        }
-        if !args.opt_present("v") {
-            dc.set(State::MainVolume(50))?;
-        }
-        pulseaudio::switch_ouput(pulseaudio::CUBIETRUCK);
-    }
-
     if let Some(p) = args.opt_str("p") {
         for power in PowerState::iterator() {
             if power.to_string() == p {
@@ -253,8 +233,6 @@ mod test {
             "-i",
             "DVD",
             "-e",
-            "-l",
-            "-r",
             "-s",
         ];
         let args = parse_args(string_args.into_iter().map(|a| a.to_string()).collect());
@@ -264,8 +242,6 @@ mod test {
         assert!(matches!(args.opt_get::<u32>("v"), Ok(Some(x)) if x == 20));
         assert!(matches!(args.opt_str("i"), Some(x) if x == "DVD"));
         assert!(args.opt_present("e"));
-        assert!(args.opt_present("l"));
-        assert!(args.opt_present("r"));
         assert!(args.opt_present("s"));
     }
 
@@ -282,8 +258,6 @@ mod test {
             "--input",
             "DVD",
             "--extern-avahi",
-            "--laptop",
-            "--receiver",
             "--status",
         ];
         let args = parse_args(string_args.into_iter().map(|a| a.to_string()).collect());
@@ -293,8 +267,6 @@ mod test {
         assert!(matches!(args.opt_get::<u32>("v"), Ok(Some(x)) if x == 20));
         assert!(matches!(args.opt_str("i"), Some(x) if x == "DVD"));
         assert!(args.opt_present("e"));
-        assert!(args.opt_present("l"));
-        assert!(args.opt_present("r"));
         assert!(args.opt_present("s"));
     }
 
