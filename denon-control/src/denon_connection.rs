@@ -87,10 +87,7 @@ fn status_update(stream: &mut TcpStream) -> Poll<AsyncResult> {
     // arrives.
     // status_update() should return Poll::Pending() if err.kind() == EWOULDBLOCK or TIMEDOUT
     // or no data has been read.
-    match read(stream, 1) {
-        Ok(status_update) => Poll::Ready(AsyncResult::StatusUpdate(Ok(status_update))),
-        Err(err) => Poll::Ready(AsyncResult::StatusUpdate(Err(err))),
-    }
+    Poll::Ready(AsyncResult::StatusUpdate(read(stream, 1)))
 }
 
 fn user_request(requests: &Receiver<(Operation, State)>) -> Poll<AsyncResult> {
