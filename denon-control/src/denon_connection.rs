@@ -195,6 +195,7 @@ pub mod test {
     use crate::state::State;
     use std::io;
     use std::net::{TcpListener, TcpStream};
+    use std::thread::yield_now;
 
     pub fn create_connected_connection() -> Result<(TcpStream, DenonConnection), io::Error> {
         let listen_socket = TcpListener::bind("127.0.0.1:0")?;
@@ -202,6 +203,17 @@ pub mod test {
         let dc = DenonConnection::new(addr.ip().to_string(), addr.port())?;
         let (to_denon_client, _) = listen_socket.accept()?;
         Ok((to_denon_client, dc))
+    }
+
+    macro_rules! wait_for_value_in_database {
+        ($denon_connection:ident, $state:expr, $exp_state:pat) => {
+            for _ in 0..100000 {
+                if matches!($denon_connection.get($state)?, $exp_state) {
+                    break;
+                }
+                yield_now();
+            }
+        };
     }
 
     #[test]
@@ -233,10 +245,10 @@ pub mod test {
     fn connection_receives_volume_from_receiver() -> Result<(), io::Error> {
         let (mut to_denon_client, mut dc) = create_connected_connection()?;
         write_string(&mut to_denon_client, "MV234\r".to_string())?;
-        assert_eq!(
-            State::MainVolume(234),
-            dc.get(State::MainVolume(666)).unwrap()
-        );
+        assert!(matches!(
+            dc.get(State::main_volume())?,
+            State::MainVolume(234)
+        ));
         Ok(())
     }
 
@@ -247,12 +259,18 @@ pub mod test {
         assert_eq!(State::Unknown, dc.get(State::source_input())?);
         assert_eq!(State::Unknown, dc.get(State::power())?);
         write_string(&mut to_denon_client, "MV234\rSICD\rPWON\r".to_string())?;
-        assert_eq!(State::MainVolume(234), dc.get(State::main_volume())?);
-        assert_eq!(
-            State::SourceInput(SourceInputState::Cd),
-            dc.get(State::source_input())?
-        );
-        assert_eq!(State::Power(PowerState::On), dc.get(State::power())?);
+        assert!(matches!(
+            dc.get(State::main_volume())?,
+            State::MainVolume(234)
+        ));
+        assert!(matches!(
+            dc.get(State::source_input())?,
+            State::SourceInput(SourceInputState::Cd)
+        ));
+        assert!(matches!(
+            dc.get(State::power())?,
+            State::Power(PowerState::On)
+        ));
         Ok(())
     }
 
@@ -260,15 +278,17 @@ pub mod test {
     fn connection_updates_values_with_newly_received_data() -> Result<(), io::Error> {
         let (mut to_denon_client, mut dc) = create_connected_connection()?;
         write_string(&mut to_denon_client, "MV234\r".to_string())?;
-        assert_eq!(
-            State::MainVolume(234),
-            dc.get(State::main_volume()).unwrap()
-        );
+        assert!(matches!(
+            dc.get(State::main_volume())?,
+            State::MainVolume(234)
+        ));
         write_string(&mut to_denon_client, "MV320\r".to_string())?;
-        assert_eq!(
-            State::MainVolume(320),
-            dc.get(State::main_volume()).unwrap()
-        );
+        wait_for_value_in_database!(dc, State::main_volume(), State::MainVolume(320));
+        assert!(matches!(
+            dc.get(State::main_volume())?,
+            State::MainVolume(320)
+        ));
+
         Ok(())
     }
 
