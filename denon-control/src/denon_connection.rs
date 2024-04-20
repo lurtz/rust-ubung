@@ -25,7 +25,8 @@ pub fn read(mut stream: &TcpStream, lines: u8) -> Result<Vec<String>, std::io::E
         let read_bytes;
         let pr = stream.peek(&mut buffer);
         println!(
-            "peek result == {:?}, buffer == {:?}",
+            "lines == {}, peek result == {:?}, buffer == {:?}",
+            lines,
             pr,
             std::str::from_utf8(&buffer)
         );
