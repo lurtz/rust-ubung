@@ -11,10 +11,19 @@ use std::time::Duration;
 
 const ESHUTDOWN: i32 = 108;
 
-fn write(stream: &mut dyn Write, input: String) -> Result<(), std::io::Error> {
+fn write_string(stream: &mut dyn Write, input: String) -> Result<(), std::io::Error> {
     let volume_command = input.into_bytes();
     stream.write_all(&volume_command[..])?;
     Ok(())
+}
+
+pub fn write(stream: &mut dyn Write, state: State, op: Operation) -> Result<(), io::Error> {
+    let command = if Operation::Set == op {
+        format!("{}\r", state)
+    } else {
+        format!("{}?\r", state.value())
+    };
+    write_string(stream, command)
 }
 
 pub fn read(mut stream: &TcpStream, lines: u8) -> Result<Vec<String>, std::io::Error> {
@@ -109,14 +118,10 @@ impl DenonConnection {
     pub fn new(denon_name: String, denon_port: u16) -> Result<DenonConnection, io::Error> {
         let state = Arc::new(Mutex::new(HashSet::new()));
         let cloned_state = state.clone();
-
         let s = TcpStream::connect((denon_name.as_str(), denon_port))?;
-
         let read_timeout = None;
         s.set_read_timeout(read_timeout)?;
         s.set_nonblocking(false)?;
-        assert_eq!(read_timeout, s.read_timeout().unwrap());
-
         let s2 = s.try_clone()?;
 
         let threadhandle = thread::spawn(move || thread_func_impl(&s2, cloned_state));
@@ -149,12 +154,7 @@ impl DenonConnection {
     }
 
     fn query(&mut self, state: State, op: Operation) -> Result<(), io::Error> {
-        let command = if Operation::Set == op {
-            format!("{}\r", state)
-        } else {
-            format!("{}?\r", state.value())
-        };
-        write(&mut self.to_receiver, command)
+        write(&mut self.to_receiver, state, op)
     }
 
     pub fn stop(&mut self) -> Result<(), io::Error> {
@@ -189,7 +189,7 @@ impl Drop for DenonConnection {
 #[cfg(test)]
 pub mod test {
     use super::DenonConnection;
-    use crate::denon_connection::{read, write};
+    use crate::denon_connection::{read, write_string};
     use crate::parse::PowerState;
     use crate::parse::SourceInputState;
     use crate::state::State;
@@ -232,7 +232,7 @@ pub mod test {
     #[test]
     fn connection_receives_volume_from_receiver() -> Result<(), io::Error> {
         let (mut to_denon_client, mut dc) = create_connected_connection()?;
-        write(&mut to_denon_client, "MV234\r".to_string())?;
+        write_string(&mut to_denon_client, "MV234\r".to_string())?;
         assert_eq!(
             State::MainVolume(234),
             dc.get(State::MainVolume(666)).unwrap()
@@ -246,7 +246,7 @@ pub mod test {
         assert_eq!(State::Unknown, dc.get(State::main_volume())?);
         assert_eq!(State::Unknown, dc.get(State::source_input())?);
         assert_eq!(State::Unknown, dc.get(State::power())?);
-        write(&mut to_denon_client, "MV234\rSICD\rPWON\r".to_string())?;
+        write_string(&mut to_denon_client, "MV234\rSICD\rPWON\r".to_string())?;
         assert_eq!(State::MainVolume(234), dc.get(State::main_volume())?);
         assert_eq!(
             State::SourceInput(SourceInputState::Cd),
@@ -259,12 +259,12 @@ pub mod test {
     #[test]
     fn connection_keeps_first_after_second_receive() -> Result<(), io::Error> {
         let (mut to_denon_client, mut dc) = create_connected_connection()?;
-        write(&mut to_denon_client, "MV234\r".to_string())?;
+        write_string(&mut to_denon_client, "MV234\r".to_string())?;
         assert_eq!(
             State::MainVolume(234),
             dc.get(State::main_volume()).unwrap()
         );
-        write(&mut to_denon_client, "MV320\r".to_string())?;
+        write_string(&mut to_denon_client, "MV320\r".to_string())?;
         assert_eq!(
             State::MainVolume(234),
             dc.get(State::main_volume()).unwrap()
@@ -293,12 +293,12 @@ pub mod test {
         let (mut to_client, _) = listen_socket.accept()?;
 
         // as \r is missing, read() does not read or extract anything
-        write(&mut to_client, "blub".to_string())?;
+        write_string(&mut to_client, "blub".to_string())?;
         let lines = read(&mut client, 1)?;
         assert_eq!(lines, Vec::<String>::new());
 
         // read() reads until \r and leaves other data in the stream
-        write(&mut to_client, "bla\rfoo".to_string())?;
+        write_string(&mut to_client, "bla\rfoo".to_string())?;
         let lines = read(&mut client, 2)?;
         assert_eq!(lines, vec!["blubbla".to_owned()]);
 
