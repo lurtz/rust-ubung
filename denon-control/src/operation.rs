@@ -2,5 +2,4 @@
 pub enum Operation {
     Query,
     Set,
-    Stop,
 }

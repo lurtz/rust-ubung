@@ -10,7 +10,7 @@ mod operation;
 mod parse;
 mod state;
 
-use denon_connection::{DenonConnection, Operation, State};
+use denon_connection::{DenonConnection, State};
 use state::PowerState;
 use state::SourceInputState;
 
@@ -56,9 +56,7 @@ fn parse_args(args: Vec<String>) -> getopts::Matches {
     arguments
 }
 
-fn print_status(
-    dc: &DenonConnection,
-) -> Result<String, std::sync::mpsc::SendError<(Operation, State)>> {
+fn print_status(dc: &mut DenonConnection) -> Result<String, std::io::Error> {
     Ok(format!(
         "Current status of receiver:\n\t{:?}\n\t{:?}\n\t{:?}\n\t{:?}\n",
         dc.get(State::power())?,
@@ -91,7 +89,6 @@ fn get_receiver_and_port(
 #[derive(Debug)]
 #[allow(dead_code)] // Fields will be used when an error is printed
 enum Error {
-    Send(std::sync::mpsc::SendError<(Operation, State)>),
     ParseInt(std::num::ParseIntError),
     Avahi(avahi_error::Error),
     IO(std::io::Error),
@@ -106,14 +103,6 @@ impl fmt::Display for Error {
 impl error::Error for Error {
     fn description(&self) -> &str {
         "Error for Denon operations"
-    }
-}
-
-impl std::convert::From<std::sync::mpsc::SendError<(operation::Operation, state::State)>>
-    for Error
-{
-    fn from(send_error: std::sync::mpsc::SendError<(operation::Operation, state::State)>) -> Self {
-        Error::Send(send_error)
     }
 }
 
@@ -136,10 +125,10 @@ impl std::convert::From<std::io::Error> for Error {
 }
 
 fn main2(args: getopts::Matches, denon_name: String, denon_port: u16) -> Result<(), Error> {
-    let dc = DenonConnection::new(denon_name, denon_port)?;
+    let mut dc = DenonConnection::new(denon_name, denon_port)?;
 
     if args.opt_present("s") {
-        println!("{}", print_status(&dc)?);
+        println!("{}", print_status(&mut dc)?);
     }
 
     if let Some(p) = args.opt_str("p") {
@@ -182,9 +171,11 @@ mod test {
     use crate::avahi3;
     use crate::avahi_error;
     use crate::denon_connection::read;
+    use crate::denon_connection::write;
     use crate::get_avahi_impl;
     use crate::get_receiver_and_port;
     use crate::main2;
+    use crate::operation::Operation;
     use crate::Error;
     use crate::PowerState;
     use crate::SourceInputState;
@@ -195,10 +186,8 @@ mod test {
     use std::net::TcpListener;
     use std::thread;
 
-    fn write(stream: &mut dyn Write, input: State) -> Result<(), std::io::Error> {
-        let volume_command = format!("{}\r\n", input).into_bytes();
-        stream.write_all(&volume_command[..])?;
-        Ok(())
+    fn write_state(stream: &mut dyn Write, input: State) -> Result<(), std::io::Error> {
+        write(stream, input, Operation::Set)
     }
 
     #[test]
@@ -272,14 +261,14 @@ mod test {
 
     #[test]
     fn print_status_test() -> Result<(), io::Error> {
-        let (mut to_receiver, dc) = create_connected_connection()?;
-        write(&mut to_receiver, State::Power(PowerState::On))?;
-        write(&mut to_receiver, State::SourceInput(SourceInputState::Cd))?;
-        write(&mut to_receiver, State::MainVolume(230))?;
-        write(&mut to_receiver, State::MaxVolume(666))?;
+        let (mut to_receiver, mut dc) = create_connected_connection()?;
+        write_state(&mut to_receiver, State::Power(PowerState::On))?;
+        write_state(&mut to_receiver, State::SourceInput(SourceInputState::Cd))?;
+        write_state(&mut to_receiver, State::MainVolume(230))?;
+        write_state(&mut to_receiver, State::MaxVolume(666))?;
 
         let expected = "Current status of receiver:\n\tPower(On)\n\tSourceInput(Cd)\n\tMainVolume(230)\n\tMaxVolume(666)\n";
-        assert_eq!(expected, print_status(&dc).unwrap());
+        assert_eq!(expected, print_status(&mut dc).unwrap());
         Ok(())
     }
 
@@ -361,10 +350,10 @@ mod test {
         let acceptor = thread::spawn(move || -> Result<Vec<String>, io::Error> {
             let mut to_receiver = listen_socket.accept()?.0;
 
-            write(&mut to_receiver, State::Power(PowerState::On))?;
-            write(&mut to_receiver, State::SourceInput(SourceInputState::Dvd))?;
-            write(&mut to_receiver, State::MainVolume(230))?;
-            write(&mut to_receiver, State::MaxVolume(666))?;
+            write_state(&mut to_receiver, State::Power(PowerState::On))?;
+            write_state(&mut to_receiver, State::SourceInput(SourceInputState::Dvd))?;
+            write_state(&mut to_receiver, State::MainVolume(230))?;
+            write_state(&mut to_receiver, State::MaxVolume(666))?;
             // might contain status queries
             read(&mut to_receiver, 10)
         });
