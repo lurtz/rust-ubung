@@ -257,7 +257,7 @@ pub mod test {
     }
 
     #[test]
-    fn connection_keeps_first_after_second_receive() -> Result<(), io::Error> {
+    fn connection_updates_values_with_newly_received_data() -> Result<(), io::Error> {
         let (mut to_denon_client, mut dc) = create_connected_connection()?;
         write_string(&mut to_denon_client, "MV234\r".to_string())?;
         assert_eq!(
@@ -266,7 +266,7 @@ pub mod test {
         );
         write_string(&mut to_denon_client, "MV320\r".to_string())?;
         assert_eq!(
-            State::MainVolume(234),
+            State::MainVolume(320),
             dc.get(State::main_volume()).unwrap()
         );
         Ok(())

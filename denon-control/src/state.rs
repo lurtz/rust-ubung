@@ -219,6 +219,7 @@ mod test {
 
     #[test]
     fn state_equal_main_volume() {
+        // TODO maybe this behavior is not the best one. == should also compare the stored integer
         assert_eq!(State::MainVolume(12), State::MainVolume(23));
         assert_ne!(State::MainVolume(12), State::MaxVolume(23));
         assert_ne!(State::MainVolume(12), State::MaxVolume(12));
