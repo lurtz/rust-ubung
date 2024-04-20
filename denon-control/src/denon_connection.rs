@@ -216,6 +216,12 @@ pub mod test {
         };
     }
 
+    macro_rules! assert_db_value {
+        ($denon_connection:ident, $state:expr, $exp_state:pat) => {
+            assert!(matches!($denon_connection.get($state)?, $exp_state));
+        };
+    }
+
     #[test]
     fn fails_to_connect_and_returns_unknown() {
         let dc = DenonConnection::new(String::from("value"), 0);
@@ -245,10 +251,7 @@ pub mod test {
     fn connection_receives_volume_from_receiver() -> Result<(), io::Error> {
         let (mut to_denon_client, mut dc) = create_connected_connection()?;
         write_string(&mut to_denon_client, "MV234\r".to_string())?;
-        assert!(matches!(
-            dc.get(State::main_volume())?,
-            State::MainVolume(234)
-        ));
+        assert_db_value!(dc, State::main_volume(), State::MainVolume(234));
         Ok(())
     }
 
@@ -259,18 +262,13 @@ pub mod test {
         assert_eq!(State::Unknown, dc.get(State::source_input())?);
         assert_eq!(State::Unknown, dc.get(State::power())?);
         write_string(&mut to_denon_client, "MV234\rSICD\rPWON\r".to_string())?;
-        assert!(matches!(
-            dc.get(State::main_volume())?,
-            State::MainVolume(234)
-        ));
-        assert!(matches!(
-            dc.get(State::source_input())?,
+        assert_db_value!(dc, State::main_volume(), State::MainVolume(234));
+        assert_db_value!(
+            dc,
+            State::source_input(),
             State::SourceInput(SourceInputState::Cd)
-        ));
-        assert!(matches!(
-            dc.get(State::power())?,
-            State::Power(PowerState::On)
-        ));
+        );
+        assert_db_value!(dc, State::power(), State::Power(PowerState::On));
         Ok(())
     }
 
@@ -278,16 +276,10 @@ pub mod test {
     fn connection_updates_values_with_newly_received_data() -> Result<(), io::Error> {
         let (mut to_denon_client, mut dc) = create_connected_connection()?;
         write_string(&mut to_denon_client, "MV234\r".to_string())?;
-        assert!(matches!(
-            dc.get(State::main_volume())?,
-            State::MainVolume(234)
-        ));
+        assert_db_value!(dc, State::main_volume(), State::MainVolume(234));
         write_string(&mut to_denon_client, "MV320\r".to_string())?;
         wait_for_value_in_database!(dc, State::main_volume(), State::MainVolume(320));
-        assert!(matches!(
-            dc.get(State::main_volume())?,
-            State::MainVolume(320)
-        ));
+        assert_db_value!(dc, State::main_volume(), State::MainVolume(320));
 
         Ok(())
     }
