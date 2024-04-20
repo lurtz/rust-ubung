@@ -204,10 +204,7 @@ pub mod test {
         Ok((to_denon_client, dc))
     }
 
-    fn compare_with_io_error(
-        left: Result<State, io::Error>,
-        right: Result<State, io::Error>,
-    ) -> bool {
+    fn cmp(left: Result<State, io::Error>, right: Result<State, io::Error>) -> bool {
         if left.is_ok() && right.is_ok() {
             return left.unwrap() == right.unwrap();
         }
@@ -231,7 +228,7 @@ pub mod test {
         let rc = dc.get(State::main_volume());
         let query = read(&mut to_denon_client, 1)?;
         let x: Result<State, io::Error> = Ok(State::Unknown);
-        assert!(compare_with_io_error(rc, x));
+        assert!(cmp(rc, x));
         assert_eq!(query, vec!["MV?"]);
         Ok(())
     }
@@ -259,28 +256,19 @@ pub mod test {
     #[test]
     fn connection_receives_multiple_values_volume_from_receiver() -> Result<(), io::Error> {
         let (mut to_denon_client, mut dc) = create_connected_connection()?;
-        assert!(compare_with_io_error(
-            Ok(State::Unknown),
-            dc.get(State::main_volume())
-        ));
-        assert!(compare_with_io_error(
-            Ok(State::Unknown),
-            dc.get(State::source_input())
-        ));
-        assert!(compare_with_io_error(
-            Ok(State::Unknown),
-            dc.get(State::power())
-        ));
+        assert!(cmp(Ok(State::Unknown), dc.get(State::main_volume())));
+        assert!(cmp(Ok(State::Unknown), dc.get(State::source_input())));
+        assert!(cmp(Ok(State::Unknown), dc.get(State::power())));
         write(&mut to_denon_client, "MV234\rSICD\rPWON\r".to_string())?;
-        assert!(compare_with_io_error(
+        assert!(cmp(
             Ok(State::MainVolume(234)),
             dc.get(State::main_volume())
         ));
-        assert!(compare_with_io_error(
+        assert!(cmp(
             Ok(State::SourceInput(SourceInputState::Cd)),
             dc.get(State::source_input())
         ));
-        assert!(compare_with_io_error(
+        assert!(cmp(
             Ok(State::Power(PowerState::On)),
             dc.get(State::power())
         ));
@@ -293,12 +281,12 @@ pub mod test {
         write(&mut to_denon_client, "MV234\r".to_string())?;
         assert_eq!(
             State::MainVolume(234),
-            dc.get(State::MainVolume(666)).unwrap()
+            dc.get(State::main_volume()).unwrap()
         );
         write(&mut to_denon_client, "MV320\r".to_string())?;
         assert_eq!(
             State::MainVolume(234),
-            dc.get(State::MainVolume(666)).unwrap()
+            dc.get(State::main_volume()).unwrap()
         );
         Ok(())
     }
