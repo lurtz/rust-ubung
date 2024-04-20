@@ -23,7 +23,13 @@ pub fn read(mut stream: &TcpStream, lines: u8) -> Result<Vec<String>, std::io::E
     while (lines as usize) != result.len() {
         let mut buffer = [0; 100];
         let read_bytes;
-        match stream.peek(&mut buffer) {
+        let pr = stream.peek(&mut buffer);
+        println!(
+            "peek result == {:?}, buffer == {:?}",
+            pr,
+            std::str::from_utf8(&buffer)
+        );
+        match pr {
             Ok(rb) => read_bytes = rb,
             Err(e) => {
                 if result.is_empty() {
@@ -84,6 +90,7 @@ fn thread_func_impl(
 
         match read(&stream, 1) {
             Ok(status_update) => {
+                println!("read() returned {:?}", status_update);
                 let parsed_response = parse_response(&status_update);
                 let mut locked_state = state.lock().unwrap();
                 for item in parsed_response {
@@ -92,9 +99,11 @@ fn thread_func_impl(
             }
             // check for timeout error -> continue on timeout error, else abort
             Err(e) => {
+                println!("read() returned {:?}", e);
                 if std::io::ErrorKind::TimedOut != e.kind()
                     && std::io::ErrorKind::WouldBlock != e.kind()
                 {
+                    println!("thread terminate");
                     return Err(e);
                 }
             }
