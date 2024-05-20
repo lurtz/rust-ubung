@@ -16,7 +16,6 @@ use state::SourceInputState;
 
 use getopts::Options;
 use std::env;
-use std::error;
 use std::fmt;
 
 // status object shall get the current status of the avr 1912
@@ -97,12 +96,6 @@ enum Error {
 impl fmt::Display for Error {
     fn fmt(&self, format: &mut fmt::Formatter) -> Result<(), fmt::Error> {
         write!(format, "{:?}", self)
-    }
-}
-
-impl error::Error for Error {
-    fn description(&self) -> &str {
-        "Error for Denon operations"
     }
 }
 
@@ -365,5 +358,32 @@ mod test {
         assert!(received_data.contains(&State::SourceInput(SourceInputState::Cd).to_string()));
         assert!(received_data.contains(&State::MainVolume(50).to_string()));
         Ok(())
+    }
+
+    macro_rules! check_error {
+        ($error_value:expr, $expected:pat, $string:expr ) => {
+            let error = Error::from($error_value);
+            assert!(matches!(error, $expected));
+            assert_eq!($string, format!("{}", error));
+        };
+    }
+
+    #[test]
+    fn error_test() {
+        check_error!(
+            i32::from_str_radix("a23", 10).unwrap_err(),
+            Error::ParseInt(_),
+            "ParseInt(ParseIntError { kind: InvalidDigit })"
+        );
+        check_error!(
+            avahi_error::Error::NoHostsFound,
+            Error::Avahi(_),
+            "Avahi(NoHostsFound)"
+        );
+        check_error!(
+            std::io::Error::from(io::ErrorKind::AddrInUse),
+            Error::IO(_),
+            "IO(Kind(AddrInUse))"
+        );
     }
 }
