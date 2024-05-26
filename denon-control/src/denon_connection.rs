@@ -1,7 +1,8 @@
 use crate::parse::parse;
 pub use crate::parse::{Operation, State};
+use crate::state::StateValue;
 
-use std::collections::HashSet;
+use std::collections::HashMap;
 use std::io::{self, Read, Write};
 use std::net::TcpStream;
 use std::panic;
@@ -17,9 +18,14 @@ fn write_string(stream: &mut dyn Write, input: String) -> Result<(), std::io::Er
     Ok(())
 }
 
-pub fn write(stream: &mut dyn Write, state: State, op: Operation) -> Result<(), io::Error> {
+pub fn write(
+    stream: &mut dyn Write,
+    state: State,
+    value: StateValue,
+    op: Operation,
+) -> Result<(), io::Error> {
     let command = if Operation::Set == op {
-        format!("{}\r", state)
+        format!("{}{}\r", state, value)
     } else {
         format!("{}?\r", state.value())
     };
@@ -78,15 +84,15 @@ pub fn read(mut stream: &TcpStream, lines: u8) -> Result<Vec<String>, std::io::E
 
 fn thread_func_impl(
     stream: &TcpStream,
-    state: Arc<Mutex<HashSet<State>>>,
+    state: Arc<Mutex<HashMap<State, StateValue>>>,
 ) -> Result<(), std::io::Error> {
     loop {
         match read(stream, 1) {
             Ok(status_update) => {
                 let parsed_response = parse_response(&status_update);
                 let mut locked_state = state.lock().unwrap();
-                for item in parsed_response {
-                    locked_state.replace(item);
+                for (state, value) in parsed_response {
+                    locked_state.insert(state, value);
                 }
             }
             // check for timeout error -> continue on timeout error, else abort
@@ -104,19 +110,19 @@ fn thread_func_impl(
     }
 }
 
-fn parse_response(response: &[String]) -> Vec<State> {
+fn parse_response(response: &[String]) -> Vec<(State, StateValue)> {
     return response.iter().filter_map(|x| parse(x.as_str())).collect();
 }
 
 pub struct DenonConnection {
-    state: Arc<Mutex<HashSet<State>>>,
+    state: Arc<Mutex<HashMap<State, StateValue>>>,
     to_receiver: TcpStream,
     thread_handle: Option<JoinHandle<Result<(), io::Error>>>,
 }
 
 impl DenonConnection {
     pub fn new(denon_name: String, denon_port: u16) -> Result<DenonConnection, io::Error> {
-        let state = Arc::new(Mutex::new(HashSet::new()));
+        let state = Arc::new(Mutex::new(HashMap::new()));
         let cloned_state = state.clone();
         let s = TcpStream::connect((denon_name.as_str(), denon_port))?;
         let read_timeout = None;
@@ -133,36 +139,36 @@ impl DenonConnection {
         })
     }
 
-    pub fn get(&mut self, op: State) -> Result<State, io::Error> {
+    pub fn get(&mut self, op: State) -> Result<StateValue, io::Error> {
         // should first check if the requested op is present in state
         // if it is not present it should send the request to the thread and wait until completion
         {
             let locked_state = self.state.lock().unwrap();
             if let Some(received_state) = locked_state.get(&op) {
-                return Ok(received_state.clone());
+                return Ok(*received_state);
             }
         }
-        self.query(op.clone(), Operation::Query)?;
+        self.query(op, StateValue::Unknown, Operation::Query)?;
         for _ in 0..50 {
             thread::sleep(Duration::from_millis(10));
             let locked_state = self.state.lock().unwrap();
             if let Some(state) = locked_state.get(&op) {
-                return Ok(state.clone());
+                return Ok(*state);
             }
         }
-        Ok(State::Unknown)
+        Ok(StateValue::Unknown)
     }
 
-    fn query(&mut self, state: State, op: Operation) -> Result<(), io::Error> {
-        write(&mut self.to_receiver, state, op)
+    fn query(&mut self, state: State, value: StateValue, op: Operation) -> Result<(), io::Error> {
+        write(&mut self.to_receiver, state, value, op)
     }
 
     pub fn stop(&mut self) -> Result<(), io::Error> {
         self.to_receiver.shutdown(std::net::Shutdown::Both)
     }
 
-    pub fn set(&mut self, state: State) -> Result<(), io::Error> {
-        self.query(state, Operation::Set)
+    pub fn set(&mut self, state: State, value: StateValue) -> Result<(), io::Error> {
+        self.query(state, value, Operation::Set)
     }
 }
 
@@ -192,7 +198,7 @@ pub mod test {
     use crate::denon_connection::{read, write_string};
     use crate::parse::PowerState;
     use crate::parse::SourceInputState;
-    use crate::state::State;
+    use crate::state::{State, StateValue};
     use std::io;
     use std::net::{TcpListener, TcpStream};
     use std::thread::yield_now;
@@ -231,9 +237,9 @@ pub mod test {
     #[test]
     fn connection_gets_no_reply_and_returns_unknown() -> Result<(), io::Error> {
         let (mut to_denon_client, mut dc) = create_connected_connection()?;
-        let rc = dc.get(State::main_volume())?;
+        let rc = dc.get(State::MainVolume)?;
         let query = read(&mut to_denon_client, 1)?;
-        assert_eq!(rc, State::Unknown);
+        assert_eq!(rc, StateValue::Unknown);
         assert_eq!(query, vec!["MV?"]);
         Ok(())
     }
@@ -241,7 +247,7 @@ pub mod test {
     #[test]
     fn connection_sends_volume_to_receiver() -> Result<(), io::Error> {
         let (mut to_denon_client, mut dc) = create_connected_connection()?;
-        dc.set(State::MainVolume(666)).unwrap();
+        dc.set(State::MainVolume, StateValue::Integer(666))?;
         let received = read(&mut to_denon_client, 1)?;
         assert_eq!("MV666", received[0]);
         Ok(())
@@ -251,24 +257,24 @@ pub mod test {
     fn connection_receives_volume_from_receiver() -> Result<(), io::Error> {
         let (mut to_denon_client, mut dc) = create_connected_connection()?;
         write_string(&mut to_denon_client, "MV234\r".to_string())?;
-        assert_db_value!(dc, State::main_volume(), State::MainVolume(234));
+        assert_db_value!(dc, State::MainVolume, StateValue::Integer(234));
         Ok(())
     }
 
     #[test]
     fn connection_receives_multiple_values_volume_from_receiver() -> Result<(), io::Error> {
         let (mut to_denon_client, mut dc) = create_connected_connection()?;
-        assert_eq!(State::Unknown, dc.get(State::main_volume())?);
-        assert_eq!(State::Unknown, dc.get(State::source_input())?);
-        assert_eq!(State::Unknown, dc.get(State::power())?);
+        assert_eq!(StateValue::Unknown, dc.get(State::MainVolume)?);
+        assert_eq!(StateValue::Unknown, dc.get(State::SourceInput)?);
+        assert_eq!(StateValue::Unknown, dc.get(State::Power)?);
         write_string(&mut to_denon_client, "MV234\rSICD\rPWON\r".to_string())?;
-        assert_db_value!(dc, State::main_volume(), State::MainVolume(234));
+        assert_db_value!(dc, State::MainVolume, StateValue::Integer(234));
         assert_db_value!(
             dc,
-            State::source_input(),
-            State::SourceInput(SourceInputState::Cd)
+            State::SourceInput,
+            StateValue::SourceInput(SourceInputState::Cd)
         );
-        assert_db_value!(dc, State::power(), State::Power(PowerState::On));
+        assert_db_value!(dc, State::Power, StateValue::Power(PowerState::On));
         Ok(())
     }
 
@@ -276,10 +282,10 @@ pub mod test {
     fn connection_updates_values_with_newly_received_data() -> Result<(), io::Error> {
         let (mut to_denon_client, mut dc) = create_connected_connection()?;
         write_string(&mut to_denon_client, "MV234\r".to_string())?;
-        assert_db_value!(dc, State::main_volume(), State::MainVolume(234));
+        assert_db_value!(dc, State::MainVolume, StateValue::Integer(234));
         write_string(&mut to_denon_client, "MV320\r".to_string())?;
-        wait_for_value_in_database!(dc, State::main_volume(), State::MainVolume(320));
-        assert_db_value!(dc, State::main_volume(), State::MainVolume(320));
+        wait_for_value_in_database!(dc, State::MainVolume, StateValue::Integer(320));
+        assert_db_value!(dc, State::MainVolume, StateValue::Integer(320));
 
         Ok(())
     }

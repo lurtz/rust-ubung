@@ -13,6 +13,7 @@ mod state;
 use denon_connection::{DenonConnection, State};
 use state::PowerState;
 use state::SourceInputState;
+use state::StateValue;
 
 use getopts::Options;
 use std::env;
@@ -57,11 +58,11 @@ fn parse_args(args: Vec<String>) -> getopts::Matches {
 
 fn print_status(dc: &mut DenonConnection) -> Result<String, std::io::Error> {
     Ok(format!(
-        "Current status of receiver:\n\t{:?}\n\t{:?}\n\t{:?}\n\t{:?}\n",
-        dc.get(State::power())?,
-        dc.get(State::source_input())?,
-        dc.get(State::main_volume())?,
-        dc.get(State::max_volume())?
+        "Current status of receiver:\n\tPower({})\n\tSourceInput({})\n\tMainVolume({})\n\tMaxVolume({})\n",
+        dc.get(State::Power)?,
+        dc.get(State::SourceInput)?,
+        dc.get(State::MainVolume)?,
+        dc.get(State::MaxVolume)?
     ))
 }
 
@@ -127,7 +128,7 @@ fn main2(args: getopts::Matches, denon_name: String, denon_port: u16) -> Result<
     if let Some(p) = args.opt_str("p") {
         for power in PowerState::iterator() {
             if power.to_string() == p {
-                dc.set(State::Power(power.clone()))?;
+                dc.set(State::Power, StateValue::Power(*power))?;
             }
         }
     }
@@ -135,7 +136,7 @@ fn main2(args: getopts::Matches, denon_name: String, denon_port: u16) -> Result<
     if let Some(i) = args.opt_str("i") {
         for input in SourceInputState::iterator() {
             if input.to_string() == i {
-                dc.set(State::SourceInput(input.clone()))?;
+                dc.set(State::SourceInput, StateValue::SourceInput(*input))?;
             }
         }
     }
@@ -146,7 +147,7 @@ fn main2(args: getopts::Matches, denon_name: String, denon_port: u16) -> Result<
         if vi > 50 {
             vi = 50;
         }
-        dc.set(State::MainVolume(vi))?;
+        dc.set(State::MainVolume, StateValue::Integer(vi))?;
     }
     Ok(())
 }
@@ -169,6 +170,7 @@ mod test {
     use crate::get_receiver_and_port;
     use crate::main2;
     use crate::operation::Operation;
+    use crate::state::StateValue;
     use crate::Error;
     use crate::PowerState;
     use crate::SourceInputState;
@@ -179,8 +181,12 @@ mod test {
     use std::net::TcpListener;
     use std::thread;
 
-    fn write_state(stream: &mut dyn Write, input: State) -> Result<(), std::io::Error> {
-        write(stream, input, Operation::Set)
+    fn write_state(
+        stream: &mut dyn Write,
+        input: State,
+        value: StateValue,
+    ) -> Result<(), std::io::Error> {
+        write(stream, input, value, Operation::Set)
     }
 
     #[test]
@@ -255,12 +261,24 @@ mod test {
     #[test]
     fn print_status_test() -> Result<(), io::Error> {
         let (mut to_receiver, mut dc) = create_connected_connection()?;
-        write_state(&mut to_receiver, State::Power(PowerState::On))?;
-        write_state(&mut to_receiver, State::SourceInput(SourceInputState::Cd))?;
-        write_state(&mut to_receiver, State::MainVolume(230))?;
-        write_state(&mut to_receiver, State::MaxVolume(666))?;
+        write_state(
+            &mut to_receiver,
+            State::Power,
+            StateValue::Power(PowerState::On),
+        )?;
+        write_state(
+            &mut to_receiver,
+            State::SourceInput,
+            StateValue::SourceInput(SourceInputState::Cd),
+        )?;
+        write_state(
+            &mut to_receiver,
+            State::MainVolume,
+            StateValue::Integer(230),
+        )?;
+        write_state(&mut to_receiver, State::MaxVolume, StateValue::Integer(666))?;
 
-        let expected = "Current status of receiver:\n\tPower(On)\n\tSourceInput(Cd)\n\tMainVolume(230)\n\tMaxVolume(666)\n";
+        let expected = "Current status of receiver:\n\tPower(ON)\n\tSourceInput(CD)\n\tMainVolume(230)\n\tMaxVolume(666)\n";
         assert_eq!(expected, print_status(&mut dc).unwrap());
         Ok(())
     }
@@ -343,10 +361,22 @@ mod test {
         let acceptor = thread::spawn(move || -> Result<Vec<String>, io::Error> {
             let mut to_receiver = listen_socket.accept()?.0;
 
-            write_state(&mut to_receiver, State::Power(PowerState::On))?;
-            write_state(&mut to_receiver, State::SourceInput(SourceInputState::Dvd))?;
-            write_state(&mut to_receiver, State::MainVolume(230))?;
-            write_state(&mut to_receiver, State::MaxVolume(666))?;
+            write_state(
+                &mut to_receiver,
+                State::Power,
+                StateValue::Power(PowerState::On),
+            )?;
+            write_state(
+                &mut to_receiver,
+                State::SourceInput,
+                StateValue::SourceInput(SourceInputState::Dvd),
+            )?;
+            write_state(
+                &mut to_receiver,
+                State::MainVolume,
+                StateValue::Integer(230),
+            )?;
+            write_state(&mut to_receiver, State::MaxVolume, StateValue::Integer(666))?;
             // might contain status queries
             read(&mut to_receiver, 10)
         });
@@ -354,9 +384,17 @@ mod test {
         main2(args, String::from("localhost"), local_port).unwrap();
 
         let received_data = acceptor.join().unwrap()?;
-        assert!(received_data.contains(&format!("{}?", State::Power(PowerState::On).value())));
-        assert!(received_data.contains(&State::SourceInput(SourceInputState::Cd).to_string()));
-        assert!(received_data.contains(&State::MainVolume(50).to_string()));
+        assert!(received_data.contains(&format!("{}?", State::Power.value())));
+        assert!(received_data.contains(&format!(
+            "{}{}",
+            State::SourceInput,
+            StateValue::SourceInput(SourceInputState::Cd)
+        )));
+        assert!(received_data.contains(&format!(
+            "{}{}",
+            State::MainVolume,
+            StateValue::Integer(50)
+        )));
         Ok(())
     }
 
