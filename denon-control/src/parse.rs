@@ -19,21 +19,11 @@ fn get_value<'a>(trimmed: &'a str, op: &State) -> &'a str {
     trimmed[to_skip..].trim()
 }
 
-fn parse_int(to_parse: &str) -> u32 {
+fn parse_int(to_parse: &str) -> StateValue {
     let mut value = to_parse.parse::<u32>().unwrap();
     if value < 100 {
         value *= 10;
     }
-    value
-}
-
-fn parse_main_volume(value: &str) -> StateValue {
-    let value = parse_int(value);
-    StateValue::Integer(value)
-}
-
-fn parse_max_volume(value: &str) -> StateValue {
-    let value = parse_int(value);
     StateValue::Integer(value)
 }
 
@@ -57,8 +47,8 @@ fn parse_source_input(value: &str) -> StateValue {
 
 pub fn parse(str: &str) -> Option<(State, StateValue)> {
     let trimmed = str.trim().trim_matches('\r');
-    parsehelper!(trimmed, State::MaxVolume, parse_max_volume);
-    parsehelper!(trimmed, State::MainVolume, parse_main_volume);
+    parsehelper!(trimmed, State::MaxVolume, parse_int);
+    parsehelper!(trimmed, State::MainVolume, parse_int);
     parsehelper!(trimmed, State::Power, parse_power);
     parsehelper!(trimmed, State::SourceInput, parse_source_input);
     None
