@@ -241,5 +241,6 @@ mod test {
                 StateValue::SourceInput(SourceInputState::Dvd)
             )
         );
+        assert_eq!("PW", ts(State::Power, StateValue::Unknown));
     }
 }
