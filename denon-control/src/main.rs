@@ -168,7 +168,7 @@ mod test {
     use crate::get_receiver_and_port;
     use crate::main2;
     use crate::operation::Operation;
-    use crate::state::StateValue;
+    use crate::state::{SetState, StateValue};
     use crate::Error;
     use crate::PowerState;
     use crate::SourceInputState;
@@ -179,12 +179,9 @@ mod test {
     use std::net::TcpListener;
     use std::thread;
 
-    fn write_state(
-        stream: &mut dyn Write,
-        input: State,
-        value: StateValue,
-    ) -> Result<(), std::io::Error> {
-        write(stream, input, value, Operation::Set)
+    fn write_state(stream: &mut dyn Write, input: SetState) -> Result<(), std::io::Error> {
+        let (state, state_value) = input.convert();
+        write(stream, state, state_value, Operation::Set)
     }
 
     #[test]
@@ -259,22 +256,13 @@ mod test {
     #[test]
     fn print_status_test() -> Result<(), io::Error> {
         let (mut to_receiver, mut dc) = create_connected_connection()?;
+        write_state(&mut to_receiver, SetState::Power(PowerState::On))?;
         write_state(
             &mut to_receiver,
-            State::Power,
-            StateValue::Power(PowerState::On),
+            SetState::SourceInput(SourceInputState::Cd),
         )?;
-        write_state(
-            &mut to_receiver,
-            State::SourceInput,
-            StateValue::SourceInput(SourceInputState::Cd),
-        )?;
-        write_state(
-            &mut to_receiver,
-            State::MainVolume,
-            StateValue::Integer(230),
-        )?;
-        write_state(&mut to_receiver, State::MaxVolume, StateValue::Integer(666))?;
+        write_state(&mut to_receiver, SetState::MainVolume(230))?;
+        write_state(&mut to_receiver, SetState::MaxVolume(666))?;
 
         let expected = "Current status of receiver:\n\tPower(ON)\n\tSourceInput(CD)\n\tMainVolume(230)\n\tMaxVolume(666)\n";
         assert_eq!(expected, print_status(&mut dc).unwrap());
@@ -359,22 +347,13 @@ mod test {
         let acceptor = thread::spawn(move || -> Result<Vec<String>, io::Error> {
             let mut to_receiver = listen_socket.accept()?.0;
 
+            write_state(&mut to_receiver, SetState::Power(PowerState::On))?;
             write_state(
                 &mut to_receiver,
-                State::Power,
-                StateValue::Power(PowerState::On),
+                SetState::SourceInput(SourceInputState::Dvd),
             )?;
-            write_state(
-                &mut to_receiver,
-                State::SourceInput,
-                StateValue::SourceInput(SourceInputState::Dvd),
-            )?;
-            write_state(
-                &mut to_receiver,
-                State::MainVolume,
-                StateValue::Integer(230),
-            )?;
-            write_state(&mut to_receiver, State::MaxVolume, StateValue::Integer(666))?;
+            write_state(&mut to_receiver, SetState::MainVolume(230))?;
+            write_state(&mut to_receiver, SetState::MaxVolume(666))?;
             // might contain status queries
             read(&mut to_receiver, 10)
         });

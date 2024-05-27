@@ -167,22 +167,9 @@ impl DenonConnection {
         self.to_receiver.shutdown(std::net::Shutdown::Both)
     }
 
-    pub fn set(&mut self, state: SetState) -> Result<(), io::Error> {
-        match state {
-            SetState::MainVolume(i) => {
-                self.query(State::MainVolume, StateValue::Integer(i), Operation::Set)
-            }
-
-            SetState::MaxVolume(i) => {
-                self.query(State::MaxVolume, StateValue::Integer(i), Operation::Set)
-            }
-            SetState::Power(ps) => self.query(State::Power, StateValue::Power(ps), Operation::Set),
-            SetState::SourceInput(si) => self.query(
-                State::SourceInput,
-                StateValue::SourceInput(si),
-                Operation::Set,
-            ),
-        }
+    pub fn set(&mut self, sstate: SetState) -> Result<(), io::Error> {
+        let (state, state_value) = sstate.convert();
+        self.query(state, state_value, Operation::Set)
     }
 }
 

@@ -132,6 +132,17 @@ pub enum SetState {
     MainVolume(u32),
 }
 
+impl SetState {
+    pub fn convert(&self) -> (State, StateValue) {
+        match *self {
+            SetState::MainVolume(i) => (State::MainVolume, StateValue::Integer(i)),
+            SetState::MaxVolume(i) => (State::MaxVolume, StateValue::Integer(i)),
+            SetState::Power(ps) => (State::Power, StateValue::Power(ps)),
+            SetState::SourceInput(si) => (State::SourceInput, StateValue::SourceInput(si)),
+        }
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum StateValue {
     Power(PowerState),
