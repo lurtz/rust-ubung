@@ -1,6 +1,6 @@
 use crate::parse::parse;
 pub use crate::parse::{Operation, State};
-use crate::state::StateValue;
+use crate::state::{SetState, StateValue};
 
 use std::collections::HashMap;
 use std::io::{self, Read, Write};
@@ -167,8 +167,22 @@ impl DenonConnection {
         self.to_receiver.shutdown(std::net::Shutdown::Both)
     }
 
-    pub fn set(&mut self, state: State, value: StateValue) -> Result<(), io::Error> {
-        self.query(state, value, Operation::Set)
+    pub fn set(&mut self, state: SetState) -> Result<(), io::Error> {
+        match state {
+            SetState::MainVolume(i) => {
+                self.query(State::MainVolume, StateValue::Integer(i), Operation::Set)
+            }
+
+            SetState::MaxVolume(i) => {
+                self.query(State::MaxVolume, StateValue::Integer(i), Operation::Set)
+            }
+            SetState::Power(ps) => self.query(State::Power, StateValue::Power(ps), Operation::Set),
+            SetState::SourceInput(si) => self.query(
+                State::SourceInput,
+                StateValue::SourceInput(si),
+                Operation::Set,
+            ),
+        }
     }
 }
 
@@ -198,7 +212,7 @@ pub mod test {
     use crate::denon_connection::{read, write_string};
     use crate::parse::PowerState;
     use crate::parse::SourceInputState;
-    use crate::state::{State, StateValue};
+    use crate::state::{SetState, State, StateValue};
     use std::io;
     use std::net::{TcpListener, TcpStream};
     use std::thread::yield_now;
@@ -245,11 +259,38 @@ pub mod test {
     }
 
     #[test]
-    fn connection_sends_volume_to_receiver() -> Result<(), io::Error> {
+    fn connection_sends_main_volume_to_receiver() -> Result<(), io::Error> {
         let (mut to_denon_client, mut dc) = create_connected_connection()?;
-        dc.set(State::MainVolume, StateValue::Integer(666))?;
+        dc.set(SetState::MainVolume(666))?;
         let received = read(&mut to_denon_client, 1)?;
         assert_eq!("MV666", received[0]);
+        Ok(())
+    }
+
+    #[test]
+    fn connection_sends_max_volume_to_receiver() -> Result<(), io::Error> {
+        let (mut to_denon_client, mut dc) = create_connected_connection()?;
+        dc.set(SetState::MaxVolume(666))?;
+        let received = read(&mut to_denon_client, 1)?;
+        assert_eq!("MVMAX666", received[0]);
+        Ok(())
+    }
+
+    #[test]
+    fn connection_sends_source_input_to_receiver() -> Result<(), io::Error> {
+        let (mut to_denon_client, mut dc) = create_connected_connection()?;
+        dc.set(SetState::SourceInput(SourceInputState::Fvp))?;
+        let received = read(&mut to_denon_client, 1)?;
+        assert_eq!("SIFVP", received[0]);
+        Ok(())
+    }
+
+    #[test]
+    fn connection_sends_power_to_receiver() -> Result<(), io::Error> {
+        let (mut to_denon_client, mut dc) = create_connected_connection()?;
+        dc.set(SetState::Power(PowerState::On))?;
+        let received = read(&mut to_denon_client, 1)?;
+        assert_eq!("PWON", received[0]);
         Ok(())
     }
 

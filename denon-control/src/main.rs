@@ -11,9 +11,7 @@ mod parse;
 mod state;
 
 use denon_connection::{DenonConnection, State};
-use state::PowerState;
-use state::SourceInputState;
-use state::StateValue;
+use state::{PowerState, SetState, SourceInputState};
 
 use getopts::Options;
 use std::env;
@@ -128,7 +126,7 @@ fn main2(args: getopts::Matches, denon_name: String, denon_port: u16) -> Result<
     if let Some(p) = args.opt_str("p") {
         for power in PowerState::iterator() {
             if power.to_string() == p {
-                dc.set(State::Power, StateValue::Power(*power))?;
+                dc.set(SetState::Power(*power))?;
             }
         }
     }
@@ -136,7 +134,7 @@ fn main2(args: getopts::Matches, denon_name: String, denon_port: u16) -> Result<
     if let Some(i) = args.opt_str("i") {
         for input in SourceInputState::iterator() {
             if input.to_string() == i {
-                dc.set(State::SourceInput, StateValue::SourceInput(*input))?;
+                dc.set(SetState::SourceInput(*input))?;
             }
         }
     }
@@ -147,7 +145,7 @@ fn main2(args: getopts::Matches, denon_name: String, denon_port: u16) -> Result<
         if vi > 50 {
             vi = 50;
         }
-        dc.set(State::MainVolume, StateValue::Integer(vi))?;
+        dc.set(SetState::MainVolume(vi))?;
     }
     Ok(())
 }
