@@ -1,15 +1,15 @@
 pub use crate::operation::Operation;
 pub use crate::state::PowerState;
+use crate::state::SetState;
 pub use crate::state::SourceInputState;
 pub use crate::state::State;
-use crate::state::StateValue;
 
 macro_rules! parsehelper {
-    ($trimmed:expr, $op:expr, $func:path) => {
+    ($trimmed:expr, $op:expr, $ss:expr, $func:path) => {
         if $trimmed.starts_with($op.value()) {
             let value = get_value($trimmed, &$op);
             let x = $func(value);
-            return Some(($op, x));
+            return Some($ss(x));
         }
     };
 }
@@ -19,38 +19,43 @@ fn get_value<'a>(trimmed: &'a str, op: &State) -> &'a str {
     trimmed[to_skip..].trim()
 }
 
-fn parse_int(to_parse: &str) -> StateValue {
+fn parse_int(to_parse: &str) -> u32 {
     let mut value = to_parse.parse::<u32>().unwrap();
     if value < 100 {
         value *= 10;
     }
-    StateValue::Integer(value)
+    value
 }
 
-fn parse_power(value: &str) -> StateValue {
+fn parse_power(value: &str) -> PowerState {
     if "ON" == value {
-        StateValue::Power(PowerState::On)
+        PowerState::On
     } else {
-        StateValue::Power(PowerState::Standby)
+        PowerState::Standby
     }
 }
 
-fn parse_source_input(value: &str) -> StateValue {
+fn parse_source_input(value: &str) -> SourceInputState {
     for sis in SourceInputState::iterator() {
         if sis.to_string() == value {
-            return StateValue::SourceInput(*sis);
+            return *sis;
         }
     }
 
-    StateValue::SourceInput(SourceInputState::Unknown)
+    SourceInputState::Unknown
 }
 
-pub fn parse(str: &str) -> Option<(State, StateValue)> {
+pub fn parse(str: &str) -> Option<SetState> {
     let trimmed = str.trim().trim_matches('\r');
-    parsehelper!(trimmed, State::MaxVolume, parse_int);
-    parsehelper!(trimmed, State::MainVolume, parse_int);
-    parsehelper!(trimmed, State::Power, parse_power);
-    parsehelper!(trimmed, State::SourceInput, parse_source_input);
+    parsehelper!(trimmed, State::MaxVolume, SetState::MaxVolume, parse_int);
+    parsehelper!(trimmed, State::MainVolume, SetState::MainVolume, parse_int);
+    parsehelper!(trimmed, State::Power, SetState::Power, parse_power);
+    parsehelper!(
+        trimmed,
+        State::SourceInput,
+        SetState::SourceInput,
+        parse_source_input
+    );
     None
 }
 
@@ -58,8 +63,8 @@ pub fn parse(str: &str) -> Option<(State, StateValue)> {
 mod test {
     use super::parse;
     use crate::{
-        parse::{PowerState, SourceInputState, State},
-        state::StateValue,
+        parse::{PowerState, SourceInputState},
+        state::SetState,
     };
 
     #[test]
@@ -76,7 +81,7 @@ mod test {
 
     #[test]
     fn max_volume() {
-        let create = |i| Some((State::MaxVolume, StateValue::Integer(i)));
+        let create = |i| Some(SetState::MaxVolume(i));
 
         assert_eq!(parse("MVMAX0"), create(0));
         assert_eq!(parse("MVMAX23"), create(230));
@@ -95,7 +100,7 @@ mod test {
 
     #[test]
     fn main_volume() {
-        let create = |i| Some((State::MainVolume, StateValue::Integer(i)));
+        let create = |i| Some(SetState::MainVolume(i));
 
         assert_eq!(parse("MV 0"), create(0));
         assert_eq!(parse("MV 23"), create(230));
@@ -108,7 +113,7 @@ mod test {
 
     #[test]
     fn power() {
-        let create = |ps| Some((State::Power, StateValue::Power(ps)));
+        let create = |ps| Some(SetState::Power(ps));
 
         assert_eq!(parse("PW"), create(PowerState::Standby));
         assert_eq!(parse("PWOFF"), create(PowerState::Standby));
@@ -117,7 +122,7 @@ mod test {
 
     #[test]
     fn source_input() {
-        let create = |si| Some((State::SourceInput, StateValue::SourceInput(si)));
+        let create = |si| Some(SetState::SourceInput(si));
 
         assert_eq!(parse("SI"), create(SourceInputState::Unknown));
         assert_eq!(parse("SIblub"), create(SourceInputState::Unknown));

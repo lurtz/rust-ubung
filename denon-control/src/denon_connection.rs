@@ -91,7 +91,8 @@ fn thread_func_impl(
             Ok(status_update) => {
                 let parsed_response = parse_response(&status_update);
                 let mut locked_state = state.lock().unwrap();
-                for (state, value) in parsed_response {
+                for sstate in parsed_response {
+                    let (state, value) = sstate.convert();
                     locked_state.insert(state, value);
                 }
             }
@@ -110,7 +111,7 @@ fn thread_func_impl(
     }
 }
 
-fn parse_response(response: &[String]) -> Vec<(State, StateValue)> {
+fn parse_response(response: &[String]) -> Vec<SetState> {
     return response.iter().filter_map(|x| parse(x.as_str())).collect();
 }
 

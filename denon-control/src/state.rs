@@ -125,6 +125,7 @@ impl Display for State {
 }
 
 #[allow(dead_code)] // currently MaxVolume is not used, but supported
+#[derive(Debug, PartialEq)]
 pub enum SetState {
     Power(PowerState),
     SourceInput(SourceInputState),
