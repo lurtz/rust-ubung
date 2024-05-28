@@ -213,9 +213,10 @@ pub mod test {
     }
 
     macro_rules! wait_for_value_in_database {
-        ($denon_connection:ident, $state:expr, $exp_state:pat) => {
+        ($denon_connection:ident, $sstate:expr) => {
+            let (state, value) = $sstate.convert();
             for _ in 0..100000 {
-                if matches!($denon_connection.get($state)?, $exp_state) {
+                if $denon_connection.get(state)? == value {
                     break;
                 }
                 yield_now();
@@ -224,8 +225,9 @@ pub mod test {
     }
 
     macro_rules! assert_db_value {
-        ($denon_connection:ident, $state:expr, $exp_state:pat) => {
-            assert!(matches!($denon_connection.get($state)?, $exp_state));
+        ($denon_connection:ident, $sstate:expr) => {
+            let (state, value) = $sstate.convert();
+            assert_eq!($denon_connection.get(state)?, value);
         };
     }
 
@@ -285,7 +287,7 @@ pub mod test {
     fn connection_receives_volume_from_receiver() -> Result<(), io::Error> {
         let (mut to_denon_client, mut dc) = create_connected_connection()?;
         write_string(&mut to_denon_client, "MV234\r".to_string())?;
-        assert_db_value!(dc, State::MainVolume, StateValue::Integer(234));
+        assert_db_value!(dc, SetState::MainVolume(234));
         Ok(())
     }
 
@@ -296,13 +298,9 @@ pub mod test {
         assert_eq!(StateValue::Unknown, dc.get(State::SourceInput)?);
         assert_eq!(StateValue::Unknown, dc.get(State::Power)?);
         write_string(&mut to_denon_client, "MV234\rSICD\rPWON\r".to_string())?;
-        assert_db_value!(dc, State::MainVolume, StateValue::Integer(234));
-        assert_db_value!(
-            dc,
-            State::SourceInput,
-            StateValue::SourceInput(SourceInputState::Cd)
-        );
-        assert_db_value!(dc, State::Power, StateValue::Power(PowerState::On));
+        assert_db_value!(dc, SetState::MainVolume(234));
+        assert_db_value!(dc, SetState::SourceInput(SourceInputState::Cd));
+        assert_db_value!(dc, SetState::Power(PowerState::On));
         Ok(())
     }
 
@@ -310,10 +308,10 @@ pub mod test {
     fn connection_updates_values_with_newly_received_data() -> Result<(), io::Error> {
         let (mut to_denon_client, mut dc) = create_connected_connection()?;
         write_string(&mut to_denon_client, "MV234\r".to_string())?;
-        assert_db_value!(dc, State::MainVolume, StateValue::Integer(234));
+        assert_db_value!(dc, SetState::MainVolume(234));
         write_string(&mut to_denon_client, "MV320\r".to_string())?;
-        wait_for_value_in_database!(dc, State::MainVolume, StateValue::Integer(320));
-        assert_db_value!(dc, State::MainVolume, StateValue::Integer(320));
+        wait_for_value_in_database!(dc, SetState::MainVolume(320));
+        assert_db_value!(dc, SetState::MainVolume(320));
 
         Ok(())
     }
