@@ -1,9 +1,9 @@
 use std::cmp::{Eq, PartialEq};
 use std::fmt::{Display, Error, Formatter, Write};
-use std::hash::{Hash, Hasher};
+use std::hash::Hash;
 use std::slice::Iter;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PowerState {
     On,
     Standby,
@@ -24,7 +24,7 @@ impl PowerState {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SourceInputState {
     Cd,
     Tuner,
@@ -99,242 +99,117 @@ impl SourceInputState {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum State {
-    Power(PowerState),
-    SourceInput(SourceInputState),
-    MaxVolume(u32),
-    MainVolume(u32),
-    Unknown,
+    Power,
+    SourceInput,
+    MaxVolume,
+    MainVolume,
 }
 
 impl State {
     pub fn value(&self) -> &'static str {
         match *self {
-            State::Power(_) => "PW",
-            State::SourceInput(_) => "SI",
-            State::MaxVolume(_) => "MVMAX",
-            State::MainVolume(_) => "MV",
-            State::Unknown => "Unknown",
+            State::Power => "PW",
+            State::SourceInput => "SI",
+            State::MaxVolume => "MVMAX",
+            State::MainVolume => "MV",
         }
-    }
-
-    pub fn power() -> State {
-        State::Power(PowerState::On)
-    }
-
-    pub fn source_input() -> State {
-        State::SourceInput(SourceInputState::Dvd)
-    }
-
-    pub fn max_volume() -> State {
-        State::MaxVolume(0)
-    }
-
-    pub fn main_volume() -> State {
-        State::MainVolume(0)
     }
 }
 
 impl Display for State {
     fn fmt(&self, format: &mut Formatter) -> Result<(), Error> {
+        write!(format, "{}", self.value())
+    }
+}
+
+#[allow(dead_code)] // currently MaxVolume is not used, but supported
+#[derive(Debug, PartialEq)]
+pub enum SetState {
+    Power(PowerState),
+    SourceInput(SourceInputState),
+    MaxVolume(u32),
+    MainVolume(u32),
+}
+
+impl SetState {
+    pub fn convert(&self) -> (State, StateValue) {
         match *self {
-            State::Power(ref p) => write!(format, "{}{}", self.value(), p),
-            State::SourceInput(ref si) => write!(format, "{}{}", self.value(), si),
-            State::MaxVolume(i) => write!(format, "{}{}", self.value(), i),
-            State::MainVolume(i) => write!(format, "{}{}", self.value(), i),
-            State::Unknown => write!(format, "{}", self.value()),
+            SetState::MainVolume(i) => (State::MainVolume, StateValue::Integer(i)),
+            SetState::MaxVolume(i) => (State::MaxVolume, StateValue::Integer(i)),
+            SetState::Power(ps) => (State::Power, StateValue::Power(ps)),
+            SetState::SourceInput(si) => (State::SourceInput, StateValue::SourceInput(si)),
         }
     }
 }
 
-impl Hash for State {
-    fn hash<H: Hasher>(&self, state: &mut H) {
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum StateValue {
+    Power(PowerState),
+    SourceInput(SourceInputState),
+    Integer(u32),
+    Unknown,
+}
+
+impl Display for StateValue {
+    fn fmt(&self, format: &mut Formatter) -> Result<(), Error> {
         match *self {
-            State::Power(_) => 1.hash(state),
-            State::SourceInput(_) => 2.hash(state),
-            State::MaxVolume(_) => 3.hash(state),
-            State::MainVolume(_) => 4.hash(state),
-            State::Unknown => 5.hash(state),
+            StateValue::Power(ref p) => write!(format, "{}", p),
+            StateValue::SourceInput(ref si) => write!(format, "{}", si),
+            StateValue::Integer(i) => write!(format, "{}", i),
+            StateValue::Unknown => Ok(()),
         }
     }
 }
-
-macro_rules! equal_helper {
-    ($first:ident, $second:ident, $enum_value:path) => {
-        if matches!(*$first, $enum_value(_)) && matches!(*$second, $enum_value(_)) {
-            return true;
-        }
-    };
-}
-
-impl PartialEq for State {
-    fn eq(&self, other: &State) -> bool {
-        equal_helper!(self, other, State::Power);
-        equal_helper!(self, other, State::SourceInput);
-        equal_helper!(self, other, State::MaxVolume);
-        equal_helper!(self, other, State::MainVolume);
-        matches!(self, State::Unknown) && matches!(other, State::Unknown)
-    }
-}
-
-impl Eq for State {}
 
 #[cfg(test)]
 mod test {
+    use super::StateValue;
     use crate::state::{PowerState, SourceInputState, State};
-    use std::collections::HashSet;
+    use std::collections::HashMap;
 
-    fn check_value(hs: &HashSet<State>, expected: &State) {
-        match expected {
-            State::MainVolume(v) => {
-                let get_value = State::MainVolume(v + 1);
-                let value = hs.get(&get_value).unwrap();
-                assert!(matches!(value, State::MainVolume(vv) if vv == v));
-            }
-            State::MaxVolume(v) => {
-                let get_value = State::MaxVolume(v + 1);
-                let value = hs.get(&get_value).unwrap();
-                assert!(matches!(value, State::MaxVolume(vv) if vv == v));
-            }
-            State::Power(p) => {
-                let get_value = match p {
-                    PowerState::On => State::Power(PowerState::Standby),
-                    PowerState::Standby => State::Power(PowerState::On),
-                };
-                let value = hs.get(&get_value).unwrap();
-                assert!(matches!(value, State::Power(vv) if vv == p));
-            }
-            State::SourceInput(si) => {
-                let get_value = State::SourceInput(SourceInputState::Ipd);
-                let value = hs.get(&get_value).unwrap();
-                assert!(matches!(value, State::SourceInput(vv) if vv == si));
-            }
-            State::Unknown => {
-                let value = hs.get(&State::Unknown).unwrap();
-                assert!(matches!(value, State::Unknown));
-            }
-        }
+    fn check_value(hs: &HashMap<State, StateValue>, key: &State, expected_value: &StateValue) {
+        let value = hs.get(key).unwrap();
+        assert!(matches!(value, value if value == expected_value));
     }
 
     #[test]
-    fn state_equal_main_volume() {
-        assert_eq!(State::MainVolume(12), State::MainVolume(23));
-        assert_ne!(State::MainVolume(12), State::MaxVolume(23));
-        assert_ne!(State::MainVolume(12), State::MaxVolume(12));
-        assert_ne!(State::MainVolume(12), State::Power(PowerState::On));
-        assert_ne!(
-            State::MainVolume(12),
-            State::SourceInput(SourceInputState::Bd)
-        );
-        assert_ne!(State::MainVolume(12), State::Unknown);
-    }
+    fn state_works_in_map() {
+        let mut hm = HashMap::new();
+        let mv = State::MainVolume;
+        let i100 = StateValue::Integer(100);
+        hm.insert(mv, i100);
+        assert_eq!(1, hm.len());
+        check_value(&hm, &mv, &i100);
 
-    #[test]
-    fn state_equal_max_volume() {
-        assert_eq!(State::MaxVolume(12), State::MaxVolume(23));
-        assert_ne!(State::MaxVolume(12), State::MainVolume(23));
-        assert_ne!(State::MaxVolume(12), State::MainVolume(12));
-        assert_ne!(State::MaxVolume(12), State::Power(PowerState::On));
-        assert_ne!(
-            State::MaxVolume(12),
-            State::SourceInput(SourceInputState::Bd)
-        );
-        assert_ne!(State::MaxVolume(12), State::Unknown);
-    }
+        let i129 = StateValue::Integer(129);
+        hm.insert(mv, i129);
+        assert_eq!(1, hm.len());
+        check_value(&hm, &mv, &i129);
 
-    #[test]
-    fn state_equal_power() {
-        assert_eq!(State::Power(PowerState::On), State::Power(PowerState::On));
-        assert_eq!(
-            State::Power(PowerState::On),
-            State::Power(PowerState::Standby)
-        );
-        assert_ne!(State::Power(PowerState::On), State::MainVolume(23));
-        assert_ne!(State::Power(PowerState::On), State::MaxVolume(12));
-        assert_ne!(
-            State::Power(PowerState::On),
-            State::SourceInput(SourceInputState::Bd)
-        );
-        assert_ne!(State::Power(PowerState::On), State::Unknown);
-    }
+        let maxv = State::MaxVolume;
+        hm.insert(maxv, i100);
+        assert_eq!(2, hm.len());
+        check_value(&hm, &mv, &i129);
+        check_value(&hm, &maxv, &i100);
 
-    #[test]
-    fn state_equal_source_input() {
-        assert_eq!(
-            State::SourceInput(SourceInputState::Bd),
-            State::SourceInput(SourceInputState::Cd)
-        );
-        assert_eq!(
-            State::SourceInput(SourceInputState::Bd),
-            State::SourceInput(SourceInputState::Fvp)
-        );
-        assert_ne!(
-            State::SourceInput(SourceInputState::Bd),
-            State::MainVolume(23)
-        );
-        assert_ne!(
-            State::SourceInput(SourceInputState::Bd),
-            State::MaxVolume(12)
-        );
-        assert_ne!(
-            State::SourceInput(SourceInputState::Bd),
-            State::Power(PowerState::On)
-        );
-        assert_ne!(State::SourceInput(SourceInputState::Bd), State::Unknown);
-    }
+        let power = State::Power;
+        let pon = StateValue::Power(PowerState::On);
+        hm.insert(power, pon);
+        assert_eq!(3, hm.len());
+        check_value(&hm, &mv, &i129);
+        check_value(&hm, &maxv, &i100);
+        check_value(&hm, &power, &pon);
 
-    #[test]
-    fn state_equal_unknown() {
-        assert_eq!(State::Unknown, State::Unknown);
-        assert_ne!(State::Unknown, State::MainVolume(23));
-        assert_ne!(State::Unknown, State::MaxVolume(12));
-        assert_ne!(State::Unknown, State::SourceInput(SourceInputState::Bd));
-        assert_ne!(State::Unknown, State::SourceInput(SourceInputState::Bd));
-    }
-
-    #[test]
-    fn state_works_in_set() {
-        let mut hs = HashSet::new();
-        let mv_100 = State::MainVolume(100);
-        hs.replace(mv_100.clone());
-        assert_eq!(1, hs.len());
-        check_value(&hs, &mv_100);
-
-        let mv_129 = State::MainVolume(129);
-        hs.replace(mv_129.clone());
-        assert_eq!(1, hs.len());
-        check_value(&hs, &mv_129);
-
-        let maxv_100 = State::MaxVolume(100);
-        hs.replace(maxv_100.clone());
-        assert_eq!(2, hs.len());
-        check_value(&hs, &mv_129);
-        check_value(&hs, &maxv_100);
-
-        let power_on = State::Power(PowerState::On);
-        hs.replace(power_on.clone());
-        assert_eq!(3, hs.len());
-        check_value(&hs, &mv_129);
-        check_value(&hs, &maxv_100);
-        check_value(&hs, &power_on);
-
-        let sibd = State::SourceInput(SourceInputState::Bd);
-        hs.replace(sibd.clone());
-        assert_eq!(4, hs.len());
-        check_value(&hs, &mv_129);
-        check_value(&hs, &maxv_100);
-        check_value(&hs, &power_on);
-        check_value(&hs, &sibd);
-
-        let unkown = State::Unknown;
-        hs.replace(unkown.clone());
-        assert_eq!(5, hs.len());
-        check_value(&hs, &mv_129);
-        check_value(&hs, &maxv_100);
-        check_value(&hs, &power_on);
-        check_value(&hs, &sibd);
-        check_value(&hs, &unkown);
+        let si = State::SourceInput;
+        let sibd = StateValue::SourceInput(SourceInputState::Bd);
+        hm.insert(si, sibd);
+        assert_eq!(4, hm.len());
+        check_value(&hm, &mv, &i129);
+        check_value(&hm, &maxv, &i100);
+        check_value(&hm, &power, &pon);
+        check_value(&hm, &si, &sibd);
     }
 
     #[test]
@@ -359,13 +234,25 @@ mod test {
 
     #[test]
     fn state_display() {
-        assert_eq!("MV23", State::MainVolume(23).to_string());
-        assert_eq!("MVMAX230", State::MaxVolume(230).to_string());
-        assert_eq!("PWON", State::Power(PowerState::On).to_string());
+        assert_eq!("MV", State::MainVolume.to_string());
+        assert_eq!("MVMAX", State::MaxVolume.to_string());
+        assert_eq!("PW", State::Power.to_string());
+        assert_eq!("SI", State::SourceInput.to_string());
+    }
+
+    #[test]
+    fn state_statevalue_display() {
+        let ts = |s, sv| format!("{}{}", s, sv);
+        assert_eq!("MV230", ts(State::MainVolume, StateValue::Integer(230)));
+        assert_eq!("MVMAX666", ts(State::MaxVolume, StateValue::Integer(666)));
+        assert_eq!("PWON", ts(State::Power, StateValue::Power(PowerState::On)));
         assert_eq!(
-            "SIDOCK",
-            State::SourceInput(SourceInputState::Dock).to_string()
+            "SIDVD",
+            ts(
+                State::SourceInput,
+                StateValue::SourceInput(SourceInputState::Dvd)
+            )
         );
-        assert_eq!("Unknown", State::Unknown.to_string());
+        assert_eq!("PW", ts(State::Power, StateValue::Unknown));
     }
 }
