@@ -6,7 +6,6 @@ mod avahi;
 mod avahi3;
 mod avahi_error;
 mod denon_connection;
-mod operation;
 mod parse;
 mod state;
 
@@ -163,11 +162,10 @@ mod test {
     use crate::avahi3;
     use crate::avahi_error;
     use crate::denon_connection::read;
-    use crate::denon_connection::write;
+    use crate::denon_connection::write_state;
     use crate::get_avahi_impl;
     use crate::get_receiver_and_port;
     use crate::main2;
-    use crate::operation::Operation;
     use crate::state::SetState;
     use crate::Error;
     use crate::PowerState;
@@ -175,14 +173,9 @@ mod test {
     use crate::{
         denon_connection::test::create_connected_connection, parse::State, parse_args, print_status,
     };
-    use std::io::{self, Write};
+    use std::io;
     use std::net::TcpListener;
     use std::thread;
-
-    fn write_state(stream: &mut dyn Write, input: SetState) -> Result<(), std::io::Error> {
-        let (state, state_value) = input.convert();
-        write(stream, state, state_value, Operation::Set)
-    }
 
     #[test]
     #[should_panic]
