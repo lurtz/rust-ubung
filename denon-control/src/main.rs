@@ -336,7 +336,7 @@ mod test {
             "localhost",
             "-s",
             "-p",
-            "OFF",
+            "STANDBY",
             "-i",
             "CD",
             "-v",
@@ -371,6 +371,11 @@ mod test {
             "{}{}",
             State::MainVolume,
             StateValue::Integer(50)
+        )));
+        assert!(received_data.contains(&format!(
+            "{}{}",
+            State::Power,
+            StateValue::Power(PowerState::Standby)
         )));
         Ok(())
     }
