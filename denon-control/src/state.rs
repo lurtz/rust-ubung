@@ -144,6 +144,13 @@ impl SetState {
     }
 }
 
+impl Display for SetState {
+    fn fmt(&self, format: &mut Formatter) -> Result<(), Error> {
+        let (state, value) = self.convert();
+        write!(format, "{}{}", state, value)
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum StateValue {
     Power(PowerState),
@@ -166,7 +173,7 @@ impl Display for StateValue {
 #[cfg(test)]
 mod test {
     use super::StateValue;
-    use crate::state::{PowerState, SourceInputState, State};
+    use crate::state::{PowerState, SetState, SourceInputState, State};
     use std::collections::HashMap;
 
     fn check_value(hs: &HashMap<State, StateValue>, key: &State, expected_value: &StateValue) {
@@ -254,5 +261,16 @@ mod test {
             )
         );
         assert_eq!("PW", ts(State::Power, StateValue::Unknown));
+    }
+
+    #[test]
+    fn setstate_diplay() {
+        assert_eq!("MV230", SetState::MainVolume(230).to_string());
+        assert_eq!("MVMAX666", SetState::MaxVolume(666).to_string());
+        assert_eq!("PWON", SetState::Power(PowerState::On).to_string());
+        assert_eq!(
+            "SIDVD",
+            SetState::SourceInput(SourceInputState::Dvd).to_string()
+        );
     }
 }

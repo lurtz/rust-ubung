@@ -6,7 +6,6 @@ mod avahi;
 mod avahi3;
 mod avahi_error;
 mod denon_connection;
-mod operation;
 mod parse;
 mod state;
 
@@ -163,26 +162,20 @@ mod test {
     use crate::avahi3;
     use crate::avahi_error;
     use crate::denon_connection::read;
-    use crate::denon_connection::write;
+    use crate::denon_connection::write_state;
     use crate::get_avahi_impl;
     use crate::get_receiver_and_port;
     use crate::main2;
-    use crate::operation::Operation;
-    use crate::state::{SetState, StateValue};
+    use crate::state::SetState;
     use crate::Error;
     use crate::PowerState;
     use crate::SourceInputState;
     use crate::{
         denon_connection::test::create_connected_connection, parse::State, parse_args, print_status,
     };
-    use std::io::{self, Write};
+    use std::io;
     use std::net::TcpListener;
     use std::thread;
-
-    fn write_state(stream: &mut dyn Write, input: SetState) -> Result<(), std::io::Error> {
-        let (state, state_value) = input.convert();
-        write(stream, state, state_value, Operation::Set)
-    }
 
     #[test]
     #[should_panic]
@@ -336,7 +329,7 @@ mod test {
             "localhost",
             "-s",
             "-p",
-            "OFF",
+            "STANDBY",
             "-i",
             "CD",
             "-v",
@@ -361,17 +354,10 @@ mod test {
         main2(args, String::from("localhost"), local_port).unwrap();
 
         let received_data = acceptor.join().unwrap()?;
-        assert!(received_data.contains(&format!("{}?", State::Power.value())));
-        assert!(received_data.contains(&format!(
-            "{}{}",
-            State::SourceInput,
-            StateValue::SourceInput(SourceInputState::Cd)
-        )));
-        assert!(received_data.contains(&format!(
-            "{}{}",
-            State::MainVolume,
-            StateValue::Integer(50)
-        )));
+        assert!(received_data.contains(&format!("{}?", State::Power)));
+        assert!(received_data.contains(&format!("{}", SetState::SourceInput(SourceInputState::Cd))));
+        assert!(received_data.contains(&format!("{}", SetState::MainVolume(50))));
+        assert!(received_data.contains(&format!("{}", SetState::Power(PowerState::Standby))));
         Ok(())
     }
 

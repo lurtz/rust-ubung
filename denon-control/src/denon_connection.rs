@@ -1,5 +1,5 @@
 use crate::parse::parse;
-pub use crate::parse::{Operation, State};
+pub use crate::parse::State;
 use crate::state::{SetState, StateValue};
 
 use std::collections::HashMap;
@@ -18,18 +18,12 @@ fn write_string(stream: &mut dyn Write, input: String) -> Result<(), std::io::Er
     Ok(())
 }
 
-pub fn write(
-    stream: &mut dyn Write,
-    state: State,
-    value: StateValue,
-    op: Operation,
-) -> Result<(), io::Error> {
-    let command = if Operation::Set == op {
-        format!("{}{}\r", state, value)
-    } else {
-        format!("{}?\r", state.value())
-    };
-    write_string(stream, command)
+pub fn write_state(stream: &mut dyn Write, state: SetState) -> Result<(), io::Error> {
+    write_string(stream, format!("{}\r", state))
+}
+
+fn write_query(stream: &mut dyn Write, state: State) -> Result<(), io::Error> {
+    write_string(stream, format!("{}?\r", state))
 }
 
 pub fn read(mut stream: &TcpStream, lines: u8) -> Result<Vec<String>, std::io::Error> {
@@ -149,7 +143,7 @@ impl DenonConnection {
                 return Ok(*received_state);
             }
         }
-        self.query(op, StateValue::Unknown, Operation::Query)?;
+        write_query(&mut self.to_receiver, op)?;
         for _ in 0..50 {
             thread::sleep(Duration::from_millis(10));
             let locked_state = self.state.lock().unwrap();
@@ -160,17 +154,12 @@ impl DenonConnection {
         Ok(StateValue::Unknown)
     }
 
-    fn query(&mut self, state: State, value: StateValue, op: Operation) -> Result<(), io::Error> {
-        write(&mut self.to_receiver, state, value, op)
-    }
-
     pub fn stop(&mut self) -> Result<(), io::Error> {
         self.to_receiver.shutdown(std::net::Shutdown::Both)
     }
 
     pub fn set(&mut self, sstate: SetState) -> Result<(), io::Error> {
-        let (state, state_value) = sstate.convert();
-        self.query(state, state_value, Operation::Set)
+        write_state(&mut self.to_receiver, sstate)
     }
 }
 
