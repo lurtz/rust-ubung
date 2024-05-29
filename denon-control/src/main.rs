@@ -168,7 +168,7 @@ mod test {
     use crate::get_receiver_and_port;
     use crate::main2;
     use crate::operation::Operation;
-    use crate::state::{SetState, StateValue};
+    use crate::state::SetState;
     use crate::Error;
     use crate::PowerState;
     use crate::SourceInputState;
@@ -361,22 +361,10 @@ mod test {
         main2(args, String::from("localhost"), local_port).unwrap();
 
         let received_data = acceptor.join().unwrap()?;
-        assert!(received_data.contains(&format!("{}?", State::Power.value())));
-        assert!(received_data.contains(&format!(
-            "{}{}",
-            State::SourceInput,
-            StateValue::SourceInput(SourceInputState::Cd)
-        )));
-        assert!(received_data.contains(&format!(
-            "{}{}",
-            State::MainVolume,
-            StateValue::Integer(50)
-        )));
-        assert!(received_data.contains(&format!(
-            "{}{}",
-            State::Power,
-            StateValue::Power(PowerState::Standby)
-        )));
+        assert!(received_data.contains(&format!("{}?", State::Power)));
+        assert!(received_data.contains(&format!("{}", SetState::SourceInput(SourceInputState::Cd))));
+        assert!(received_data.contains(&format!("{}", SetState::MainVolume(50))));
+        assert!(received_data.contains(&format!("{}", SetState::Power(PowerState::Standby))));
         Ok(())
     }
 
