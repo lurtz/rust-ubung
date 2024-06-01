@@ -3,7 +3,7 @@ pub use crate::parse::State;
 use crate::state::{SetState, StateValue};
 
 use std::collections::HashMap;
-use std::io::{self, Read, Write};
+use std::io::{self, ErrorKind, Read, Write};
 use std::net::TcpStream;
 use std::panic;
 use std::sync::{Arc, Mutex};
@@ -92,9 +92,7 @@ fn thread_func_impl(
             }
             // check for timeout error -> continue on timeout error, else abort
             Err(e) => {
-                if std::io::ErrorKind::TimedOut != e.kind()
-                    && std::io::ErrorKind::WouldBlock != e.kind()
-                {
+                if ErrorKind::TimedOut != e.kind() && ErrorKind::WouldBlock != e.kind() {
                     if e.raw_os_error() != Some(ESHUTDOWN) {
                         return Err(e);
                     }
@@ -120,8 +118,7 @@ impl DenonConnection {
         let state = Arc::new(Mutex::new(HashMap::new()));
         let cloned_state = state.clone();
         let s = TcpStream::connect((denon_name.as_str(), denon_port))?;
-        let read_timeout = None;
-        s.set_read_timeout(read_timeout)?;
+        s.set_read_timeout(None)?;
         s.set_nonblocking(false)?;
         let s2 = s.try_clone()?;
 
