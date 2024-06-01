@@ -107,20 +107,15 @@ pub enum State {
     MainVolume,
 }
 
-impl State {
-    pub fn value(&self) -> &'static str {
-        match *self {
+impl Display for State {
+    fn fmt(&self, format: &mut Formatter) -> Result<(), Error> {
+        let val = match *self {
             State::Power => "PW",
             State::SourceInput => "SI",
             State::MaxVolume => "MVMAX",
             State::MainVolume => "MV",
-        }
-    }
-}
-
-impl Display for State {
-    fn fmt(&self, format: &mut Formatter) -> Result<(), Error> {
-        write!(format, "{}", self.value())
+        };
+        write!(format, "{}", val)
     }
 }
 

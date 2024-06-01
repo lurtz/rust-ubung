@@ -5,7 +5,7 @@ pub use crate::state::State;
 
 macro_rules! parsehelper {
     ($trimmed:expr, $op:expr, $ss:expr, $func:path) => {
-        if $trimmed.starts_with($op.value()) {
+        if $trimmed.starts_with($op.to_string().as_str()) {
             let value = get_value($trimmed, &$op);
             let x = $func(value);
             return Some($ss(x));
@@ -14,7 +14,7 @@ macro_rules! parsehelper {
 }
 
 fn get_value<'a>(trimmed: &'a str, op: &State) -> &'a str {
-    let to_skip = op.value().len();
+    let to_skip = op.to_string().len();
     trimmed[to_skip..].trim()
 }
 
