@@ -87,55 +87,55 @@ pub fn with_distance_units(i: u32) -> String {
     convert(i, dist_impl).join(" ")
 }
 
-#[test]
-fn test_to_roman() {
-    assert_eq!("ø", to_roman(0));
-    assert_eq!("I", to_roman(1));
-    assert_eq!("II", to_roman(2));
-    assert_eq!("III", to_roman(3));
-    assert_eq!("IV", to_roman(4));
-    assert_eq!("V", to_roman(5));
-    assert_eq!("VI", to_roman(6));
-    assert_eq!("IX", to_roman(9));
-    assert_eq!("X", to_roman(10));
-    assert_eq!("XI", to_roman(11));
-    assert_eq!("XIX", to_roman(19));
-    assert_eq!("XX", to_roman(20));
-    assert_eq!("XXI", to_roman(21));
-    assert_eq!("XL", to_roman(40));
-    assert_eq!("XLIX", to_roman(49));
-    assert_eq!("L", to_roman(50));
-    assert_eq!("LX", to_roman(60));
-    assert_eq!("LXI", to_roman(61));
-    assert_eq!("LXXXIX", to_roman(89));
-    assert_eq!("XC", to_roman(90));
-    assert_eq!("XCIV", to_roman(94));
-    assert_eq!("XCIX", to_roman(99));
-    assert_eq!("C", to_roman(100));
-    assert_eq!("CI", to_roman(101));
-    assert_eq!("CCCXCIV", to_roman(394));
-    assert_eq!("CDXCIV", to_roman(494));
-    assert_eq!("DI", to_roman(501));
-    assert_eq!("DCCCLXXVI", to_roman(876));
-    assert_eq!("DCCCLXXXIX", to_roman(889));
-    assert_eq!("CM", to_roman(900));
-    assert_eq!("CMI", to_roman(901));
-    assert_eq!("CMXCIX", to_roman(999));
-    assert_eq!("M", to_roman(1000));
-    assert_eq!("MI", to_roman(1001));
-}
+#[cfg(test)]
+mod test {
+    use crate::{to_roman, with_distance_units};
 
-#[test]
-fn test_with_distance_units() {
-    assert_eq!("0m", with_distance_units(0));
-    assert_eq!("1mm", with_distance_units(1));
-    assert_eq!("1cm", with_distance_units(10));
-    assert_eq!("1m", with_distance_units(1000));
-    assert_eq!("1km", with_distance_units(1000000));
-    assert_eq!("20km 345m 32cm 7mm", with_distance_units(20345327));
-}
+    #[test]
+    fn test_to_roman() {
+        assert_eq!("ø", to_roman(0));
+        assert_eq!("I", to_roman(1));
+        assert_eq!("II", to_roman(2));
+        assert_eq!("III", to_roman(3));
+        assert_eq!("IV", to_roman(4));
+        assert_eq!("V", to_roman(5));
+        assert_eq!("VI", to_roman(6));
+        assert_eq!("IX", to_roman(9));
+        assert_eq!("X", to_roman(10));
+        assert_eq!("XI", to_roman(11));
+        assert_eq!("XIX", to_roman(19));
+        assert_eq!("XX", to_roman(20));
+        assert_eq!("XXI", to_roman(21));
+        assert_eq!("XL", to_roman(40));
+        assert_eq!("XLIX", to_roman(49));
+        assert_eq!("L", to_roman(50));
+        assert_eq!("LX", to_roman(60));
+        assert_eq!("LXI", to_roman(61));
+        assert_eq!("LXXXIX", to_roman(89));
+        assert_eq!("XC", to_roman(90));
+        assert_eq!("XCIV", to_roman(94));
+        assert_eq!("XCIX", to_roman(99));
+        assert_eq!("C", to_roman(100));
+        assert_eq!("CI", to_roman(101));
+        assert_eq!("CCCXCIV", to_roman(394));
+        assert_eq!("CDXCIV", to_roman(494));
+        assert_eq!("DI", to_roman(501));
+        assert_eq!("DCCCLXXVI", to_roman(876));
+        assert_eq!("DCCCLXXXIX", to_roman(889));
+        assert_eq!("CM", to_roman(900));
+        assert_eq!("CMI", to_roman(901));
+        assert_eq!("CMXCIX", to_roman(999));
+        assert_eq!("M", to_roman(1000));
+        assert_eq!("MI", to_roman(1001));
+    }
 
-fn main() {
-    println!("Hello, world!");
-    //    let value_to_string = vec![(100, "C"), (90, "XC")];
+    #[test]
+    fn test_with_distance_units() {
+        assert_eq!("0m", with_distance_units(0));
+        assert_eq!("1mm", with_distance_units(1));
+        assert_eq!("1cm", with_distance_units(10));
+        assert_eq!("1m", with_distance_units(1000));
+        assert_eq!("1km", with_distance_units(1000000));
+        assert_eq!("20km 345m 32cm 7mm", with_distance_units(20345327));
+    }
 }

@@ -256,6 +256,13 @@ mod tests {
         let m0 = mmatrix![2.0, 3.0; 4.0, 5.0];
         assert_eq!(mmatrix![16.0, 21.0; 28.0, 37.0], m0.clone() * m0);
     }
+
+    #[test]
+    fn display() {
+        let m0 = mmatrix!(1,2,3;4,5,6;7,8,9);
+        let s = format!("{}", m0);
+        assert_eq!("3x3-Matrix([1, 2, 3, 4, 5, 6, 7, 8, 9])", s);
+    }
 }
 
 #[cfg(not(test))]

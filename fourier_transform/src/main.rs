@@ -103,8 +103,10 @@ fn main() {
 
 #[cfg(test)]
 mod test {
+    use crate::create_waveforms;
     use crate::{
-        create_waveform, display_waveform, fourier_transform, inverse_fourier_transform, CosParam,
+        create_waveform, display_waveform, fourier_transform, inverse_fourier_transform, main,
+        CosParam,
     };
     use num_complex::Complex;
     use num_complex::ComplexFloat;
@@ -112,6 +114,18 @@ mod test {
 
     fn calc_open_end(resolution: i32) -> f64 {
         ((resolution - 1) as f64 / resolution as f64 * PI * 2.0).cos()
+    }
+
+    #[test]
+    fn main_does_not_crash() {
+        main();
+    }
+
+    #[test]
+    fn create_waveforms_creates_multiple_waveforms() {
+        let wfs = create_waveforms();
+        // some resolution is used
+        assert!(1 < wfs.len());
     }
 
     #[test]
