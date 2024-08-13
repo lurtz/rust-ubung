@@ -6,9 +6,11 @@ trait TraitWithAssocType {
 
     fn get_x(&self) -> Self::X;
     fn get_y(&self) -> Self::Y;
+}
 
-    fn print(&self) {
-        println!("{}, {:?}", self.get_x(), self.get_y());
+impl<X: fmt::Display, Y: fmt::Debug> fmt::Display for dyn TraitWithAssocType<X = X, Y = Y> {
+    fn fmt(&self, format: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(format, "{}, {:?}", self.get_x(), self.get_y())
     }
 }
 
@@ -70,17 +72,54 @@ fn main() {
         i: 34,
         data: vec![1, 2, 3, 4, 5],
     };
-    x.print();
+    println!("{}", &x as &dyn TraitWithAssocType<X = u32, Y = Vec<u32>>);
     let y = TestStruct2 {
         s: String::from("bblabla"),
         i: 666,
         data: vec![7, 7, 7, 4, 3, 2],
     };
-    y.print();
+    println!(
+        "{}",
+        &y as &dyn TraitWithAssocType<X = String, Y = TestStruct>
+    );
 
     bla(&x);
     bla(&y);
 
     bla2(&x);
-    //    bla2(&y);
+    // bla2(&y);
+}
+
+#[cfg(test)]
+mod test {
+    use crate::{main, TestStruct, TestStruct2, TraitWithAssocType};
+
+    #[test]
+    fn display_returns_expected_strings() {
+        let x = TestStruct {
+            i: 66,
+            data: vec![34, 2, 432, 432],
+        };
+        assert_eq!(
+            "66, [34, 2, 432, 432]",
+            format!("{}", &x as &dyn TraitWithAssocType<X = u32, Y = Vec<u32>>)
+        );
+        let y = TestStruct2 {
+            s: String::from("test"),
+            i: 190,
+            data: vec![1, 2, 3],
+        };
+        assert_eq!(
+            "test, TestStruct { i: 190, data: [1, 2, 3] }",
+            format!(
+                "{}",
+                &y as &dyn TraitWithAssocType<X = String, Y = TestStruct>
+            )
+        );
+    }
+
+    #[test]
+    fn call_main() {
+        main();
+    }
 }
