@@ -12,6 +12,21 @@ use std::time::Duration;
 
 const ESHUTDOWN: i32 = 108;
 
+pub trait ReadStream {
+    fn peekly(&self, buf: &mut [u8]) -> io::Result<usize>;
+    fn read_exactly(&mut self, buf: &mut [u8]) -> io::Result<()>;
+}
+
+impl ReadStream for TcpStream {
+    fn peekly(&self, buf: &mut [u8]) -> io::Result<usize> {
+        self.peek(buf)
+    }
+
+    fn read_exactly(&mut self, buf: &mut [u8]) -> io::Result<()> {
+        self.read_exact(buf)
+    }
+}
+
 fn write_string(stream: &mut dyn Write, input: String) -> Result<(), std::io::Error> {
     let volume_command = input.into_bytes();
     stream.write_all(&volume_command[..])?;
@@ -26,14 +41,14 @@ fn write_query(stream: &mut dyn Write, state: State) -> Result<(), io::Error> {
     write_string(stream, format!("{}?\r", state))
 }
 
-pub fn read(mut stream: &TcpStream, lines: u8) -> Result<Vec<String>, std::io::Error> {
+pub fn read(stream: &mut impl ReadStream, lines: u8) -> Result<Vec<String>, std::io::Error> {
     let mut result = Vec::<String>::new();
 
     // guarantee to read a full line. check that read content ends with \r
     while (lines as usize) != result.len() {
         let mut buffer = [0; 100];
         let read_bytes;
-        match stream.peek(&mut buffer) {
+        match stream.peekly(&mut buffer) {
             Ok(rb) => read_bytes = rb,
             Err(e) => {
                 if result.is_empty() {
@@ -70,14 +85,14 @@ pub fn read(mut stream: &TcpStream, lines: u8) -> Result<Vec<String>, std::io::E
             result.push(tmp.trim().to_owned());
         }
 
-        stream.read_exact(&mut buffer[0..bytes_to_extract])?;
+        stream.read_exactly(&mut buffer[0..bytes_to_extract])?;
     }
 
     Ok(result)
 }
 
 fn thread_func_impl(
-    stream: &TcpStream,
+    stream: &mut impl ReadStream,
     state: Arc<Mutex<HashMap<State, StateValue>>>,
 ) -> Result<(), std::io::Error> {
     loop {
@@ -120,9 +135,9 @@ impl DenonConnection {
         let s = TcpStream::connect((denon_name.as_str(), denon_port))?;
         s.set_read_timeout(None)?;
         s.set_nonblocking(false)?;
-        let s2 = s.try_clone()?;
+        let mut s2 = s.try_clone()?;
 
-        let threadhandle = thread::spawn(move || thread_func_impl(&s2, cloned_state));
+        let threadhandle = thread::spawn(move || thread_func_impl(&mut s2, cloned_state));
 
         Ok(DenonConnection {
             state,
