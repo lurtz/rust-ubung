@@ -103,10 +103,9 @@ fn main() {
 
 #[cfg(test)]
 mod test {
-    use crate::create_waveforms;
     use crate::{
-        create_waveform, display_waveform, fourier_transform, inverse_fourier_transform, main,
-        CosParam,
+        create_waveform, create_waveforms, display_waveform, fourier_transform,
+        inverse_fourier_transform, main, CosParam,
     };
     use num_complex::Complex;
     use num_complex::ComplexFloat;
