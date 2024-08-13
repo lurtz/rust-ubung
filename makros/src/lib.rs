@@ -14,6 +14,8 @@ pub fn skip_prefix<'a>(line: &'a str, prefix: &str) -> &'a str {
 
 #[cfg(test)]
 mod tests {
+    use crate::skip_prefix;
+
     #[test]
     fn round_brackets() {
         let x = my_vec!(1, 2, 3);
@@ -62,7 +64,9 @@ mod tests {
         let lang = "en";
 
         let p = format!("lang:{}=", lang);
-        let x = ::skip_prefix(line.as_str(), p.as_str());
+        let x = skip_prefix(line.as_str(), p.as_str());
         assert_eq!("Hello World!", x);
+        let y = skip_prefix(line.as_str(), "blub");
+        assert_eq!(y, y)
     }
 }

@@ -1,7 +1,7 @@
 use std::thread;
 
 #[no_mangle]
-pub extern "C" fn process() {
+pub extern "C" fn process() -> u64 {
     let handles: Vec<_> = (0..10)
         .map(|_| {
             thread::spawn(|| {
@@ -14,14 +14,24 @@ pub extern "C" fn process() {
         })
         .collect();
 
+    let mut ret_val = 0;
+
     for h in handles {
-        println!(
-            "Thread finished with count={}",
-            h.join().map_err(|_| "Could not join a thread!").unwrap()
-        );
+        let jr = h.join();
+        if jr.is_ok() {
+            ret_val += jr.unwrap();
+        }
     }
-    println!("done!");
+
+    ret_val
 }
 
-#[test]
-fn it_works() {}
+#[cfg(test)]
+mod test {
+    use crate::process;
+
+    #[test]
+    fn it_works() {
+        assert_eq!(10 * 5000000, process());
+    }
+}

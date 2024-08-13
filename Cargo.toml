@@ -4,14 +4,9 @@ resolver = "2"
 members = [
         "adder",
         "assoc_types",
-        "bla",
         "denon-control",
-        "dining_philosophers",
         "embed",
-        "error_handling",
 	"fourier_transform",
-        "guessing_game",
-        "hello_world",
         "makros",
         "matrix",
         "romans"

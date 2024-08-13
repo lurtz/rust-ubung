@@ -1,7 +1,0 @@
-[package]
-name = "guessing_game"
-version = "0.0.1"
-authors = [ "Your name <you@example.com>" ]
-
-[dependencies]
-rand="0.8"

@@ -2,8 +2,8 @@
 
 from ctypes import cdll
 
-lib = cdll.LoadLibrary("target/release/libembed.so")
+lib = cdll.LoadLibrary("target/debug/libembed.so")
 
-lib.process()
+print(lib.process())
 
 print("done!")
