@@ -23,7 +23,7 @@ pub extern "C" fn process() -> u64 {
         }
     }
 
-    return ret_val;
+    ret_val
 }
 
 #[cfg(test)]
