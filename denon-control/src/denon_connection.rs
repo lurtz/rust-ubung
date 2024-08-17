@@ -209,6 +209,7 @@ pub mod test {
     use crate::denon_connection::{read, write_string};
     use crate::parse::{PowerState, SourceInputState};
     use crate::state::{SetState, State, StateValue};
+    use std::cmp::min;
     use std::io::{self, Error};
     use std::net::{TcpListener, TcpStream};
     use std::sync::Arc;
@@ -356,6 +357,42 @@ pub mod test {
         let lines = read(&mut client, 2)?;
         assert_eq!(lines, vec!["blubbla".to_owned()]);
 
+        Ok(())
+    }
+
+    fn copy_string_into_slice(src: &str, dst: &mut [u8]) -> usize {
+        let length = min(src.len(), dst.len());
+        let mut chars = src.chars();
+        for i in 0..length {
+            dst[i] = chars.next().unwrap() as u8;
+        }
+        length
+    }
+
+    #[test]
+    fn read_reads_content_gets_error_and_returns_content() -> Result<(), io::Error> {
+        let mut sequence = Sequence::new();
+        let mut mstream = MockReadStream::new();
+        // peek works
+        mstream
+            .expect_peekly()
+            .times(1)
+            .in_sequence(&mut sequence)
+            .returning(|buf| Ok(copy_string_into_slice("some_data\r", buf)));
+        // read works
+        mstream
+            .expect_read_exactly()
+            .times(1)
+            .in_sequence(&mut sequence)
+            .returning(|_| Ok(()));
+        // peek with error
+        mstream
+            .expect_peekly()
+            .times(1)
+            .in_sequence(&mut sequence)
+            .returning(|_| Err(Error::from(io::ErrorKind::ConnectionAborted)));
+        let lines = read(&mut mstream, 2)?;
+        assert_eq!(vec!(String::from("some_data")), lines);
         Ok(())
     }
 
