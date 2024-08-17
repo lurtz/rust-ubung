@@ -10,8 +10,12 @@ use std::sync::{Arc, Mutex};
 use std::thread::{self, JoinHandle};
 use std::time::Duration;
 
+#[cfg(test)]
+use mockall::{automock, predicate::*};
+
 const ESHUTDOWN: i32 = 108;
 
+#[cfg_attr(test, automock)]
 pub trait ReadStream {
     fn peekly(&self, buf: &mut [u8]) -> io::Result<usize>;
     fn read_exactly(&self, buf: &mut [u8]) -> io::Result<()>;
@@ -199,13 +203,15 @@ impl Drop for DenonConnection {
 
 #[cfg(test)]
 pub mod test {
-    use super::DenonConnection;
+    use mockall::Sequence;
+
+    use super::{thread_func_impl, DenonConnection, MockReadStream};
     use crate::denon_connection::{read, write_string};
-    use crate::parse::PowerState;
-    use crate::parse::SourceInputState;
+    use crate::parse::{PowerState, SourceInputState};
     use crate::state::{SetState, State, StateValue};
-    use std::io;
+    use std::io::{self, Error};
     use std::net::{TcpListener, TcpStream};
+    use std::sync::Arc;
     use std::thread::yield_now;
 
     pub fn create_connected_connection() -> Result<(TcpStream, DenonConnection), io::Error> {
@@ -351,5 +357,43 @@ pub mod test {
         assert_eq!(lines, vec!["blubbla".to_owned()]);
 
         Ok(())
+    }
+
+    #[test]
+    fn thread_func_impl_gets_error_and_returns() {
+        let mut mstream = MockReadStream::new();
+        mstream
+            .expect_peekly()
+            .returning(|_| Err(Error::from(io::ErrorKind::ConnectionAborted)));
+        let state = Arc::default();
+        let thread_err = thread_func_impl(&mstream, state);
+        assert!(thread_err.is_err());
+        assert_eq!(
+            io::ErrorKind::ConnectionAborted,
+            thread_err.unwrap_err().kind()
+        );
+    }
+
+    #[test]
+    fn thread_func_impl_gets_timeout_then_error_and_returns() {
+        let mut sequence = Sequence::new();
+        let mut mstream = MockReadStream::new();
+        mstream
+            .expect_peekly()
+            .times(1)
+            .in_sequence(&mut sequence)
+            .returning(|_| Err(Error::from(io::ErrorKind::TimedOut)));
+        mstream
+            .expect_peekly()
+            .times(1)
+            .in_sequence(&mut sequence)
+            .returning(|_| Err(Error::from(io::ErrorKind::ConnectionAborted)));
+        let state = Arc::default();
+        let thread_err = thread_func_impl(&mstream, state);
+        assert!(thread_err.is_err());
+        assert_eq!(
+            io::ErrorKind::ConnectionAborted,
+            thread_err.unwrap_err().kind()
+        );
     }
 }
