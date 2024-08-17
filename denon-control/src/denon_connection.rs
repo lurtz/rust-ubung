@@ -14,7 +14,7 @@ const ESHUTDOWN: i32 = 108;
 
 pub trait ReadStream {
     fn peekly(&self, buf: &mut [u8]) -> io::Result<usize>;
-    fn read_exactly(&mut self, buf: &mut [u8]) -> io::Result<()>;
+    fn read_exactly(&self, buf: &mut [u8]) -> io::Result<()>;
 }
 
 impl ReadStream for TcpStream {
@@ -22,8 +22,10 @@ impl ReadStream for TcpStream {
         self.peek(buf)
     }
 
-    fn read_exactly(&mut self, buf: &mut [u8]) -> io::Result<()> {
-        self.read_exact(buf)
+    fn read_exactly(&self, buf: &mut [u8]) -> io::Result<()> {
+        // why does this work?
+        let mut mself = self;
+        mself.read_exact(buf)
     }
 }
 
@@ -41,7 +43,7 @@ fn write_query(stream: &mut dyn Write, state: State) -> Result<(), io::Error> {
     write_string(stream, format!("{}?\r", state))
 }
 
-pub fn read(stream: &mut impl ReadStream, lines: u8) -> Result<Vec<String>, std::io::Error> {
+pub fn read(stream: &impl ReadStream, lines: u8) -> Result<Vec<String>, std::io::Error> {
     let mut result = Vec::<String>::new();
 
     // guarantee to read a full line. check that read content ends with \r
@@ -92,7 +94,7 @@ pub fn read(stream: &mut impl ReadStream, lines: u8) -> Result<Vec<String>, std:
 }
 
 fn thread_func_impl(
-    stream: &mut impl ReadStream,
+    stream: &impl ReadStream,
     state: Arc<Mutex<HashMap<State, StateValue>>>,
 ) -> Result<(), std::io::Error> {
     loop {
@@ -135,9 +137,9 @@ impl DenonConnection {
         let s = TcpStream::connect((denon_name.as_str(), denon_port))?;
         s.set_read_timeout(None)?;
         s.set_nonblocking(false)?;
-        let mut s2 = s.try_clone()?;
+        let s2 = s.try_clone()?;
 
-        let threadhandle = thread::spawn(move || thread_func_impl(&mut s2, cloned_state));
+        let threadhandle = thread::spawn(move || thread_func_impl(&s2, cloned_state));
 
         Ok(DenonConnection {
             state,
