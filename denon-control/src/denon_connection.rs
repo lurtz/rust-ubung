@@ -362,10 +362,7 @@ pub mod test {
 
     fn copy_string_into_slice(src: &str, dst: &mut [u8]) -> usize {
         let length = min(src.len(), dst.len());
-        let mut chars = src.chars();
-        for i in 0..length {
-            dst[i] = chars.next().unwrap() as u8;
-        }
+        dst[0..length].copy_from_slice(&src.as_bytes()[0..length]);
         length
     }
 
