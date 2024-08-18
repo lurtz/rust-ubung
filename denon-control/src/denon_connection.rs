@@ -47,7 +47,7 @@ fn write_query(stream: &mut dyn Write, state: State) -> Result<(), io::Error> {
     write_string(stream, format!("{}?\r", state))
 }
 
-pub fn read(stream: &impl ReadStream, lines: u8) -> Result<Vec<String>, std::io::Error> {
+pub fn read(stream: &dyn ReadStream, lines: u8) -> Result<Vec<String>, std::io::Error> {
     let mut result = Vec::<String>::new();
 
     // guarantee to read a full line. check that read content ends with \r
@@ -98,7 +98,7 @@ pub fn read(stream: &impl ReadStream, lines: u8) -> Result<Vec<String>, std::io:
 }
 
 fn thread_func_impl(
-    stream: &impl ReadStream,
+    stream: &dyn ReadStream,
     state: Arc<Mutex<HashMap<State, StateValue>>>,
 ) -> Result<(), std::io::Error> {
     loop {
