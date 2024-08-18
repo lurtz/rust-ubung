@@ -165,6 +165,7 @@ mod test {
     use crate::denon_connection::write_state;
     use crate::get_avahi_impl;
     use crate::get_receiver_and_port;
+    use crate::main;
     use crate::main2;
     use crate::state::SetState;
     use crate::Error;
@@ -319,9 +320,10 @@ mod test {
         Ok(())
     }
 
+    // TODO test is unstable
     #[test]
     fn main2_test() -> Result<(), io::Error> {
-        let listen_socket = TcpListener::bind("127.0.0.1:0")?;
+        let listen_socket = TcpListener::bind("localhost:0")?;
         let local_port = listen_socket.local_addr()?.port();
         let string_args = vec![
             "blub",
@@ -359,6 +361,31 @@ mod test {
         assert!(received_data.contains(&format!("{}", SetState::MainVolume(50))));
         assert!(received_data.contains(&format!("{}", SetState::Power(PowerState::Standby))));
         Ok(())
+    }
+
+    // TODO test is unstable
+    #[test]
+    fn main2_less_args_test() -> Result<(), io::Error> {
+        let listen_socket = TcpListener::bind("localhost:0")?;
+        let local_port = listen_socket.local_addr()?.port();
+        let string_args = vec!["blub", "-a", "localhost"];
+        let args = parse_args(string_args.into_iter().map(|a| a.to_string()).collect());
+
+        let acceptor = thread::spawn(move || -> Result<(), io::Error> {
+            listen_socket.accept()?;
+            Ok(())
+        });
+
+        main2(args, String::from("localhost"), local_port).unwrap();
+
+        acceptor.join().unwrap()?;
+        Ok(())
+    }
+
+    // TODO integration test
+    #[test]
+    fn main_test() {
+        let _ = main();
     }
 
     macro_rules! check_error {
