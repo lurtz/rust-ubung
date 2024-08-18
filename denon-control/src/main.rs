@@ -24,7 +24,12 @@ use std::fmt;
 
 fn parse_args(args: Vec<String>) -> getopts::Matches {
     let mut ops = Options::new();
-    ops.optopt("a", "address", "Address of Denon AVR", "HOSTNAME");
+    ops.optopt(
+        "a",
+        "address",
+        "Address of Denon AVR with optional port (default: 23)",
+        "HOSTNAME[:port]",
+    );
     ops.optopt("p", "power", "Power ON, STANDBY or OFF", "POWER_MODE");
     ops.optopt("v", "volume", "set volume in range 30..50", "VOLUME");
     ops.optopt("i", "input", "set source input: DVD, GAME2", "SOURCE_INPUT");
@@ -75,12 +80,19 @@ fn get_receiver_and_port(
     args: &getopts::Matches,
     get_rec: fn() -> Result<String, avahi_error::Error>,
 ) -> Result<(String, u16), avahi_error::Error> {
-    let denon_name = match args.opt_str("a") {
-        Some(name) => name,
-        None => get_rec()?,
+    let default_port = 23;
+    let (denon_name, port) = match args.opt_str("a") {
+        Some(name) => match name.find(':') {
+            Some(pos) => (
+                String::from(&name[0..pos]),
+                name[(pos + 1)..].parse().unwrap_or(default_port),
+            ),
+            None => (name, default_port),
+        },
+        None => (get_rec()?, default_port),
     };
-    println!("using receiver: {}", denon_name);
-    Ok((denon_name, 23))
+    println!("using receiver: {}:{}", denon_name, port);
+    Ok((denon_name, port))
 }
 
 #[derive(Debug)]
@@ -165,7 +177,6 @@ mod test {
     use crate::denon_connection::write_state;
     use crate::get_avahi_impl;
     use crate::get_receiver_and_port;
-    use crate::main;
     use crate::main2;
     use crate::state::SetState;
     use crate::Error;
@@ -320,6 +331,18 @@ mod test {
         Ok(())
     }
 
+    #[test]
+    fn get_receiver_and_port_using_args_with_port_test() -> Result<(), Error> {
+        let string_args = vec!["blub", "-a", "blub_receiver:666"];
+        let args = parse_args(string_args.into_iter().map(|a| a.to_string()).collect());
+        let receiver_address = String::from("blub_receiver");
+        assert_eq!(
+            (receiver_address, 666),
+            get_receiver_and_port(&args, || Ok(String::from("some_receiver")))?
+        );
+        Ok(())
+    }
+
     // TODO test is unstable
     #[test]
     fn main2_test() -> Result<(), io::Error> {
@@ -380,12 +403,6 @@ mod test {
 
         acceptor.join().unwrap()?;
         Ok(())
-    }
-
-    // TODO integration test
-    #[test]
-    fn main_test() {
-        let _ = main();
     }
 
     macro_rules! check_error {
