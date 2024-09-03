@@ -1,6 +1,6 @@
 use assert_cmd::prelude::*; // Add methods on commands
 use predicates::prelude::*; // Used for writing assertions
-use std::{io, net::TcpListener, process::Command, thread}; // Run programs
+use std::{net::TcpListener, process::Command}; // Run programs
 
 #[test]
 fn denon_control_prints_help() -> Result<(), Box<dyn std::error::Error>> {
@@ -30,11 +30,6 @@ fn denon_control_connects_to_test_receiver() -> Result<(), Box<dyn std::error::E
     let listen_socket = TcpListener::bind("localhost:0")?;
     let local_port = listen_socket.local_addr()?.port();
 
-    let acceptor = thread::spawn(move || -> Result<(), io::Error> {
-        listen_socket.accept()?;
-        Ok(())
-    });
-
     let mut cmd = Command::cargo_bin("denon-control")?;
     cmd.arg("--address")
         .arg(format!("localhost:{}", local_port));
@@ -42,6 +37,5 @@ fn denon_control_connects_to_test_receiver() -> Result<(), Box<dyn std::error::E
         .success()
         .stdout(predicate::str::contains("using receiver: localhost"));
 
-    acceptor.join().unwrap()?;
     Ok(())
 }
