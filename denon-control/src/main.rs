@@ -365,7 +365,6 @@ mod test {
         let args = parse_args(string_args.into_iter().map(|a| a.to_string()).collect());
 
         let acceptor = thread::spawn(move || -> Result<Vec<String>, io::Error> {
-            // TODO no extra thread is needed for accept()
             let mut to_receiver = listen_socket.accept()?.0;
 
             write_state(&mut to_receiver, SetState::Power(PowerState::On))?;
@@ -397,15 +396,8 @@ mod test {
         let string_args = vec!["blub", "-a", "localhost"];
         let args = parse_args(string_args.into_iter().map(|a| a.to_string()).collect());
 
-        let acceptor = thread::spawn(move || -> Result<(), io::Error> {
-            // TODO no extra thread is needed for accept()
-            listen_socket.accept()?;
-            Ok(())
-        });
-
         main2(args, String::from("localhost"), local_port).unwrap();
 
-        acceptor.join().unwrap()?;
         Ok(())
     }
 

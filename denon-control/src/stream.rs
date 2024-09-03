@@ -64,7 +64,6 @@ mod test {
         let listener = TcpListener::bind("localhost:0")?;
         let addr = listener.local_addr()?;
         assert!(create_tcp_stream(addr.ip().to_string(), addr.port()).is_ok());
-        let _ = listener.accept();
         Ok(())
     }
 
