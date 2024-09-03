@@ -8,13 +8,14 @@ mod avahi_error;
 mod denon_connection;
 mod parse;
 mod state;
+mod stream;
 
 use denon_connection::{DenonConnection, State};
 use state::{PowerState, SetState, SourceInputState};
 
 use getopts::Options;
-use std::env;
-use std::fmt;
+use std::{env, fmt};
+use stream::create_tcp_stream;
 
 // status object shall get the current status of the avr 1912
 // easiest way would be a map<Key, Value> where Value is an enum of u32 and String
@@ -128,7 +129,8 @@ impl std::convert::From<std::io::Error> for Error {
 }
 
 fn main2(args: getopts::Matches, denon_name: String, denon_port: u16) -> Result<(), Error> {
-    let mut dc = DenonConnection::new(denon_name, denon_port)?;
+    let s = create_tcp_stream(denon_name, denon_port)?;
+    let mut dc = DenonConnection::new(s)?;
 
     if args.opt_present("s") {
         println!("{}", print_status(&mut dc)?);
@@ -363,6 +365,7 @@ mod test {
         let args = parse_args(string_args.into_iter().map(|a| a.to_string()).collect());
 
         let acceptor = thread::spawn(move || -> Result<Vec<String>, io::Error> {
+            // TODO no extra thread is needed for accept()
             let mut to_receiver = listen_socket.accept()?.0;
 
             write_state(&mut to_receiver, SetState::Power(PowerState::On))?;
@@ -395,6 +398,7 @@ mod test {
         let args = parse_args(string_args.into_iter().map(|a| a.to_string()).collect());
 
         let acceptor = thread::spawn(move || -> Result<(), io::Error> {
+            // TODO no extra thread is needed for accept()
             listen_socket.accept()?;
             Ok(())
         });

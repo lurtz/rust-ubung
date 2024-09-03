@@ -1,37 +1,15 @@
 use crate::parse::parse;
 pub use crate::parse::State;
 use crate::state::{SetState, StateValue};
-
+use crate::stream::{ReadStream, WriteShutdownStream};
 use std::collections::HashMap;
-use std::io::{self, ErrorKind, Read, Write};
-use std::net::TcpStream;
+use std::io::{self, ErrorKind, Write};
 use std::panic;
 use std::sync::{Arc, Mutex};
 use std::thread::{self, JoinHandle};
 use std::time::Duration;
 
-#[cfg(test)]
-use mockall::{automock, predicate::*};
-
 const ESHUTDOWN: i32 = 108;
-
-#[cfg_attr(test, automock)]
-pub trait ReadStream {
-    fn peekly(&self, buf: &mut [u8]) -> io::Result<usize>;
-    fn read_exactly(&self, buf: &mut [u8]) -> io::Result<()>;
-}
-
-impl ReadStream for TcpStream {
-    fn peekly(&self, buf: &mut [u8]) -> io::Result<usize> {
-        self.peek(buf)
-    }
-
-    fn read_exactly(&self, buf: &mut [u8]) -> io::Result<()> {
-        // why does this work?
-        let mut mself = self;
-        mself.read_exact(buf)
-    }
-}
 
 fn write_string(stream: &mut dyn Write, input: String) -> Result<(), std::io::Error> {
     let volume_command = input.into_bytes();
@@ -130,24 +108,22 @@ fn parse_response(response: &[String]) -> Vec<SetState> {
 
 pub struct DenonConnection {
     state: Arc<Mutex<HashMap<State, StateValue>>>,
-    to_receiver: TcpStream,
+    to_receiver: Box<dyn WriteShutdownStream>,
     thread_handle: Option<JoinHandle<Result<(), io::Error>>>,
 }
 
 impl DenonConnection {
-    pub fn new(denon_name: String, denon_port: u16) -> Result<DenonConnection, io::Error> {
+    // TODO inject tcp stream and use interface
+    pub fn new(to_receiver: Box<dyn WriteShutdownStream>) -> Result<DenonConnection, io::Error> {
         let state = Arc::new(Mutex::new(HashMap::new()));
         let cloned_state = state.clone();
-        let s = TcpStream::connect((denon_name.as_str(), denon_port))?;
-        s.set_read_timeout(None)?;
-        s.set_nonblocking(false)?;
-        let s2 = s.try_clone()?;
+        let s2 = to_receiver.try_clonely()?;
 
         let threadhandle = thread::spawn(move || thread_func_impl(&s2, cloned_state));
 
         Ok(DenonConnection {
             state,
-            to_receiver: s,
+            to_receiver,
             thread_handle: Some(threadhandle),
         })
     }
@@ -173,7 +149,7 @@ impl DenonConnection {
     }
 
     pub fn stop(&mut self) -> Result<(), io::Error> {
-        self.to_receiver.shutdown(std::net::Shutdown::Both)
+        self.to_receiver.shutdownly()
     }
 
     pub fn set(&mut self, sstate: SetState) -> Result<(), io::Error> {
@@ -205,10 +181,11 @@ impl Drop for DenonConnection {
 pub mod test {
     use mockall::Sequence;
 
-    use super::{thread_func_impl, DenonConnection, MockReadStream};
+    use super::{thread_func_impl, DenonConnection};
     use crate::denon_connection::{read, write_string};
     use crate::parse::{PowerState, SourceInputState};
     use crate::state::{SetState, State, StateValue};
+    use crate::stream::{create_tcp_stream, MockReadStream};
     use std::cmp::min;
     use std::io::{self, Error};
     use std::net::{TcpListener, TcpStream};
@@ -216,9 +193,10 @@ pub mod test {
     use std::thread::yield_now;
 
     pub fn create_connected_connection() -> Result<(TcpStream, DenonConnection), io::Error> {
-        let listen_socket = TcpListener::bind("127.0.0.1:0")?;
+        let listen_socket = TcpListener::bind("localhost:0")?;
         let addr = listen_socket.local_addr()?;
-        let dc = DenonConnection::new(addr.ip().to_string(), addr.port())?;
+        let s = create_tcp_stream(addr.ip().to_string(), addr.port())?;
+        let dc = DenonConnection::new(s)?;
         let (to_denon_client, _) = listen_socket.accept()?;
         Ok((to_denon_client, dc))
     }
@@ -240,12 +218,6 @@ pub mod test {
             let (state, value) = $sstate.convert();
             assert_eq!($denon_connection.get(state)?, value);
         };
-    }
-
-    #[test]
-    fn fails_to_connect_and_returns_unknown() {
-        let dc = DenonConnection::new(String::from("value"), 0);
-        assert!(matches!(dc, Err(_)));
     }
 
     #[test]
@@ -342,7 +314,7 @@ pub mod test {
 
     #[test]
     fn read_without_valid_content_returns_empty_vec() -> Result<(), io::Error> {
-        let listen_socket = TcpListener::bind("127.0.0.1:0")?;
+        let listen_socket = TcpListener::bind("localhost:0")?;
         let addr = listen_socket.local_addr()?;
         let mut client = TcpStream::connect(addr)?;
         let (mut to_client, _) = listen_socket.accept()?;
