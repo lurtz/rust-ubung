@@ -2,10 +2,10 @@ use std::io::{self, Read, Write};
 use std::net::TcpStream;
 
 #[cfg(test)]
-use mockall::{automock, predicate::*};
+use mockall::{automock, mock, predicate::*};
 
 #[cfg_attr(test, automock)]
-pub trait ReadStream {
+pub trait ReadStream: Send {
     fn peekly(&self, buf: &mut [u8]) -> io::Result<usize>;
     fn read_exactly(&self, buf: &mut [u8]) -> io::Result<()>;
 }
@@ -22,11 +22,9 @@ impl ReadStream for TcpStream {
     }
 }
 
-#[cfg_attr(test, automock)]
-pub trait ShutdownStream {
+pub trait ShutdownStream: Write {
     fn shutdownly(&self) -> io::Result<()>;
-    // TODO returning TcpStream breaks a bit the abstraction
-    fn try_clonely(&self) -> io::Result<TcpStream>;
+    fn try_clonely(&self) -> io::Result<Box<dyn ReadStream>>;
 }
 
 impl ShutdownStream for TcpStream {
@@ -34,19 +32,28 @@ impl ShutdownStream for TcpStream {
         self.shutdown(std::net::Shutdown::Both)
     }
 
-    fn try_clonely(&self) -> io::Result<TcpStream> {
-        self.try_clone()
+    fn try_clonely(&self) -> io::Result<Box<dyn ReadStream>> {
+        Ok(Box::new(self.try_clone()?))
     }
 }
 
-pub trait WriteShutdownStream: Write + ShutdownStream {}
-
-impl WriteShutdownStream for TcpStream {}
+#[cfg(test)]
+mock! {
+    pub ShutdownStream {}
+    impl Write for ShutdownStream {
+        fn write(&mut self, buf: &[u8]) -> io::Result<usize>;
+        fn flush(&mut self) -> io::Result<()>;
+    }
+    impl ShutdownStream for ShutdownStream {
+        fn shutdownly(&self) -> io::Result<()>;
+        fn try_clonely(&self) -> io::Result<Box<dyn ReadStream>>;
+    }
+}
 
 pub fn create_tcp_stream(
     denon_name: String,
     denon_port: u16,
-) -> Result<Box<dyn WriteShutdownStream>, io::Error> {
+) -> Result<Box<dyn ShutdownStream>, io::Error> {
     let s = TcpStream::connect((denon_name.as_str(), denon_port))?;
     s.set_read_timeout(None)?;
     s.set_nonblocking(false)?;

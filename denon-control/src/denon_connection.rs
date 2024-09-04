@@ -1,7 +1,7 @@
 use crate::parse::parse;
 pub use crate::parse::State;
 use crate::state::{SetState, StateValue};
-use crate::stream::{ReadStream, WriteShutdownStream};
+use crate::stream::{ReadStream, ShutdownStream};
 use std::collections::HashMap;
 use std::io::{self, ErrorKind, Write};
 use std::panic;
@@ -108,18 +108,17 @@ fn parse_response(response: &[String]) -> Vec<SetState> {
 
 pub struct DenonConnection {
     state: Arc<Mutex<HashMap<State, StateValue>>>,
-    to_receiver: Box<dyn WriteShutdownStream>,
+    to_receiver: Box<dyn ShutdownStream>,
     thread_handle: Option<JoinHandle<Result<(), io::Error>>>,
 }
 
 impl DenonConnection {
-    // TODO inject tcp stream and use interface
-    pub fn new(to_receiver: Box<dyn WriteShutdownStream>) -> Result<DenonConnection, io::Error> {
+    pub fn new(to_receiver: Box<dyn ShutdownStream>) -> Result<DenonConnection, io::Error> {
         let state = Arc::new(Mutex::new(HashMap::new()));
         let cloned_state = state.clone();
         let s2 = to_receiver.try_clonely()?;
 
-        let threadhandle = thread::spawn(move || thread_func_impl(&s2, cloned_state));
+        let threadhandle = thread::spawn(move || thread_func_impl(s2.as_ref(), cloned_state));
 
         Ok(DenonConnection {
             state,
@@ -168,7 +167,6 @@ impl Drop for DenonConnection {
         match thread_result {
             Ok(result) => {
                 if let Err(e) = result {
-                    // TODO only one test should trigger this
                     println!("got error: {}", e)
                 }
             }
@@ -185,7 +183,7 @@ pub mod test {
     use crate::denon_connection::{read, write_string};
     use crate::parse::{PowerState, SourceInputState};
     use crate::state::{SetState, State, StateValue};
-    use crate::stream::{create_tcp_stream, MockReadStream};
+    use crate::stream::{create_tcp_stream, MockReadStream, MockShutdownStream};
     use std::cmp::min;
     use std::io::{self, Error};
     use std::net::{TcpListener, TcpStream};
@@ -401,5 +399,25 @@ pub mod test {
             io::ErrorKind::ConnectionAborted,
             thread_err.unwrap_err().kind()
         );
+    }
+
+    #[test]
+    fn drop_gets_error() {
+        let mut msdstream = MockShutdownStream::new();
+
+        msdstream.expect_try_clonely().times(1).returning(|| {
+            let mut blub = MockReadStream::new();
+            blub.expect_peekly()
+                .times(1)
+                .returning(|_| Err(io::Error::new(io::ErrorKind::ConnectionAborted, "blub")));
+            Ok(Box::new(blub))
+        });
+
+        // TODO mock logging
+
+        msdstream.expect_shutdownly().times(1).returning(|| Ok(()));
+
+        let dc = DenonConnection::new(Box::new(msdstream));
+        assert!(dc.is_ok());
     }
 }
