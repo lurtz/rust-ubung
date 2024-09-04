@@ -51,10 +51,10 @@ mock! {
 }
 
 pub fn create_tcp_stream(
-    denon_name: String,
+    denon_name: &str,
     denon_port: u16,
 ) -> Result<Box<dyn ConnectionStream>, io::Error> {
-    let s = TcpStream::connect((denon_name.as_str(), denon_port))?;
+    let s = TcpStream::connect((denon_name, denon_port))?;
     s.set_read_timeout(None)?;
     s.set_nonblocking(false)?;
     Ok(Box::new(s))
@@ -70,13 +70,13 @@ mod test {
     fn connects_to_server() -> Result<(), io::Error> {
         let listener = TcpListener::bind("localhost:0")?;
         let addr = listener.local_addr()?;
-        assert!(create_tcp_stream(addr.ip().to_string(), addr.port()).is_ok());
+        assert!(create_tcp_stream(addr.ip().to_string().as_str(), addr.port()).is_ok());
         Ok(())
     }
 
     #[test]
     fn fails_to_connect_and_returns_unknown() {
-        let dc = create_tcp_stream(String::from("value"), 0);
+        let dc = create_tcp_stream("value", 0);
         assert!(matches!(dc, Err(_)));
     }
 }

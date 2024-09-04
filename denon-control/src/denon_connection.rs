@@ -199,7 +199,7 @@ pub mod test {
     pub fn create_connected_connection() -> Result<(TcpStream, DenonConnection), io::Error> {
         let listen_socket = TcpListener::bind("localhost:0")?;
         let addr = listen_socket.local_addr()?;
-        let s = create_tcp_stream(addr.ip().to_string(), addr.port())?;
+        let s = create_tcp_stream(addr.ip().to_string().as_str(), addr.port())?;
         let dc = DenonConnection::new(s, Box::new(std::io::stdout()))?;
         let (to_denon_client, _) = listen_socket.accept()?;
         Ok((to_denon_client, dc))

@@ -15,7 +15,7 @@ use state::{PowerState, SetState, SourceInputState};
 
 use getopts::Options;
 use std::{env, fmt};
-use stream::create_tcp_stream;
+use stream::{create_tcp_stream, ConnectionStream};
 
 // status object shall get the current status of the avr 1912
 // easiest way would be a map<Key, Value> where Value is an enum of u32 and String
@@ -128,9 +128,8 @@ impl std::convert::From<std::io::Error> for Error {
     }
 }
 
-fn main2(args: getopts::Matches, denon_name: String, denon_port: u16) -> Result<(), Error> {
-    let s = create_tcp_stream(denon_name, denon_port)?;
-    let mut dc = DenonConnection::new(s, Box::new(std::io::stdout()))?;
+fn main2(args: getopts::Matches, stream: Box<dyn ConnectionStream>) -> Result<(), Error> {
+    let mut dc = DenonConnection::new(stream, Box::new(std::io::stdout()))?;
 
     if args.opt_present("s") {
         println!("{}", print_status(&mut dc)?);
@@ -166,7 +165,8 @@ fn main2(args: getopts::Matches, denon_name: String, denon_port: u16) -> Result<
 fn main() -> Result<(), Error> {
     let args = parse_args(env::args().collect());
     let (denon_name, denon_port) = get_receiver_and_port(&args, get_avahi_impl(&args))?;
-    main2(args, denon_name, denon_port)?;
+    let s = create_tcp_stream(denon_name.as_str(), denon_port)?;
+    main2(args, s)?;
     Ok(())
 }
 
@@ -181,6 +181,7 @@ mod test {
     use crate::get_receiver_and_port;
     use crate::main2;
     use crate::state::SetState;
+    use crate::stream::create_tcp_stream;
     use crate::Error;
     use crate::PowerState;
     use crate::SourceInputState;
@@ -378,7 +379,8 @@ mod test {
             read(&mut to_receiver, 10)
         });
 
-        main2(args, String::from("localhost"), local_port).unwrap();
+        let s = create_tcp_stream("localhost", local_port)?;
+        main2(args, s).unwrap();
 
         let received_data = acceptor.join().unwrap()?;
         assert!(received_data.contains(&format!("{}?", State::Power)));
@@ -396,7 +398,8 @@ mod test {
         let string_args = vec!["blub", "-a", "localhost"];
         let args = parse_args(string_args.into_iter().map(|a| a.to_string()).collect());
 
-        main2(args, String::from("localhost"), local_port).unwrap();
+        let s = create_tcp_stream("localhost", local_port)?;
+        main2(args, s).unwrap();
 
         Ok(())
     }
