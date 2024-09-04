@@ -22,17 +22,17 @@ impl ReadStream for TcpStream {
     }
 }
 
-pub trait ShutdownStream: Write {
+pub trait ConnectionStream: Write {
     fn shutdownly(&self) -> io::Result<()>;
-    fn try_clonely(&self) -> io::Result<Box<dyn ReadStream>>;
+    fn get_readstream(&self) -> io::Result<Box<dyn ReadStream>>;
 }
 
-impl ShutdownStream for TcpStream {
+impl ConnectionStream for TcpStream {
     fn shutdownly(&self) -> io::Result<()> {
         self.shutdown(std::net::Shutdown::Both)
     }
 
-    fn try_clonely(&self) -> io::Result<Box<dyn ReadStream>> {
+    fn get_readstream(&self) -> io::Result<Box<dyn ReadStream>> {
         Ok(Box::new(self.try_clone()?))
     }
 }
@@ -44,16 +44,16 @@ mock! {
         fn write(&mut self, buf: &[u8]) -> io::Result<usize>;
         fn flush(&mut self) -> io::Result<()>;
     }
-    impl ShutdownStream for ShutdownStream {
+    impl ConnectionStream for ShutdownStream {
         fn shutdownly(&self) -> io::Result<()>;
-        fn try_clonely(&self) -> io::Result<Box<dyn ReadStream>>;
+        fn get_readstream(&self) -> io::Result<Box<dyn ReadStream>>;
     }
 }
 
 pub fn create_tcp_stream(
     denon_name: String,
     denon_port: u16,
-) -> Result<Box<dyn ShutdownStream>, io::Error> {
+) -> Result<Box<dyn ConnectionStream>, io::Error> {
     let s = TcpStream::connect((denon_name.as_str(), denon_port))?;
     s.set_read_timeout(None)?;
     s.set_nonblocking(false)?;

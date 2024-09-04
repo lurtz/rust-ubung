@@ -130,7 +130,7 @@ impl std::convert::From<std::io::Error> for Error {
 
 fn main2(args: getopts::Matches, denon_name: String, denon_port: u16) -> Result<(), Error> {
     let s = create_tcp_stream(denon_name, denon_port)?;
-    let mut dc = DenonConnection::new(s)?;
+    let mut dc = DenonConnection::new(s, Box::new(std::io::stdout()))?;
 
     if args.opt_present("s") {
         println!("{}", print_status(&mut dc)?);
