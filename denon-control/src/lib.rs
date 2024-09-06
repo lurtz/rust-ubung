@@ -194,6 +194,7 @@ mod test {
     };
     use std::io;
     use std::net::TcpListener;
+    use std::net::TcpStream;
     use std::thread;
 
     #[test]
@@ -350,7 +351,6 @@ mod test {
         Ok(())
     }
 
-    // TODO test is unstable
     #[test]
     fn main2_test() -> Result<(), io::Error> {
         let listen_socket = TcpListener::bind("localhost:0")?;
@@ -369,29 +369,37 @@ mod test {
         ];
         let args = parse_args(string_args.into_iter().map(|a| a.to_string()).collect());
 
-        let acceptor = thread::spawn(move || -> Result<Vec<String>, io::Error> {
+        let acceptor = thread::spawn(move || -> Result<(TcpStream, Vec<String>), io::Error> {
             let mut to_receiver = listen_socket.accept()?.0;
 
+            let mut received_data = read(&mut to_receiver, 1)?;
             write_state(&mut to_receiver, SetState::Power(PowerState::On))?;
+            received_data.append(&mut read(&mut to_receiver, 1)?);
             write_state(
                 &mut to_receiver,
                 SetState::SourceInput(SourceInputState::Dvd),
             )?;
+            received_data.append(&mut read(&mut to_receiver, 1)?);
             write_state(&mut to_receiver, SetState::MainVolume(230))?;
+            received_data.append(&mut read(&mut to_receiver, 1)?);
             write_state(&mut to_receiver, SetState::MaxVolume(666))?;
-            // might contain status queries
-            read(&mut to_receiver, 10)
+            Ok((to_receiver, received_data))
         });
 
         let s = create_tcp_stream("localhost", local_port)?;
         let mlogger = Box::new(MockLogger::new());
         main2(args, s, mlogger).unwrap();
 
-        let received_data = acceptor.join().unwrap()?;
-        assert!(received_data.contains(&format!("{}?", State::Power)));
-        assert!(received_data.contains(&format!("{}", SetState::SourceInput(SourceInputState::Cd))));
-        assert!(received_data.contains(&format!("{}", SetState::MainVolume(50))));
-        assert!(received_data.contains(&format!("{}", SetState::Power(PowerState::Standby))));
+        let (to_receiver, query_data) = acceptor.join().unwrap()?;
+        assert!(query_data.contains(&format!("{}?", State::Power)));
+        assert!(query_data.contains(&format!("{}?", State::SourceInput)));
+        assert!(query_data.contains(&format!("{}?", State::MainVolume)));
+        assert!(query_data.contains(&format!("{}?", State::MaxVolume)));
+
+        let set_data = read(&to_receiver, 3)?;
+        assert!(set_data.contains(&format!("{}", SetState::SourceInput(SourceInputState::Cd))));
+        assert!(set_data.contains(&format!("{}", SetState::MainVolume(50))));
+        assert!(set_data.contains(&format!("{}", SetState::Power(PowerState::Standby))));
         Ok(())
     }
 
