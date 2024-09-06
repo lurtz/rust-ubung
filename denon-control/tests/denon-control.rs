@@ -55,23 +55,18 @@ fn denon_control_queries_receiver_state() -> Result<(), Box<dyn std::error::Erro
 
     let acceptor = thread::spawn(move || -> Result<(TcpStream, Vec<String>), io::Error> {
         let mut to_receiver = listen_socket.accept()?.0;
-
-        let received_data = Vec::new();
-
-        // while received_data.len() < 4 {
-        //     println!("received data size {}", received_data.len());
-        //     let mut tmp_data = read(&mut to_receiver, 10)?;
-        //     received_data.append(&mut tmp_data);
-        // }
-
+        let mut received_data = Vec::new();
+        received_data.append(&mut read(&mut to_receiver, 1)?);
         write_state(&mut to_receiver, SetState::Power(PowerState::On))?;
+        received_data.append(&mut read(&mut to_receiver, 1)?);
         write_state(
             &mut to_receiver,
             SetState::SourceInput(SourceInputState::Dvd),
         )?;
+        received_data.append(&mut read(&mut to_receiver, 1)?);
         write_state(&mut to_receiver, SetState::MainVolume(230))?;
+        received_data.append(&mut read(&mut to_receiver, 1)?);
         write_state(&mut to_receiver, SetState::MaxVolume(666))?;
-
         Ok((to_receiver, received_data))
     });
 
@@ -82,12 +77,12 @@ fn denon_control_queries_receiver_state() -> Result<(), Box<dyn std::error::Erro
         .arg("--status");
     cmd.assert().success().stdout(contains(expected));
 
-    let (_to_receiver, received_data) = acceptor.join().unwrap()?;
+    let (_, received_data) = acceptor.join().unwrap()?;
 
-    println!("{:?}", received_data);
-
-    //    assert!(received_data.contains(&format!("{}?", State::Power)));
-    //    assert!(received_data.contains(&format!("{}?", State::MaxVolume)));
+    assert!(received_data.contains(&format!("{}?", State::Power)));
+    assert!(received_data.contains(&format!("{}?", State::SourceInput)));
+    assert!(received_data.contains(&format!("{}?", State::MainVolume)));
+    assert!(received_data.contains(&format!("{}?", State::MaxVolume)));
 
     Ok(())
 }
