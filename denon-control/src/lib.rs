@@ -17,8 +17,10 @@ use denon_connection::{DenonConnection, State};
 use state::{PowerState, SetState, SourceInputState};
 
 use getopts::Options;
-use std::{env, fmt, io::Write};
-use stream::{create_tcp_stream, ConnectionStream};
+use std::{fmt, io::Write};
+use stream::ConnectionStream;
+
+pub use stream::create_tcp_stream;
 
 // status object shall get the current status of the avr 1912
 // easiest way would be a map<Key, Value> where Value is an enum of u32 and String
@@ -26,7 +28,7 @@ use stream::{create_tcp_stream, ConnectionStream};
 // the status object can be shared or the communication thread can be asked about a
 // status which queries the receiver if it is not set
 
-fn parse_args(args: Vec<String>) -> getopts::Matches {
+pub fn parse_args(args: Vec<String>) -> getopts::Matches {
     let mut ops = Options::new();
     ops.optopt(
         "a",
@@ -72,7 +74,7 @@ fn print_status(dc: &mut DenonConnection) -> Result<String, std::io::Error> {
     ))
 }
 
-fn get_avahi_impl(args: &getopts::Matches) -> fn() -> Result<String, avahi_error::Error> {
+pub fn get_avahi_impl(args: &getopts::Matches) -> fn() -> Result<String, avahi_error::Error> {
     if args.opt_present("e") {
         avahi::get_receiver
     } else {
@@ -80,7 +82,7 @@ fn get_avahi_impl(args: &getopts::Matches) -> fn() -> Result<String, avahi_error
     }
 }
 
-fn get_receiver_and_port(
+pub fn get_receiver_and_port(
     args: &getopts::Matches,
     get_rec: fn() -> Result<String, avahi_error::Error>,
 ) -> Result<(String, u16), avahi_error::Error> {
@@ -101,7 +103,7 @@ fn get_receiver_and_port(
 
 #[derive(Debug)]
 #[allow(dead_code)] // Fields will be used when an error is printed
-enum Error {
+pub enum Error {
     ParseInt(std::num::ParseIntError),
     Avahi(avahi_error::Error),
     IO(std::io::Error),
@@ -131,7 +133,7 @@ impl std::convert::From<std::io::Error> for Error {
     }
 }
 
-fn main2(
+pub fn main2(
     args: getopts::Matches,
     stream: Box<dyn ConnectionStream>,
     logger: Box<dyn Write>,
@@ -166,14 +168,6 @@ fn main2(
         }
         dc.set(SetState::MainVolume(vi))?;
     }
-    Ok(())
-}
-
-fn main() -> Result<(), Error> {
-    let args = parse_args(env::args().collect());
-    let (denon_name, denon_port) = get_receiver_and_port(&args, get_avahi_impl(&args))?;
-    let s = create_tcp_stream(denon_name.as_str(), denon_port)?;
-    main2(args, s, Box::new(std::io::stdout()))?;
     Ok(())
 }
 
