@@ -13,14 +13,14 @@ mod stream;
 #[cfg(test)]
 mod logger;
 
-use denon_connection::{DenonConnection, State};
-use state::{PowerState, SetState, SourceInputState};
-
+use denon_connection::DenonConnection;
+pub use denon_connection::{read, write_state};
 use getopts::Options;
+pub use state::State;
+pub use state::{PowerState, SetState, SourceInputState};
 use std::{fmt, io::Write};
-use stream::ConnectionStream;
-
 pub use stream::create_tcp_stream;
+use stream::ConnectionStream;
 
 // status object shall get the current status of the avr 1912
 // easiest way would be a map<Key, Value> where Value is an enum of u32 and String

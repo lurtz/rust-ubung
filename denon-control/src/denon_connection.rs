@@ -1,5 +1,5 @@
 use crate::parse::parse;
-pub use crate::parse::State;
+use crate::parse::State;
 use crate::state::{SetState, StateValue};
 use crate::stream::{ConnectionStream, ReadStream};
 use std::collections::HashMap;
