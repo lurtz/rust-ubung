@@ -10,11 +10,14 @@ mod parse;
 mod state;
 mod stream;
 
+#[cfg(test)]
+mod logger;
+
 use denon_connection::{DenonConnection, State};
 use state::{PowerState, SetState, SourceInputState};
 
 use getopts::Options;
-use std::{env, fmt};
+use std::{env, fmt, io::Write};
 use stream::{create_tcp_stream, ConnectionStream};
 
 // status object shall get the current status of the avr 1912
@@ -128,8 +131,12 @@ impl std::convert::From<std::io::Error> for Error {
     }
 }
 
-fn main2(args: getopts::Matches, stream: Box<dyn ConnectionStream>) -> Result<(), Error> {
-    let mut dc = DenonConnection::new(stream, Box::new(std::io::stdout()))?;
+fn main2(
+    args: getopts::Matches,
+    stream: Box<dyn ConnectionStream>,
+    logger: Box<dyn Write>,
+) -> Result<(), Error> {
+    let mut dc = DenonConnection::new(stream, logger)?;
 
     if args.opt_present("s") {
         println!("{}", print_status(&mut dc)?);
@@ -166,7 +173,7 @@ fn main() -> Result<(), Error> {
     let args = parse_args(env::args().collect());
     let (denon_name, denon_port) = get_receiver_and_port(&args, get_avahi_impl(&args))?;
     let s = create_tcp_stream(denon_name.as_str(), denon_port)?;
-    main2(args, s)?;
+    main2(args, s, Box::new(std::io::stdout()))?;
     Ok(())
 }
 
@@ -179,9 +186,12 @@ mod test {
     use crate::denon_connection::write_state;
     use crate::get_avahi_impl;
     use crate::get_receiver_and_port;
+    use crate::logger::MockLogger;
     use crate::main2;
     use crate::state::SetState;
     use crate::stream::create_tcp_stream;
+    use crate::stream::MockReadStream;
+    use crate::stream::MockShutdownStream;
     use crate::Error;
     use crate::PowerState;
     use crate::SourceInputState;
@@ -380,7 +390,8 @@ mod test {
         });
 
         let s = create_tcp_stream("localhost", local_port)?;
-        main2(args, s).unwrap();
+        let mlogger = Box::new(MockLogger::new());
+        main2(args, s, mlogger).unwrap();
 
         let received_data = acceptor.join().unwrap()?;
         assert!(received_data.contains(&format!("{}?", State::Power)));
@@ -390,16 +401,27 @@ mod test {
         Ok(())
     }
 
-    // TODO test is unstable
     #[test]
     fn main2_less_args_test() -> Result<(), io::Error> {
-        let listen_socket = TcpListener::bind("localhost:0")?;
-        let local_port = listen_socket.local_addr()?.port();
         let string_args = vec!["blub", "-a", "localhost"];
         let args = parse_args(string_args.into_iter().map(|a| a.to_string()).collect());
 
-        let s = create_tcp_stream("localhost", local_port)?;
-        main2(args, s).unwrap();
+        let mut msdstream = Box::new(MockShutdownStream::new());
+
+        msdstream.expect_get_readstream().times(1).returning(|| {
+            let mut blub = MockReadStream::new();
+            blub.expect_peekly()
+                .times(1)
+                .returning(|_| Err(io::Error::new(io::ErrorKind::ConnectionAborted, "")));
+            Ok(Box::new(blub))
+        });
+
+        msdstream.expect_shutdownly().times(1).returning(|| Ok(()));
+
+        let mut mlogger = Box::new(MockLogger::new());
+        mlogger.expect_write().returning(|buf| Ok(buf.len()));
+
+        main2(args, msdstream, mlogger).unwrap();
 
         Ok(())
     }

@@ -182,16 +182,17 @@ impl Drop for DenonConnection {
 
 #[cfg(test)]
 pub mod test {
-    use mockall::{mock, Sequence};
+    use mockall::Sequence;
     use predicates::ord::eq;
 
     use super::{thread_func_impl, DenonConnection};
     use crate::denon_connection::{read, write_string};
+    use crate::logger::MockLogger;
     use crate::parse::{PowerState, SourceInputState};
     use crate::state::{SetState, State, StateValue};
     use crate::stream::{create_tcp_stream, MockReadStream, MockShutdownStream};
     use std::cmp::min;
-    use std::io::{self, Error, Write};
+    use std::io::{self, Error};
     use std::net::{TcpListener, TcpStream};
     use std::sync::Arc;
     use std::thread::yield_now;
@@ -204,11 +205,6 @@ pub mod test {
         let (to_denon_client, _) = listen_socket.accept()?;
         Ok((to_denon_client, dc))
     }
-
-    mock! {Logger {} impl Write for Logger {
-        fn write(&mut self, buf: &[u8]) -> io::Result<usize>;
-        fn flush(&mut self) -> io::Result<()>;
-    }}
 
     macro_rules! wait_for_value_in_database {
         ($denon_connection:ident, $sstate:expr) => {
