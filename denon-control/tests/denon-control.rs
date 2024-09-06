@@ -55,8 +55,7 @@ fn denon_control_queries_receiver_state() -> Result<(), Box<dyn std::error::Erro
 
     let acceptor = thread::spawn(move || -> Result<(TcpStream, Vec<String>), io::Error> {
         let mut to_receiver = listen_socket.accept()?.0;
-        let mut received_data = Vec::new();
-        received_data.append(&mut read(&mut to_receiver, 1)?);
+        let mut received_data = read(&mut to_receiver, 1)?;
         write_state(&mut to_receiver, SetState::Power(PowerState::On))?;
         received_data.append(&mut read(&mut to_receiver, 1)?);
         write_state(
