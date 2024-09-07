@@ -76,10 +76,26 @@ pub fn get_receiver() -> Result<String, Error> {
 
 #[cfg(test)]
 mod test {
-    use super::{get_receiver, get_roap_service_type};
+    use super::{get_receiver, get_roap_service_type, on_service_discovered, Context};
     use crate::{avahi3::get_hostname, avahi_error::Error};
-    use std::net::TcpStream;
-    use zeroconf::ServiceType;
+    use std::{
+        net::TcpStream,
+        sync::{Arc, Mutex},
+    };
+    use zeroconf::{error, prelude::BuilderDelegate, ServiceDiscovery, ServiceType};
+
+    fn create_service_discovery() -> ServiceDiscovery {
+        ServiceDiscovery::builder()
+            .address(String::from("blub.local"))
+            .name(String::from("bla"))
+            .service_type(ServiceType::new("foo", "bar").unwrap())
+            .domain(String::from("test"))
+            .host_name(String::from("bla.local"))
+            .port(123)
+            .txt(None)
+            .build()
+            .unwrap()
+    }
 
     #[test]
     fn get_receiver_may_return() {
@@ -116,5 +132,43 @@ mod test {
     fn timeout() {
         let sn = ServiceType::new("does_not_exit", "tcp").unwrap();
         assert!(matches!(get_hostname(sn), Err(Error::NoHostsFound)));
+    }
+
+    #[test]
+    fn on_service_discovered_works() {
+        let sd = create_service_discovery();
+        let context: Arc<Arc<Mutex<Context>>> = Arc::default();
+        assert_eq!(context.lock().unwrap().service_discovery, None);
+        on_service_discovered(Ok(sd.clone()), Some(context.clone()));
+        assert_eq!(context.lock().unwrap().service_discovery, Some(sd.clone()));
+    }
+
+    #[test]
+    fn on_service_discovered_does_nothing_on_no_service_discovery() {
+        let context: Arc<Arc<Mutex<Context>>> = Arc::default();
+        assert_eq!(context.lock().unwrap().service_discovery, None);
+        on_service_discovered(
+            Err(error::Error::new(String::from("blub"))),
+            Some(context.clone()),
+        );
+        assert_eq!(context.lock().unwrap().service_discovery, None);
+    }
+
+    #[test]
+    fn on_service_discovered_does_nothing_on_no_context() {
+        let sd = create_service_discovery();
+        let context: Arc<Arc<Mutex<Context>>> = Arc::default();
+        assert_eq!(context.lock().unwrap().service_discovery, None);
+        on_service_discovered(Ok(sd.clone()), None);
+        assert_eq!(context.lock().unwrap().service_discovery, None);
+    }
+
+    #[test]
+    fn on_service_discovered_does_nothing_on_context_with_different_type() {
+        let sd = create_service_discovery();
+        let context: Arc<Mutex<Context>> = Arc::default();
+        assert_eq!(context.lock().unwrap().service_discovery, None);
+        on_service_discovered(Ok(sd.clone()), Some(context.clone()));
+        assert_eq!(context.lock().unwrap().service_discovery, None);
     }
 }

@@ -8,13 +8,18 @@ mod avahi_error;
 mod denon_connection;
 mod parse;
 mod state;
+mod stream;
 
-use denon_connection::{DenonConnection, State};
-use state::{PowerState, SetState, SourceInputState};
+#[cfg(test)]
+mod logger;
 
+use denon_connection::DenonConnection;
+pub use denon_connection::{read, write_string};
 use getopts::Options;
-use std::env;
-use std::fmt;
+use state::{PowerState, SetState, SourceInputState, State};
+use std::{fmt, io::Write};
+pub use stream::create_tcp_stream;
+use stream::ConnectionStream;
 
 // status object shall get the current status of the avr 1912
 // easiest way would be a map<Key, Value> where Value is an enum of u32 and String
@@ -22,9 +27,14 @@ use std::fmt;
 // the status object can be shared or the communication thread can be asked about a
 // status which queries the receiver if it is not set
 
-fn parse_args(args: Vec<String>) -> getopts::Matches {
+pub fn parse_args(args: Vec<String>) -> getopts::Matches {
     let mut ops = Options::new();
-    ops.optopt("a", "address", "Address of Denon AVR", "HOSTNAME");
+    ops.optopt(
+        "a",
+        "address",
+        "Address of Denon AVR with optional port (default: 23)",
+        "HOSTNAME[:port]",
+    );
     ops.optopt("p", "power", "Power ON, STANDBY or OFF", "POWER_MODE");
     ops.optopt("v", "volume", "set volume in range 30..50", "VOLUME");
     ops.optopt("i", "input", "set source input: DVD, GAME2", "SOURCE_INPUT");
@@ -63,7 +73,7 @@ fn print_status(dc: &mut DenonConnection) -> Result<String, std::io::Error> {
     ))
 }
 
-fn get_avahi_impl(args: &getopts::Matches) -> fn() -> Result<String, avahi_error::Error> {
+pub fn get_avahi_impl(args: &getopts::Matches) -> fn() -> Result<String, avahi_error::Error> {
     if args.opt_present("e") {
         avahi::get_receiver
     } else {
@@ -71,21 +81,28 @@ fn get_avahi_impl(args: &getopts::Matches) -> fn() -> Result<String, avahi_error
     }
 }
 
-fn get_receiver_and_port(
+pub fn get_receiver_and_port(
     args: &getopts::Matches,
     get_rec: fn() -> Result<String, avahi_error::Error>,
 ) -> Result<(String, u16), avahi_error::Error> {
-    let denon_name = match args.opt_str("a") {
-        Some(name) => name,
-        None => get_rec()?,
+    let default_port = 23;
+    let (denon_name, port) = match args.opt_str("a") {
+        Some(name) => match name.find(':') {
+            Some(pos) => (
+                String::from(&name[0..pos]),
+                name[(pos + 1)..].parse().unwrap_or(default_port),
+            ),
+            None => (name, default_port),
+        },
+        None => (get_rec()?, default_port),
     };
-    println!("using receiver: {}", denon_name);
-    Ok((denon_name, 23))
+    println!("using receiver: {}:{}", denon_name, port);
+    Ok((denon_name, port))
 }
 
 #[derive(Debug)]
 #[allow(dead_code)] // Fields will be used when an error is printed
-enum Error {
+pub enum Error {
     ParseInt(std::num::ParseIntError),
     Avahi(avahi_error::Error),
     IO(std::io::Error),
@@ -115,8 +132,12 @@ impl std::convert::From<std::io::Error> for Error {
     }
 }
 
-fn main2(args: getopts::Matches, denon_name: String, denon_port: u16) -> Result<(), Error> {
-    let mut dc = DenonConnection::new(denon_name, denon_port)?;
+pub fn main2(
+    args: getopts::Matches,
+    stream: Box<dyn ConnectionStream>,
+    logger: Box<dyn Write>,
+) -> Result<(), Error> {
+    let mut dc = DenonConnection::new(stream, logger)?;
 
     if args.opt_present("s") {
         println!("{}", print_status(&mut dc)?);
@@ -149,13 +170,6 @@ fn main2(args: getopts::Matches, denon_name: String, denon_port: u16) -> Result<
     Ok(())
 }
 
-fn main() -> Result<(), Error> {
-    let args = parse_args(env::args().collect());
-    let (denon_name, denon_port) = get_receiver_and_port(&args, get_avahi_impl(&args))?;
-    main2(args, denon_name, denon_port)?;
-    Ok(())
-}
-
 #[cfg(test)]
 mod test {
     use crate::avahi;
@@ -165,8 +179,12 @@ mod test {
     use crate::denon_connection::write_state;
     use crate::get_avahi_impl;
     use crate::get_receiver_and_port;
+    use crate::logger::MockLogger;
     use crate::main2;
     use crate::state::SetState;
+    use crate::stream::create_tcp_stream;
+    use crate::stream::MockReadStream;
+    use crate::stream::MockShutdownStream;
     use crate::Error;
     use crate::PowerState;
     use crate::SourceInputState;
@@ -175,6 +193,7 @@ mod test {
     };
     use std::io;
     use std::net::TcpListener;
+    use std::net::TcpStream;
     use std::thread;
 
     #[test]
@@ -320,8 +339,20 @@ mod test {
     }
 
     #[test]
+    fn get_receiver_and_port_using_args_with_port_test() -> Result<(), Error> {
+        let string_args = vec!["blub", "-a", "blub_receiver:666"];
+        let args = parse_args(string_args.into_iter().map(|a| a.to_string()).collect());
+        let receiver_address = String::from("blub_receiver");
+        assert_eq!(
+            (receiver_address, 666),
+            get_receiver_and_port(&args, || panic!())?
+        );
+        Ok(())
+    }
+
+    #[test]
     fn main2_test() -> Result<(), io::Error> {
-        let listen_socket = TcpListener::bind("127.0.0.1:0")?;
+        let listen_socket = TcpListener::bind("localhost:0")?;
         let local_port = listen_socket.local_addr()?.port();
         let string_args = vec![
             "blub",
@@ -337,27 +368,62 @@ mod test {
         ];
         let args = parse_args(string_args.into_iter().map(|a| a.to_string()).collect());
 
-        let acceptor = thread::spawn(move || -> Result<Vec<String>, io::Error> {
+        let acceptor = thread::spawn(move || -> Result<(TcpStream, Vec<String>), io::Error> {
             let mut to_receiver = listen_socket.accept()?.0;
 
+            let mut received_data = read(&mut to_receiver, 1)?;
             write_state(&mut to_receiver, SetState::Power(PowerState::On))?;
+            received_data.append(&mut read(&mut to_receiver, 1)?);
             write_state(
                 &mut to_receiver,
                 SetState::SourceInput(SourceInputState::Dvd),
             )?;
+            received_data.append(&mut read(&mut to_receiver, 1)?);
             write_state(&mut to_receiver, SetState::MainVolume(230))?;
+            received_data.append(&mut read(&mut to_receiver, 1)?);
             write_state(&mut to_receiver, SetState::MaxVolume(666))?;
-            // might contain status queries
-            read(&mut to_receiver, 10)
+            Ok((to_receiver, received_data))
         });
 
-        main2(args, String::from("localhost"), local_port).unwrap();
+        let s = create_tcp_stream("localhost", local_port)?;
+        let mlogger = Box::new(MockLogger::new());
+        assert!(main2(args, s, mlogger).is_ok());
 
-        let received_data = acceptor.join().unwrap()?;
-        assert!(received_data.contains(&format!("{}?", State::Power)));
-        assert!(received_data.contains(&format!("{}", SetState::SourceInput(SourceInputState::Cd))));
-        assert!(received_data.contains(&format!("{}", SetState::MainVolume(50))));
-        assert!(received_data.contains(&format!("{}", SetState::Power(PowerState::Standby))));
+        let (to_receiver, query_data) = acceptor.join().unwrap()?;
+        assert!(query_data.contains(&format!("{}?", State::Power)));
+        assert!(query_data.contains(&format!("{}?", State::SourceInput)));
+        assert!(query_data.contains(&format!("{}?", State::MainVolume)));
+        assert!(query_data.contains(&format!("{}?", State::MaxVolume)));
+
+        let set_data = read(&to_receiver, 3)?;
+        assert!(set_data.contains(&format!("{}", SetState::SourceInput(SourceInputState::Cd))));
+        assert!(set_data.contains(&format!("{}", SetState::MainVolume(50))));
+        assert!(set_data.contains(&format!("{}", SetState::Power(PowerState::Standby))));
+        Ok(())
+    }
+
+    #[test]
+    fn main2_less_args_test() -> Result<(), io::Error> {
+        let string_args = vec!["blub", "-a", "localhost"];
+        let args = parse_args(string_args.into_iter().map(|a| a.to_string()).collect());
+
+        let mut msdstream = Box::new(MockShutdownStream::new());
+
+        msdstream.expect_get_readstream().times(1).returning(|| {
+            let mut blub = MockReadStream::new();
+            blub.expect_peekly()
+                .times(1)
+                .returning(|_| Err(io::Error::new(io::ErrorKind::ConnectionAborted, "")));
+            Ok(Box::new(blub))
+        });
+
+        msdstream.expect_shutdownly().times(1).returning(|| Ok(()));
+
+        let mut mlogger = Box::new(MockLogger::new());
+        mlogger.expect_write().returning(|buf| Ok(buf.len()));
+
+        main2(args, msdstream, mlogger).unwrap();
+
         Ok(())
     }
 
