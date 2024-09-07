@@ -3,7 +3,7 @@ use denon_control::{read, write_string};
 use predicates::prelude::*; // Used for writing assertions
 use predicates::str::contains;
 use std::{
-    io,
+    io::{self, Read},
     net::{TcpListener, TcpStream},
     process::Command,
     thread,
@@ -43,6 +43,29 @@ fn denon_control_connects_to_test_receiver() -> Result<(), Box<dyn std::error::E
     cmd.assert()
         .success()
         .stdout(contains("using receiver: localhost:"));
+
+    Ok(())
+}
+
+#[test]
+fn denon_control_loses_connection() -> Result<(), Box<dyn std::error::Error>> {
+    let listen_socket = TcpListener::bind("localhost:0")?;
+    let local_port = listen_socket.local_addr()?.port();
+    let mut cmd = Command::cargo_bin("denon-control")?;
+
+    let acceptor = thread::spawn(move || -> Result<(), io::Error> {
+        let mut to_receiver = listen_socket.accept()?.0;
+        let mut buf = [0; 100];
+        to_receiver.read(&mut buf)?;
+        Ok(())
+    });
+
+    cmd.arg("--address")
+        .arg(format!("localhost:{}", local_port))
+        .arg("--status");
+    cmd.assert().failure().stderr(contains("Error: IO"));
+
+    let _ = acceptor.join().unwrap()?;
 
     Ok(())
 }
