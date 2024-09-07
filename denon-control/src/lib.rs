@@ -345,7 +345,7 @@ mod test {
         let receiver_address = String::from("blub_receiver");
         assert_eq!(
             (receiver_address, 666),
-            get_receiver_and_port(&args, || Ok(String::from("some_receiver")))?
+            get_receiver_and_port(&args, || panic!())?
         );
         Ok(())
     }
