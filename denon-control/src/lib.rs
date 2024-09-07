@@ -14,10 +14,9 @@ mod stream;
 mod logger;
 
 use denon_connection::DenonConnection;
-pub use denon_connection::{read, write_state};
+pub use denon_connection::{read, write_string};
 use getopts::Options;
-pub use state::State;
-pub use state::{PowerState, SetState, SourceInputState};
+use state::{PowerState, SetState, SourceInputState, State};
 use std::{fmt, io::Write};
 pub use stream::create_tcp_stream;
 use stream::ConnectionStream;
@@ -388,7 +387,7 @@ mod test {
 
         let s = create_tcp_stream("localhost", local_port)?;
         let mlogger = Box::new(MockLogger::new());
-        main2(args, s, mlogger).unwrap();
+        assert!(main2(args, s, mlogger).is_ok());
 
         let (to_receiver, query_data) = acceptor.join().unwrap()?;
         assert!(query_data.contains(&format!("{}?", State::Power)));

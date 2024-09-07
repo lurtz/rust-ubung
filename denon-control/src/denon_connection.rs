@@ -11,7 +11,7 @@ use std::time::Duration;
 
 const ESHUTDOWN: i32 = 108;
 
-fn write_string(stream: &mut dyn Write, input: String) -> Result<(), std::io::Error> {
+pub fn write_string(stream: &mut dyn Write, input: String) -> Result<(), std::io::Error> {
     let volume_command = input.into_bytes();
     stream.write_all(&volume_command[..])?;
     Ok(())

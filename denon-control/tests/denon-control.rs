@@ -1,5 +1,5 @@
 use assert_cmd::prelude::*; // Add methods on commands
-use denon_control::{read, write_state, PowerState, SetState, SourceInputState, State};
+use denon_control::{read, write_string};
 use predicates::prelude::*; // Used for writing assertions
 use predicates::str::contains;
 use std::{
@@ -56,16 +56,13 @@ fn denon_control_queries_receiver_state() -> Result<(), Box<dyn std::error::Erro
     let acceptor = thread::spawn(move || -> Result<(TcpStream, Vec<String>), io::Error> {
         let mut to_receiver = listen_socket.accept()?.0;
         let mut received_data = read(&mut to_receiver, 1)?;
-        write_state(&mut to_receiver, SetState::Power(PowerState::On))?;
+        write_string(&mut to_receiver, String::from("PWON\r"))?;
         received_data.append(&mut read(&mut to_receiver, 1)?);
-        write_state(
-            &mut to_receiver,
-            SetState::SourceInput(SourceInputState::Dvd),
-        )?;
+        write_string(&mut to_receiver, String::from("SIDVD\r"))?;
         received_data.append(&mut read(&mut to_receiver, 1)?);
-        write_state(&mut to_receiver, SetState::MainVolume(230))?;
+        write_string(&mut to_receiver, String::from("MV230\r"))?;
         received_data.append(&mut read(&mut to_receiver, 1)?);
-        write_state(&mut to_receiver, SetState::MaxVolume(666))?;
+        write_string(&mut to_receiver, String::from("MVMAX666\r"))?;
         Ok((to_receiver, received_data))
     });
 
@@ -78,10 +75,10 @@ fn denon_control_queries_receiver_state() -> Result<(), Box<dyn std::error::Erro
 
     let (_, received_data) = acceptor.join().unwrap()?;
 
-    assert!(received_data.contains(&format!("{}?", State::Power)));
-    assert!(received_data.contains(&format!("{}?", State::SourceInput)));
-    assert!(received_data.contains(&format!("{}?", State::MainVolume)));
-    assert!(received_data.contains(&format!("{}?", State::MaxVolume)));
+    assert!(received_data.contains(&String::from("PW?")));
+    assert!(received_data.contains(&String::from("SI?")));
+    assert!(received_data.contains(&String::from("MV?")));
+    assert!(received_data.contains(&String::from("MVMAX?")));
 
     Ok(())
 }
@@ -112,9 +109,9 @@ fn denon_control_sets_receiver_state() -> Result<(), Box<dyn std::error::Error>>
     let mut to_receiver = acceptor.join().unwrap()?;
     let received_data = read(&mut to_receiver, 10)?;
 
-    assert!(received_data.contains(&format!("{}", SetState::SourceInput(SourceInputState::Cd))));
-    assert!(received_data.contains(&format!("{}", SetState::MainVolume(50))));
-    assert!(received_data.contains(&format!("{}", SetState::Power(PowerState::Standby))));
+    assert!(received_data.contains(&String::from("SICD")));
+    assert!(received_data.contains(&String::from("MV50")));
+    assert!(received_data.contains(&String::from("PWSTANDBY")));
 
     Ok(())
 }
