@@ -4,7 +4,6 @@ resolver = "2"
 members = [
         "adder",
         "assoc_types",
-        "denon-control",
         "embed",
 	"fourier_transform",
         "makros",
