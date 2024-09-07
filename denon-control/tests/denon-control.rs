@@ -48,7 +48,8 @@ fn denon_control_connects_to_test_receiver() -> Result<(), Box<dyn std::error::E
 }
 
 #[test]
-fn denon_control_queries_receiver_state() -> Result<(), Box<dyn std::error::Error>> {
+fn denon_control_queries_receiver_state_and_gets_state_one_by_one(
+) -> Result<(), Box<dyn std::error::Error>> {
     let listen_socket = TcpListener::bind("localhost:0")?;
     let local_port = listen_socket.local_addr()?.port();
     let mut cmd = Command::cargo_bin("denon-control")?;
@@ -79,6 +80,38 @@ fn denon_control_queries_receiver_state() -> Result<(), Box<dyn std::error::Erro
     assert!(received_data.contains(&String::from("SI?")));
     assert!(received_data.contains(&String::from("MV?")));
     assert!(received_data.contains(&String::from("MVMAX?")));
+
+    Ok(())
+}
+
+#[test]
+fn denon_control_queries_receiver_state_and_gets_all_states_at_once(
+) -> Result<(), Box<dyn std::error::Error>> {
+    let listen_socket = TcpListener::bind("localhost:0")?;
+    let local_port = listen_socket.local_addr()?.port();
+    let mut cmd = Command::cargo_bin("denon-control")?;
+
+    let acceptor = thread::spawn(move || -> Result<(TcpStream, Vec<String>), io::Error> {
+        let mut to_receiver = listen_socket.accept()?.0;
+        let received_data = read(&mut to_receiver, 1)?;
+        write_string(
+            &mut to_receiver,
+            String::from("PWSTANDBY\rSIBD\rMV123\rMVMAX333\r"),
+        )?;
+
+        Ok((to_receiver, received_data))
+    });
+
+    let expected = "Current status of receiver:\n\tPower(STANDBY)\n\tSourceInput(BD)\n\tMainVolume(123)\n\tMaxVolume(333)\n";
+
+    cmd.arg("--address")
+        .arg(format!("localhost:{}", local_port))
+        .arg("--status");
+    cmd.assert().success().stdout(contains(expected));
+
+    let (_, received_data) = acceptor.join().unwrap()?;
+
+    assert!(received_data.contains(&String::from("PW?")));
 
     Ok(())
 }
