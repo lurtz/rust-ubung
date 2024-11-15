@@ -1,3 +1,7 @@
+use std::marker::PhantomData;
+use std::sync::Mutex;
+use std::sync::MutexGuard;
+
 struct TakenLockPriority<'a, T: ?Sized, const PRIORITY: usize> {
     phantom: PhantomData<&'a mut T>,
 }
@@ -26,7 +30,7 @@ impl<'a, T: ?Sized, U, const PRIORITY: usize> PriorityMutex<'a, T, U, PRIORITY> 
     }
 }
 
-fn UsePriority<'a, 'b, V, const PREVIOUS_PRIORITY: usize>(
+fn use_priority<'a, 'b, V, const PREVIOUS_PRIORITY: usize>(
     _priority: &'a mut TakenLockPriority<'b, V, PREVIOUS_PRIORITY>,
 ) -> PhantomData<&'a mut TakenLockPriority<'b, V, PREVIOUS_PRIORITY>> {
     PhantomData
@@ -45,12 +49,9 @@ pub fn main() {
         mutex: Mutex::new(()),
     };
     {
-        let (protector2, guard2) = m2.lock(UsePriority(&mut root));
+        let (mut _protector2, _guard2) = m2.lock(use_priority(&mut root));
+        let (_protector1, _guard1) = m1.lock(use_priority(&mut root));
     }
-    let (mut protector1, guard1) = m1.lock(UsePriority(&mut root));
-    let (protector2, guard2) = m2.lock(UsePriority(&mut root));
+    let (mut protector1, _guard1) = m1.lock(use_priority(&mut root));
+    let (_protector2, _guard2) = m2.lock(use_priority(&mut protector1));
 }
-
-use std::marker::PhantomData;
-use std::sync::Mutex;
-use std::sync::MutexGuard;
