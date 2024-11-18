@@ -2,7 +2,7 @@
 
 #[cfg(test)]
 mod test {
-    use std::marker::PhantomData;
+    use std::{fmt::Display, marker::PhantomData};
 
     struct ActualResponseState {
         status_line: (u8, String),
@@ -34,6 +34,16 @@ mod test {
     struct HttpResponse<S: SendingState> {
         state: Box<ActualResponseState>,
         _sending_state: PhantomData<S>,
+    }
+
+    impl<S: SendingState> Display for HttpResponse<S> {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            write!(
+                f,
+                "{:?} {:?} {}",
+                self.state.status_line, self.state.header, self.state.body
+            )
+        }
     }
 
     impl HttpResponse<Start> {
@@ -81,5 +91,20 @@ mod test {
             .header("Length", "123")
             .header("Spam-value", "666")
             .body("aaaaaaaahhhhh");
+    }
+
+    #[test]
+    fn check_display() {
+        let httpresponse = HttpResponse::new();
+        let body = httpresponse
+            .status_line(123, "blub")
+            .header("Length", "123")
+            .header("Spam-value", "666")
+            .body("aaaaaaaahhhhh");
+
+        assert_eq!(
+            "(123, \"blub\") [(\"Length\", \"123\"), (\"Spam-value\", \"666\")] aaaaaaaahhhhh",
+            format!("{}", body)
+        );
     }
 }
