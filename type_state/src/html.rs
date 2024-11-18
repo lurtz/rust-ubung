@@ -2,46 +2,37 @@
 
 #[cfg(test)]
 mod test {
-    use std::{fmt::Display, marker::PhantomData};
-
-    struct ActualResponseState {
-        status_line: (u8, String),
-        header: Vec<(String, String)>,
-        body: String,
-    }
-
-    impl ActualResponseState {
-        fn new() -> ActualResponseState {
-            ActualResponseState {
-                status_line: (0u8, String::new()),
-                header: Vec::new(),
-                body: String::new(),
-            }
-        }
-    }
+    use std::fmt::Display;
 
     trait SendingState {}
 
     struct Start {}
     impl SendingState for Start {}
 
-    struct Headers {}
+    struct Headers {
+        status_line: (u8, String),
+        header: Vec<(String, String)>,
+    }
     impl SendingState for Headers {}
 
-    struct Body {}
+    struct Body {
+        headers: Headers,
+        body: String,
+    }
     impl SendingState for Body {}
 
     struct HttpResponse<S: SendingState> {
-        state: Box<ActualResponseState>,
-        _sending_state: PhantomData<S>,
+        _sending_state: S,
     }
 
-    impl<S: SendingState> Display for HttpResponse<S> {
+    impl Display for HttpResponse<Body> {
         fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
             write!(
                 f,
                 "{:?} {:?} {}",
-                self.state.status_line, self.state.header, self.state.body
+                self._sending_state.headers.status_line,
+                self._sending_state.headers.header,
+                self._sending_state.body
             )
         }
     }
@@ -49,34 +40,36 @@ mod test {
     impl HttpResponse<Start> {
         fn new() -> HttpResponse<Start> {
             HttpResponse::<Start> {
-                state: Box::new(ActualResponseState::new()),
-                _sending_state: PhantomData::default(),
+                _sending_state: Start {},
             }
         }
 
-        fn status_line(mut self, code: u8, message: &str) -> HttpResponse<Headers> {
-            self.state.status_line = (code, message.to_string());
+        fn status_line(self, code: u8, message: &str) -> HttpResponse<Headers> {
             HttpResponse {
-                state: self.state,
-                _sending_state: PhantomData::default(),
+                _sending_state: Headers {
+                    status_line: (code, message.to_string()),
+                    header: Vec::new(),
+                },
             }
         }
     }
 
     impl HttpResponse<Headers> {
         fn header(mut self, key: &str, value: &str) -> HttpResponse<Headers> {
-            self.state.header.push((key.to_string(), value.to_string()));
+            self._sending_state
+                .header
+                .push((key.to_string(), value.to_string()));
             HttpResponse {
-                state: self.state,
-                _sending_state: PhantomData::default(),
+                _sending_state: self._sending_state,
             }
         }
 
-        fn body(mut self, body: &str) -> HttpResponse<Body> {
-            self.state.body = body.to_string();
+        fn body(self, body: &str) -> HttpResponse<Body> {
             HttpResponse {
-                state: self.state,
-                _sending_state: PhantomData::default(),
+                _sending_state: Body {
+                    headers: self._sending_state,
+                    body: body.to_string(),
+                },
             }
         }
     }
