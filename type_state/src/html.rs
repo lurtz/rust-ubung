@@ -5,6 +5,7 @@ mod test {
     use std::fmt::Display;
 
     trait ResponseState {}
+    trait SendingState {}
 
     struct Start {}
     impl ResponseState for Start {}
@@ -14,15 +15,24 @@ mod test {
         header: Vec<(String, String)>,
     }
     impl ResponseState for Headers {}
+    impl SendingState for Headers {}
 
     struct Body {
         headers: Headers,
         body: String,
     }
     impl ResponseState for Body {}
+    impl SendingState for Body {}
 
     struct HttpResponse<S: ResponseState> {
         _sending_state: S,
+    }
+
+    impl<S> HttpResponse<S>
+    where
+        S: ResponseState + SendingState,
+    {
+        fn send(self) {}
     }
 
     impl Display for HttpResponse<Body> {
@@ -99,5 +109,22 @@ mod test {
             "(123, \"blub\") [(\"Length\", \"123\"), (\"Spam-value\", \"666\")] aaaaaaaahhhhh",
             format!("{}", body)
         );
+    }
+
+    #[test]
+    fn send_with_body() {
+        let httpresponse = HttpResponse::new();
+        httpresponse
+            .status_line(123, "blub")
+            .header("Length", "123")
+            .header("Spam-value", "666")
+            .body("aaaaaaaahhhhh")
+            .send();
+    }
+
+    #[test]
+    fn send_with_status() {
+        let httpresponse = HttpResponse::new();
+        httpresponse.status_line(123, "blub").send();
     }
 }
