@@ -4,24 +4,24 @@
 mod test {
     use std::fmt::Display;
 
-    trait SendingState {}
+    trait ResponseState {}
 
     struct Start {}
-    impl SendingState for Start {}
+    impl ResponseState for Start {}
 
     struct Headers {
         status_line: (u8, String),
         header: Vec<(String, String)>,
     }
-    impl SendingState for Headers {}
+    impl ResponseState for Headers {}
 
     struct Body {
         headers: Headers,
         body: String,
     }
-    impl SendingState for Body {}
+    impl ResponseState for Body {}
 
-    struct HttpResponse<S: SendingState> {
+    struct HttpResponse<S: ResponseState> {
         _sending_state: S,
     }
 
