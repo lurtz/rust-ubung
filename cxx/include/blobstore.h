@@ -10,14 +10,11 @@ struct BlobMetadata;
 
 class BlobstoreClient {
 public:
-  BlobstoreClient();
-  uint64_t put(MultiBuf &buf) const;
-  void tag(uint64_t blobid, rust::Str tag) const;
-  BlobMetadata metadata(uint64_t blobid) const;
-
-private:
-  class impl;
-  std::shared_ptr<impl> impl;
+  BlobstoreClient() = default;
+  virtual ~BlobstoreClient() = default;
+  virtual uint64_t put(MultiBuf &buf) = 0;
+  virtual void tag(uint64_t blobid, rust::Str tag) = 0;
+  virtual BlobMetadata metadata(uint64_t blobid) = 0;
 };
 
 std::unique_ptr<BlobstoreClient> new_blobstore_client();
