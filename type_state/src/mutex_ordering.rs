@@ -2,19 +2,19 @@ use std::marker::PhantomData;
 use std::sync::Mutex;
 use std::sync::MutexGuard;
 
-struct TakenLockPriority<'a, T: ?Sized, const PRIORITY: usize> {
+pub struct TakenLockPriority<'a, T: ?Sized, const PRIORITY: usize> {
     phantom: PhantomData<&'a mut T>,
 }
 
-struct PriorityMutex<'a, T: ?Sized, U, const PRIORITY: usize> {
+pub struct PriorityMutex<'a, T: ?Sized, U, const PRIORITY: usize> {
     previous: PhantomData<&'a mut U>,
     mutex: Mutex<T>,
 }
 
-impl<'a, T: ?Sized, U, const PRIORITY: usize> PriorityMutex<'a, T, U, PRIORITY> {
-    fn lock<'b, 'c, V, const PREVIOUS_PRIORITY: usize>(
+impl<T: ?Sized, U, const PRIORITY: usize> PriorityMutex<'_, T, U, PRIORITY> {
+    pub fn lock<'c, V, const PREVIOUS_PRIORITY: usize>(
         &self,
-        _previous_priority: PhantomData<&'c mut TakenLockPriority<'b, V, PREVIOUS_PRIORITY>>,
+        _previous_priority: PhantomData<&'c mut TakenLockPriority<'_, V, PREVIOUS_PRIORITY>>,
     ) -> (TakenLockPriority<'c, Self, PRIORITY>, MutexGuard<'_, T>) {
         const {
             if PREVIOUS_PRIORITY >= PRIORITY {
@@ -30,7 +30,7 @@ impl<'a, T: ?Sized, U, const PRIORITY: usize> PriorityMutex<'a, T, U, PRIORITY> 
     }
 }
 
-fn use_priority<'a, 'b, V, const PREVIOUS_PRIORITY: usize>(
+pub fn use_priority<'a, 'b, V, const PREVIOUS_PRIORITY: usize>(
     _priority: &'a mut TakenLockPriority<'b, V, PREVIOUS_PRIORITY>,
 ) -> PhantomData<&'a mut TakenLockPriority<'b, V, PREVIOUS_PRIORITY>> {
     PhantomData

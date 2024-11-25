@@ -46,16 +46,16 @@ mod test {
         let second = std::sync::Mutex::new('b');
         let third = std::sync::Mutex::new(3u32);
 
-        let mut locked = LockedAt::new();
+        let mut _locked = LockedAt::new();
         let mut locked_third = LockedAt::new();
 
         // This is fine: the second lock can be acquired without holding the first.
-        let (mut locked, mut second_guard) = locked.with_lock::<SecondLock>(&second).unwrap();
+        let (mut _locked, mut second_guard) = _locked.with_lock::<SecondLock>(&second).unwrap();
         *second_guard = 'c';
         // let (mut locked_third_from_second, mut third_guard) =
         //     locked.with_lock::<ThirdLock>(&third).unwrap();
 
-        let (mut locked, mut third_guard) = locked_third.with_lock::<ThirdLock>(&third).unwrap();
+        let (mut _locked, mut third_guard) = locked_third.with_lock::<ThirdLock>(&third).unwrap();
         *third_guard = 4u32;
         // let (mut locked, mut third_guard) = locked.with_lock::<SecondLock>(&second).unwrap();
 
@@ -63,7 +63,7 @@ mod test {
         // held.
         // let (mut locked, mut first_guard) = locked.with_lock::<FirstLock>(&first).unwrap();
         let mut locked = LockedAt::new();
-        let (mut locked, mut first_guard) = locked.with_lock::<FirstLock>(&first).unwrap();
+        let (mut _locked, mut first_guard) = locked.with_lock::<FirstLock>(&first).unwrap();
         *first_guard = 666;
     }
 }

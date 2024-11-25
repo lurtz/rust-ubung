@@ -4,15 +4,15 @@ use std::fmt::Display;
 
 pub trait ResponseState {}
 pub trait SendingState {}
-pub struct Start {}
+struct Start {}
 impl ResponseState for Start {}
-pub struct Headers {
+struct Headers {
     status_line: (u8, String),
     header: Vec<(String, String)>,
 }
 impl ResponseState for Headers {}
 impl SendingState for Headers {}
-pub struct Body {
+struct Body {
     headers: Headers,
     body: String,
 }
@@ -42,13 +42,15 @@ impl Display for HttpResponse<Body> {
     }
 }
 
-impl HttpResponse<Start> {
-    pub fn new() -> HttpResponse<Start> {
-        HttpResponse::<Start> {
+impl Default for HttpResponse<Start> {
+    fn default() -> Self {
+        Self {
             _sending_state: Start {},
         }
     }
+}
 
+impl HttpResponse<Start> {
     pub fn status_line(self, code: u8, message: &str) -> HttpResponse<Headers> {
         HttpResponse {
             _sending_state: Headers {
@@ -85,7 +87,7 @@ mod test {
 
     #[test]
     fn create_valid_response() {
-        let httpresponse = HttpResponse::new();
+        let httpresponse = HttpResponse::default();
         httpresponse
             .status_line(123, "blub")
             .header("Length", "123")
@@ -95,7 +97,7 @@ mod test {
 
     #[test]
     fn check_display() {
-        let httpresponse = HttpResponse::new();
+        let httpresponse = HttpResponse::default();
         let body = httpresponse
             .status_line(123, "blub")
             .header("Length", "123")
@@ -110,7 +112,7 @@ mod test {
 
     #[test]
     fn send_with_body() {
-        let httpresponse = HttpResponse::new();
+        let httpresponse = HttpResponse::default();
         httpresponse
             .status_line(123, "blub")
             .header("Length", "123")
@@ -121,7 +123,7 @@ mod test {
 
     #[test]
     fn send_with_status() {
-        let httpresponse = HttpResponse::new();
+        let httpresponse = HttpResponse::default();
         httpresponse.status_line(123, "blub").send();
     }
 }
