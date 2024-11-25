@@ -1,42 +1,46 @@
+use std::marker::PhantomData;
+use std::sync::Mutex;
+use std::sync::MutexGuard;
+
+struct TakenLockPriority<'a, T: ?Sized, const PRIORITY: usize> {
+    phantom: PhantomData<&'a mut T>,
+}
+
+struct PriorityMutex<'a, T: ?Sized, U, const PRIORITY: usize> {
+    previous: PhantomData<&'a mut U>,
+    mutex: Mutex<T>,
+}
+
+impl<'a, T: ?Sized, U, const PRIORITY: usize> PriorityMutex<'a, T, U, PRIORITY> {
+    fn lock<'b, 'c, V, const PREVIOUS_PRIORITY: usize>(
+        &self,
+        _previous_priority: PhantomData<&'c mut TakenLockPriority<'b, V, PREVIOUS_PRIORITY>>,
+    ) -> (TakenLockPriority<'c, Self, PRIORITY>, MutexGuard<'_, T>) {
+        const {
+            if PREVIOUS_PRIORITY >= PRIORITY {
+                panic!("Improper use of lock is detetected")
+            }
+        }
+        (
+            TakenLockPriority::<'_, _, PRIORITY> {
+                phantom: PhantomData::<&mut _>,
+            },
+            self.mutex.lock().unwrap(),
+        )
+    }
+}
+
+fn use_priority<'a, 'b, V, const PREVIOUS_PRIORITY: usize>(
+    _priority: &'a mut TakenLockPriority<'b, V, PREVIOUS_PRIORITY>,
+) -> PhantomData<&'a mut TakenLockPriority<'b, V, PREVIOUS_PRIORITY>> {
+    PhantomData
+}
+
 #[cfg(test)]
 mod test {
-    use std::marker::PhantomData;
-    use std::sync::Mutex;
-    use std::sync::MutexGuard;
+    use std::{marker::PhantomData, sync::Mutex};
 
-    struct TakenLockPriority<'a, T: ?Sized, const PRIORITY: usize> {
-        phantom: PhantomData<&'a mut T>,
-    }
-
-    struct PriorityMutex<'a, T: ?Sized, U, const PRIORITY: usize> {
-        previous: PhantomData<&'a mut U>,
-        mutex: Mutex<T>,
-    }
-
-    impl<'a, T: ?Sized, U, const PRIORITY: usize> PriorityMutex<'a, T, U, PRIORITY> {
-        fn lock<'b, 'c, V, const PREVIOUS_PRIORITY: usize>(
-            &self,
-            _previous_priority: PhantomData<&'c mut TakenLockPriority<'b, V, PREVIOUS_PRIORITY>>,
-        ) -> (TakenLockPriority<'c, Self, PRIORITY>, MutexGuard<'_, T>) {
-            const {
-                if PREVIOUS_PRIORITY >= PRIORITY {
-                    panic!("Improper use of lock is detetected")
-                }
-            }
-            (
-                TakenLockPriority::<'_, _, PRIORITY> {
-                    phantom: PhantomData::<&mut _>,
-                },
-                self.mutex.lock().unwrap(),
-            )
-        }
-    }
-
-    fn use_priority<'a, 'b, V, const PREVIOUS_PRIORITY: usize>(
-        _priority: &'a mut TakenLockPriority<'b, V, PREVIOUS_PRIORITY>,
-    ) -> PhantomData<&'a mut TakenLockPriority<'b, V, PREVIOUS_PRIORITY>> {
-        PhantomData
-    }
+    use super::{use_priority, PriorityMutex, TakenLockPriority};
 
     #[test]
     fn main() {
