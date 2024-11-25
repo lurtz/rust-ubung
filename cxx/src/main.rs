@@ -1,3 +1,5 @@
+use std::io::{Result, Write};
+
 #[cxx::bridge(namespace = "org::blobstore")]
 mod ffi {
     // Shared structs with fields visible to both languages.
@@ -42,19 +44,37 @@ pub fn next_chunk(buf: &mut MultiBuf) -> &[u8] {
     next.map_or(&[], Vec::as_slice)
 }
 
-fn main() {
+fn main_impl(logger: &mut dyn Write) -> Result<()> {
     let mut client = ffi::new_blobstore_client();
 
     // Upload a blob.
     let chunks = vec![b"fearless".to_vec(), b"concurrency".to_vec()];
     let mut buf = MultiBuf { chunks, pos: 0 };
     let blobid = client.pin_mut().put(&mut buf);
-    println!("blobid = {}", blobid);
+    writeln!(logger, "blobid = {}", blobid)?;
 
     // Add a tag.
     client.pin_mut().tag(blobid, "rust");
 
     // Read back the tags.
     let metadata = client.pin_mut().metadata(blobid);
-    println!("tags = {:?}", metadata.tags);
+    writeln!(logger, "tags = {:?}", metadata.tags)?;
+    Ok(())
+}
+
+fn main() -> Result<()> {
+    main_impl(&mut std::io::stdout())
+}
+
+#[cfg(test)]
+mod test {
+    use crate::main_impl;
+
+    #[test]
+    fn main_works() {
+        let mut logger = Vec::new();
+        main_impl(&mut logger).unwrap();
+        let expected = "blobid = 9851996977040795552\ntags = [\"rust\"]\n".as_bytes();
+        assert_eq!(expected, &logger);
+    }
 }
