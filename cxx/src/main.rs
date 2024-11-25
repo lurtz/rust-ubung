@@ -62,6 +62,7 @@ fn main_impl(logger: &mut dyn Write) -> Result<()> {
     Ok(())
 }
 
+#[cfg(not(test))]
 fn main() -> Result<()> {
     main_impl(&mut std::io::stdout())
 }
