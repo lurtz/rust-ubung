@@ -1,6 +1,8 @@
 #pragma once
 #include "rust/cxx.h"
+#include <cstdint>
 #include <memory>
+#include <utility>
 
 namespace org {
 namespace blobstore {
@@ -18,6 +20,16 @@ public:
 };
 
 std::unique_ptr<BlobstoreClient> new_blobstore_client();
+
+template <typename T> struct T_wrapper {
+  T t;
+  T_wrapper(T t) : t{std::move(t)} {}
+  T two_times() const { return t + t; }
+};
+
+using Int_wrapper = T_wrapper<uint8_t>;
+
+std::unique_ptr<Int_wrapper> create_int_wrapper(std::uint8_t val);
 
 } // namespace blobstore
 } // namespace org

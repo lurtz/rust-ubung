@@ -69,5 +69,9 @@ std::unique_ptr<BlobstoreClient> new_blobstore_client() {
   return std::make_unique<BlobstoreClient_impl>();
 }
 
+std::unique_ptr<Int_wrapper> create_int_wrapper(std::uint8_t const val) {
+  return std::make_unique<Int_wrapper>(val);
+}
+
 } // namespace blobstore
 } // namespace org

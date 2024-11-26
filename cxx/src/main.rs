@@ -1,5 +1,7 @@
 use std::io::{Result, Write};
 
+use ffi::create_int_wrapper;
+
 #[cxx::bridge(namespace = "org::blobstore")]
 mod ffi {
     // Shared structs with fields visible to both languages.
@@ -25,6 +27,10 @@ mod ffi {
         fn put(self: Pin<&mut BlobstoreClient>, parts: &mut MultiBuf) -> u64;
         fn tag(self: Pin<&mut BlobstoreClient>, blobid: u64, tag: &str);
         fn metadata(self: Pin<&mut BlobstoreClient>, blobid: u64) -> BlobMetadata;
+
+        type Int_wrapper;
+        fn two_times(self: &Int_wrapper) -> u8;
+        fn create_int_wrapper(val: u8) -> UniquePtr<Int_wrapper>;
 
     }
 }
@@ -59,6 +65,9 @@ fn main_impl(logger: &mut dyn Write) -> Result<()> {
     // Read back the tags.
     let metadata = client.pin_mut().metadata(blobid);
     writeln!(logger, "tags = {:?}", metadata.tags)?;
+
+    let int_wrapper = create_int_wrapper(23);
+    writeln!(logger, "double == {}", int_wrapper.two_times())?;
     Ok(())
 }
 
@@ -75,7 +84,7 @@ mod test {
     fn main_works() {
         let mut logger = Vec::new();
         main_impl(&mut logger).unwrap();
-        let expected = "blobid = 9851996977040795552\ntags = [\"rust\"]\n".as_bytes();
+        let expected = "blobid = 9851996977040795552\ntags = [\"rust\"]\ndouble == 46\n".as_bytes();
         assert_eq!(expected, &logger);
     }
 }
