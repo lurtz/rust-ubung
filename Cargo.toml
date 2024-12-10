@@ -4,10 +4,12 @@ resolver = "2"
 members = [
         "adder",
         "assoc_types",
+        "cxx",
         "embed",
 	"fourier_transform",
         "makros",
         "matrix",
+        "pin",
         "romans",
         "type_state"
 ]
