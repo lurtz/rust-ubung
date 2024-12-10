@@ -9,6 +9,7 @@ members = [
 	"fourier_transform",
         "makros",
         "matrix",
+        "pin",
         "romans",
         "type_state"
 ]
