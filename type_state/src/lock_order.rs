@@ -85,11 +85,14 @@ mod test {
     enum A {}
     enum B {}
     enum C {}
+    enum D {}
 
     #[test]
     fn impl_lock_after_test() {
         impl_lock_after!(A => B);
+        // impl_lock_after!(B => A);
         impl_lock_after!(B => C);
-        // impl_lock_after!(C => A); // this will create a compile error
+        impl_lock_after!(C => D);
+        // impl_lock_after!(D => A); // this will create a compile error
     }
 }
