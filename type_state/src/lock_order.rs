@@ -66,4 +66,30 @@ mod test {
         let (mut _locked, mut first_guard) = locked.with_lock::<FirstLock>(&first).unwrap();
         *first_guard = 666;
     }
+
+    // from https://cs.opensource.google/fuchsia/fuchsia/+/main:src/connectivity/network/netstack3/core/lock-order/src/relation.rs;l=107;drc=e2e00bc897e7362f33b25a7d98d9d7ba5ff07f69
+    pub trait LockAfterF<A> {}
+
+    pub trait LockBefore<X> {}
+
+    impl<B: LockAfterF<A>, A> LockBefore<B> for A {}
+
+    #[macro_export]
+    macro_rules! impl_lock_after {
+        ($A:ty => $B:ty) => {
+            impl LockAfterF<$A> for $B {}
+            impl<X: LockBefore<$A>> LockAfterF<X> for $B {}
+        };
+    }
+
+    enum A {}
+    enum B {}
+    enum C {}
+
+    #[test]
+    fn impl_lock_after_test() {
+        impl_lock_after!(A => B);
+        impl_lock_after!(B => C);
+        // impl_lock_after!(C => A); // this will create a compile error
+    }
 }
