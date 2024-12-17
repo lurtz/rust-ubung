@@ -68,16 +68,21 @@ mod test {
     }
 
     // from https://cs.opensource.google/fuchsia/fuchsia/+/main:src/connectivity/network/netstack3/core/lock-order/src/relation.rs;l=107;drc=e2e00bc897e7362f33b25a7d98d9d7ba5ff07f69
+    // forward in graph
     pub trait LockAfterF<A> {}
 
+    // backward in graph
     pub trait LockBefore<X> {}
 
+    // automatic backward implementation
     impl<B: LockAfterF<A>, A> LockBefore<B> for A {}
 
+    // creates a graph with edges von A to B and all predecessors of A to B
     #[macro_export]
     macro_rules! impl_lock_after {
         ($A:ty => $B:ty) => {
             impl LockAfterF<$A> for $B {}
+            // in case of circular dependency this will create a second trait LockAfterF<$A> implementation and cause compile error
             impl<X: LockBefore<$A>> LockAfterF<X> for $B {}
         };
     }
