@@ -4,12 +4,13 @@ resolver = "2"
 members = [
         "adder",
         "assoc_types",
+        "async_io",
         "cxx",
         "embed",
-	"fourier_transform",
+        "fourier_transform",
         "makros",
         "matrix",
         "pin",
         "romans",
-        "type_state"
+        "type_state",
 ]
