@@ -66,4 +66,38 @@ mod test {
         let (mut _locked, mut first_guard) = locked.with_lock::<FirstLock>(&first).unwrap();
         *first_guard = 666;
     }
+
+    // from https://cs.opensource.google/fuchsia/fuchsia/+/main:src/connectivity/network/netstack3/core/lock-order/src/relation.rs;l=107;drc=e2e00bc897e7362f33b25a7d98d9d7ba5ff07f69
+    // forward in graph
+    pub trait LockAfterF<A> {}
+
+    // backward in graph
+    pub trait LockBefore<X> {}
+
+    // automatic backward implementation
+    impl<B: LockAfterF<A>, A> LockBefore<B> for A {}
+
+    // creates a graph with edges von A to B and all predecessors of A to B
+    #[macro_export]
+    macro_rules! impl_lock_after {
+        ($A:ty => $B:ty) => {
+            impl LockAfterF<$A> for $B {}
+            // in case of circular dependency this will create a second trait LockAfterF<$A> implementation and cause compile error
+            impl<X: LockBefore<$A>> LockAfterF<X> for $B {}
+        };
+    }
+
+    enum A {}
+    enum B {}
+    enum C {}
+    enum D {}
+
+    #[test]
+    fn impl_lock_after_test() {
+        impl_lock_after!(A => B);
+        // impl_lock_after!(B => A);
+        impl_lock_after!(B => C);
+        impl_lock_after!(C => D);
+        // impl_lock_after!(D => A); // this will create a compile error
+    }
 }
