@@ -71,7 +71,6 @@ async fn read_int(socket: &mut TcpStream, mut buf: &mut [u8]) -> Result<usize, s
 }
 
 async fn read_int_and_watch_for_event(
-    message: &str,
     mut socket: &mut TcpStream,
     mut buf: &mut [u8],
     event_receiver: &mut Channel_type::Receiver<String>,
@@ -83,7 +82,6 @@ async fn read_int_and_watch_for_event(
 
     let n;
     loop {
-        socket.write_all(message.as_bytes()).await?;
         let select_kind = tokio::select! {
             x = read_int(&mut socket, &mut buf) => SelectKind::ReadInt(x?),
             _ = event_receiver.changed() => {SelectKind::Event(event_receiver.borrow_and_update().clone())}
@@ -110,11 +108,13 @@ async fn read_x_and_y_and_reply_with_sum(
     event_receiver: &mut Channel_type::Receiver<String>,
 ) -> Result<(), std::io::Error> {
     {
-        let x = read_int_and_watch_for_event("< x = ", socket, buf, event_receiver).await?;
+        socket.write_all("< x = ".as_bytes()).await?;
+        let x = read_int_and_watch_for_event(socket, buf, event_receiver).await?;
         l(task_state).set_x(x);
     }
     {
-        let y = read_int_and_watch_for_event("< y = ", socket, buf, event_receiver).await?;
+        socket.write_all("< y = ".as_bytes()).await?;
+        let y = read_int_and_watch_for_event(socket, buf, event_receiver).await?;
         l(task_state).set_y(y);
     }
 
