@@ -10,18 +10,16 @@ struct LeSharedState {
     x: usize,
     y: usize,
     sender: Channel_type::Sender<String>,
-    receiver: Channel_type::Receiver<String>,
 }
 
 impl Default for LeSharedState {
     fn default() -> Self {
-        let (sender, receiver) = Channel_type::channel::<String>("".to_string());
+        let sender = Channel_type::Sender::<String>::new("".to_string());
         Self {
             counter: Default::default(),
             x: Default::default(),
             y: Default::default(),
             sender,
-            receiver,
         }
     }
 }
@@ -55,7 +53,7 @@ impl LeSharedState {
     }
 
     fn get_event_update_receiver(&self) -> Channel_type::Receiver<String> {
-        self.receiver.clone()
+        self.sender.subscribe()
     }
 }
 
