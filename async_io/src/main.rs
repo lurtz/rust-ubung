@@ -51,7 +51,6 @@ impl LeSharedState {
     }
 
     fn send_event(&self, event: &str) -> Result<(), Channel_type::error::SendError<String>> {
-        // TODO take owned string?
         self.sender.send(event.to_string())
     }
 
@@ -132,6 +131,21 @@ fn l(state: &mut State) -> std::sync::MutexGuard<'_, LeSharedState> {
     state.lock().unwrap()
 }
 
+fn io_thread_main(mut thread_state: &mut State) {
+    let mut buffer = String::new();
+    buffer.reserve(10);
+    loop {
+        print!("Enter event content: ");
+        stdout().flush().expect("flush failed");
+        stdin()
+            .read_line(&mut buffer)
+            .expect("no proper string entered");
+
+        l(&mut thread_state).send_event(buffer.trim()).unwrap();
+        buffer.clear();
+    }
+}
+
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let listener = TcpListener::bind("127.0.0.1:8080").await?;
@@ -142,18 +156,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // send event from user io thread
     let mut thread_state = le_state.clone();
     let _le_thread = std::thread::spawn(move || {
-        let mut buffer = String::new();
-        buffer.reserve(10);
-        loop {
-            print!("Enter event content: ");
-            stdout().flush().expect("flush failed");
-            stdin()
-                .read_line(&mut buffer)
-                .expect("no proper string entered");
-
-            l(&mut thread_state).send_event(buffer.trim()).unwrap();
-            buffer.clear();
-        }
+        io_thread_main(&mut thread_state);
     });
 
     loop {
