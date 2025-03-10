@@ -1,14 +1,29 @@
-use std::io::ErrorKind;
+use std::io::{stdin, stdout, ErrorKind, Write};
 use std::sync::{Arc, Mutex};
 
-use tokio::io::{AsyncReadExt, AsyncWriteExt, Stdin};
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
+use tokio::sync::watch as Channel_type;
 
-#[derive(Default)]
 struct LeSharedState {
     counter: usize,
     x: usize,
     y: usize,
+    sender: Channel_type::Sender<String>,
+    receiver: Channel_type::Receiver<String>,
+}
+
+impl Default for LeSharedState {
+    fn default() -> Self {
+        let (sender, receiver) = Channel_type::channel::<String>("".to_string());
+        Self {
+            counter: Default::default(),
+            x: Default::default(),
+            y: Default::default(),
+            sender,
+            receiver,
+        }
+    }
 }
 
 fn exchange(current: &mut usize, new: &usize) -> usize {
@@ -34,6 +49,15 @@ impl LeSharedState {
     fn get_z(&self) -> usize {
         self.x + self.y
     }
+
+    fn send_event(&self, event: &str) -> Result<(), Channel_type::error::SendError<String>> {
+        // TODO take owned string?
+        self.sender.send(event.to_string())
+    }
+
+    fn get_event_update_receiver(&self) -> Channel_type::Receiver<String> {
+        self.receiver.clone()
+    }
 }
 
 type State = Arc<Mutex<LeSharedState>>;
@@ -47,19 +71,51 @@ async fn read_int(socket: &mut TcpStream, mut buf: &mut [u8]) -> Result<usize, s
     Ok(x)
 }
 
-async fn read_x_and_y_and_reply_with_sum(
+async fn read_int_and_watch_for_event(
+    message: &str,
     mut socket: &mut TcpStream,
     mut buf: &mut [u8],
+    event_receiver: &mut Channel_type::Receiver<String>,
+) -> Result<usize, std::io::Error> {
+    enum SelectKind {
+        ReadInt(usize),
+        Event(String),
+    }
+
+    let n;
+    loop {
+        socket.write_all(message.as_bytes()).await?;
+        let select_kind = tokio::select! {
+            x = read_int(&mut socket, &mut buf) => SelectKind::ReadInt(x?),
+            _ = event_receiver.changed() => {SelectKind::Event(event_receiver.borrow_and_update().clone())}
+        };
+        match select_kind {
+            SelectKind::ReadInt(xx) => {
+                n = xx;
+                break;
+            }
+            SelectKind::Event(s) => {
+                socket
+                    .write_all(format!("\n got event: {}\n", s).as_bytes())
+                    .await?;
+            }
+        }
+    }
+    Ok(n)
+}
+
+async fn read_x_and_y_and_reply_with_sum(
+    socket: &mut TcpStream,
+    buf: &mut [u8],
     task_state: &mut State,
+    event_receiver: &mut Channel_type::Receiver<String>,
 ) -> Result<(), std::io::Error> {
     {
-        socket.write_all("< x = ".as_bytes()).await?;
-        let x = read_int(&mut socket, &mut buf).await?;
+        let x = read_int_and_watch_for_event("< x = ", socket, buf, event_receiver).await?;
         l(task_state).set_x(x);
     }
     {
-        socket.write_all("< y = ".as_bytes()).await?;
-        let y = read_int(&mut socket, &mut buf).await?;
+        let y = read_int_and_watch_for_event("< y = ", socket, buf, event_receiver).await?;
         l(task_state).set_y(y);
     }
 
@@ -81,9 +137,24 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let listener = TcpListener::bind("127.0.0.1:8080").await?;
     println!("listening on {}", listener.local_addr()?);
 
-    // TODO send event from main thread
-
     let mut le_state = State::default();
+
+    // send event from user io thread
+    let mut thread_state = le_state.clone();
+    let _le_thread = std::thread::spawn(move || {
+        let mut buffer = String::new();
+        buffer.reserve(10);
+        loop {
+            print!("Enter event content: ");
+            stdout().flush().expect("flush failed");
+            stdin()
+                .read_line(&mut buffer)
+                .expect("no proper string entered");
+
+            l(&mut thread_state).send_event(buffer.trim()).unwrap();
+            buffer.clear();
+        }
+    });
 
     loop {
         let (mut socket, _) = listener.accept().await?;
@@ -93,11 +164,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         tokio::spawn(async move {
             let mut buf = [0; 10];
+            let mut event_receiver = l(&mut task_state).get_event_update_receiver();
 
             // In a loop, read data from the socket and write the data back.
             loop {
-                if let Err(e) =
-                    read_x_and_y_and_reply_with_sum(&mut socket, &mut buf, &mut task_state).await
+                if let Err(e) = read_x_and_y_and_reply_with_sum(
+                    &mut socket,
+                    &mut buf,
+                    &mut task_state,
+                    &mut event_receiver,
+                )
+                .await
                 {
                     eprintln!("socket failure; err = {:?}", e);
                     return;
