@@ -59,8 +59,8 @@ impl LeSharedState {
 
 type State = Arc<Mutex<LeSharedState>>;
 
-async fn read_int(socket: &mut TcpStream, mut buf: &mut [u8]) -> Result<usize, std::io::Error> {
-    let n = socket.read(&mut buf).await?;
+async fn read_int(socket: &mut TcpStream, buf: &mut [u8]) -> Result<usize, std::io::Error> {
+    let n = socket.read(buf).await?;
     if 0 == n {
         return Err(std::io::Error::from(ErrorKind::ConnectionAborted));
     }
@@ -73,8 +73,8 @@ async fn read_int(socket: &mut TcpStream, mut buf: &mut [u8]) -> Result<usize, s
 }
 
 async fn read_int_and_watch_for_event(
-    mut socket: &mut TcpStream,
-    mut buf: &mut [u8],
+    socket: &mut TcpStream,
+    buf: &mut [u8],
     event_receiver: &mut Channel_type::Receiver<String>,
 ) -> Result<usize, std::io::Error> {
     enum SelectKind {
@@ -85,7 +85,7 @@ async fn read_int_and_watch_for_event(
     let n;
     loop {
         let select_kind = tokio::select! {
-            x = read_int(&mut socket, &mut buf) => SelectKind::ReadInt(x?),
+            x = read_int(socket, buf) => SelectKind::ReadInt(x?),
             _ = event_receiver.changed() => {SelectKind::Event(event_receiver.borrow_and_update().clone())}
         };
         match select_kind {
@@ -129,11 +129,11 @@ async fn read_x_and_y_and_reply_with_sum(
     Ok(())
 }
 
-fn l(state: &mut State) -> std::sync::MutexGuard<'_, LeSharedState> {
+fn l(state: &State) -> std::sync::MutexGuard<'_, LeSharedState> {
     state.lock().unwrap()
 }
 
-fn io_thread_main(mut thread_state: &mut State) {
+fn io_thread_main(thread_state: &mut State) {
     let mut buffer = String::new();
     buffer.reserve(10);
     loop {
@@ -143,7 +143,7 @@ fn io_thread_main(mut thread_state: &mut State) {
             .read_line(&mut buffer)
             .expect("no proper string entered");
 
-        l(&mut thread_state).send_event(buffer.trim()).unwrap();
+        l(thread_state).send_event(buffer.trim()).unwrap();
         buffer.clear();
     }
 }
@@ -153,7 +153,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let listener = TcpListener::bind("127.0.0.1:8080").await?;
     println!("listening on {}", listener.local_addr()?);
 
-    let mut le_state = State::default();
+    let le_state = State::default();
 
     // send event from user io thread
     let mut thread_state = le_state.clone();
@@ -163,13 +163,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     loop {
         let (mut socket, _) = listener.accept().await?;
-        println!("new connection {}", l(&mut le_state).inc_counter());
+        println!("new connection {}", l(&le_state).inc_counter());
 
         let mut task_state = le_state.clone();
 
         tokio::spawn(async move {
             let mut buf = [0; 10];
-            let mut event_receiver = l(&mut task_state).get_event_update_receiver();
+            let mut event_receiver = l(&task_state).get_event_update_receiver();
 
             // In a loop, read data from the socket and write the data back.
             loop {
