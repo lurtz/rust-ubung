@@ -64,7 +64,11 @@ async fn read_int(socket: &mut TcpStream, mut buf: &mut [u8]) -> Result<usize, s
     if 0 == n {
         return Err(std::io::Error::from(ErrorKind::ConnectionAborted));
     }
-    let x: usize = str::from_utf8(&buf[0..n]).unwrap().trim().parse().unwrap();
+    let x: usize = std::str::from_utf8(&buf[0..n])
+        .unwrap()
+        .trim()
+        .parse()
+        .unwrap();
     Ok(x)
 }
 
