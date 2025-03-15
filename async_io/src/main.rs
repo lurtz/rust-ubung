@@ -1,9 +1,9 @@
 use std::io::{stdin, stdout, ErrorKind, Write};
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
-use tokio::sync::watch as Channel_type;
+use tokio::sync::{watch as Channel_type, Mutex};
 
 struct LeSharedState {
     counter: usize,
@@ -112,25 +112,21 @@ async fn read_x_and_y_and_reply_with_sum(
     {
         socket.write_all("< x = ".as_bytes()).await?;
         let x = read_int_and_watch_for_event(socket, buf, event_receiver).await?;
-        l(task_state).set_x(x);
+        task_state.lock().await.set_x(x);
     }
     {
         socket.write_all("< y = ".as_bytes()).await?;
         let y = read_int_and_watch_for_event(socket, buf, event_receiver).await?;
-        l(task_state).set_y(y);
+        task_state.lock().await.set_y(y);
     }
 
     // Write the data back
-    let z = l(task_state).get_z();
+    let z = task_state.lock().await.get_z();
     socket
         .write_all(format!("> z = {}\n", z).as_bytes())
         .await?;
 
     Ok(())
-}
-
-fn l(state: &State) -> std::sync::MutexGuard<'_, LeSharedState> {
-    state.lock().unwrap()
 }
 
 fn io_thread_main(thread_state: &mut State) {
@@ -143,7 +139,10 @@ fn io_thread_main(thread_state: &mut State) {
             .read_line(&mut buffer)
             .expect("no proper string entered");
 
-        l(thread_state).send_event(buffer.trim()).unwrap();
+        thread_state
+            .blocking_lock()
+            .send_event(buffer.trim())
+            .unwrap();
         buffer.clear();
     }
 }
@@ -163,13 +162,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     loop {
         let (mut socket, _) = listener.accept().await?;
-        println!("new connection {}", l(&le_state).inc_counter());
+        println!("new connection {}", le_state.lock().await.inc_counter());
 
         let mut task_state = le_state.clone();
 
         tokio::spawn(async move {
             let mut buf = [0; 10];
-            let mut event_receiver = l(&task_state).get_event_update_receiver();
+            let mut event_receiver = task_state.lock().await.get_event_update_receiver();
 
             // In a loop, read data from the socket and write the data back.
             loop {
