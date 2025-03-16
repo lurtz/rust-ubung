@@ -4,6 +4,7 @@ use std::sync::Arc;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
 use tokio::sync::{watch as Channel_type, Mutex};
+use tokio::task::spawn_blocking;
 
 struct LeSharedState {
     counter: usize,
@@ -156,7 +157,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // send event from user io thread
     let mut thread_state = le_state.clone();
-    let _le_thread = std::thread::spawn(move || {
+    spawn_blocking(move || {
         io_thread_main(&mut thread_state);
     });
 
