@@ -3,8 +3,8 @@ use std::sync::{Arc, Mutex};
 
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
+use tokio::signal;
 use tokio::sync::watch as Channel_type;
-use tokio::task::spawn_blocking;
 
 struct LeSharedState {
     counter: usize,
@@ -144,7 +144,7 @@ fn io_thread_main(thread_state: &mut State) {
             .read_line(&mut buffer)
             .expect("no proper string entered");
 
-        l(thread_state).send_event(buffer.trim()).unwrap();
+        let _ = l(thread_state).send_event(buffer.trim());
         buffer.clear();
     }
 }
@@ -156,16 +156,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let le_state = State::default();
 
-    // send event from user io thread
+    // send event from user io thread, cannot be managed by tokio, because
+    // reading from stdin blocks. Due to that the runtime will not shutdown
+    // without user input. But with a normal os thread the application
+    // terminates as expected.
     let mut thread_state = le_state.clone();
-    spawn_blocking(move || {
+    std::thread::spawn(move || {
         io_thread_main(&mut thread_state);
     });
 
-    loop {
-        let (mut socket, _) = listener.accept().await?;
+    let handle_new_connection = move |mut socket| {
         println!("new connection {}", l(&le_state).inc_counter());
-
         let mut task_state = le_state.clone();
 
         tokio::spawn(async move {
@@ -183,9 +184,21 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 .await
                 {
                     eprintln!("socket failure; err = {:?}", e);
-                    return;
+                    break;
                 }
             }
         });
-    }
+    };
+
+    tokio::spawn(async move {
+        loop {
+            let (socket, _) = listener.accept().await.unwrap();
+            handle_new_connection(socket);
+        }
+    });
+
+    signal::ctrl_c().await.unwrap();
+    println!("terminating");
+
+    Ok(())
 }
