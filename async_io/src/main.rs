@@ -78,28 +78,16 @@ async fn read_int_and_watch_for_event(
     buf: &mut [u8],
     event_receiver: &mut Channel_type::Receiver<String>,
 ) -> Result<usize, std::io::Error> {
-    enum SelectKind {
-        ReadInt(usize),
-        Event(String),
-    }
-
     let n;
     loop {
-        let select_kind = tokio::select! {
-            x = read_int(socket, buf) => SelectKind::ReadInt(x?),
-            _ = event_receiver.changed() => {SelectKind::Event(event_receiver.borrow_and_update().clone())}
-        };
-        match select_kind {
-            SelectKind::ReadInt(xx) => {
-                n = xx;
-                break;
-            }
-            SelectKind::Event(s) => {
+        tokio::select! {
+            x = read_int(socket, buf) => {n=x?; break;},
+            _ = event_receiver.changed() => {
                 socket
-                    .write_all(format!("\n got event: {}\n", s).as_bytes())
+                    .write_all(format!("\n got event: {}\n", *event_receiver.borrow_and_update()).as_bytes())
                     .await?;
             }
-        }
+        };
     }
     Ok(n)
 }
