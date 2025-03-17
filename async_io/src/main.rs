@@ -158,7 +158,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         let mut task_state = le_state.clone();
 
         tokio::spawn(async move {
-            let mut buf = [0; 10];
+            let mut buf = vec![0; 10];
             let mut event_receiver = l(&task_state).get_event_update_receiver();
 
             // In a loop, read data from the socket and write the data back.
