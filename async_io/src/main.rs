@@ -279,7 +279,20 @@ mod test {
     }
 
     #[tokio::test]
-    async fn test_create_new_connection_handler() {
+    async fn test_create_new_connection_handler_computes_result() {
+        let task_state = State::default();
+        let socket = Builder::new()
+            .write(b"< x = ")
+            .read(b"3")
+            .write(b"< y = ")
+            .read(b"4")
+            .write(b"> z = 7\n")
+            .build();
+        create_new_connection_handler(task_state)(socket);
+    }
+
+    #[tokio::test]
+    async fn test_create_new_connection_handler_aborts_connection() {
         let task_state = State::default();
         let socket = Builder::new().write(b"< x = ").build();
         create_new_connection_handler(task_state)(socket);
