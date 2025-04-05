@@ -5,6 +5,7 @@ use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpListener;
 use tokio::signal;
 use tokio::sync::watch as Channel_type;
+use tokio::task::JoinHandle;
 
 struct LeSharedState {
     counter: usize,
@@ -146,7 +147,7 @@ fn io_thread_main(thread_state: &mut State) {
     }
 }
 
-fn create_new_connection_handler<Socket>(le_state: State) -> impl Fn(Socket)
+fn create_new_connection_handler<Socket>(le_state: State) -> impl Fn(Socket) -> JoinHandle<()>
 where
     Socket: AsyncReadExt + AsyncWriteExt + Unpin + Send + 'static,
 {
@@ -172,7 +173,7 @@ where
                     break;
                 }
             }
-        });
+        })
     }
 }
 
@@ -287,14 +288,19 @@ mod test {
             .write(b"< y = ")
             .read(b"4")
             .write(b"> z = 7\n")
+            .write(b"< x = ")
             .build();
-        create_new_connection_handler(task_state)(socket);
+        assert!(create_new_connection_handler(task_state)(socket)
+            .await
+            .is_ok());
     }
 
     #[tokio::test]
     async fn test_create_new_connection_handler_aborts_connection() {
         let task_state = State::default();
         let socket = Builder::new().write(b"< x = ").build();
-        create_new_connection_handler(task_state)(socket);
+        assert!(create_new_connection_handler(task_state)(socket)
+            .await
+            .is_ok());
     }
 }
