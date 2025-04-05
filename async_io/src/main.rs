@@ -202,6 +202,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 #[cfg(test)]
 mod test {
+    use std::io::ErrorKind;
+
     use crate::{l, read_x_and_y_and_reply_with_sum, State};
     use tokio_test::io::Builder;
 
@@ -249,5 +251,23 @@ mod test {
         )
         .await;
         assert!(r.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_return_connection_aborted() {
+        let mut task_state = State::default();
+        let mut buf = vec![0; 10];
+        let mut event_receiver = l(&task_state).get_event_update_receiver();
+        let mut socket = Builder::new().write(b"< x = ").build();
+        let r = read_x_and_y_and_reply_with_sum(
+            &mut socket,
+            &mut buf,
+            &mut task_state,
+            &mut event_receiver,
+        )
+        .await;
+        assert!(r.is_err());
+        let error = r.unwrap_err();
+        assert_eq!(ErrorKind::ConnectionAborted, error.kind());
     }
 }
