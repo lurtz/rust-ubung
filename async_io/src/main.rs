@@ -146,23 +146,11 @@ fn io_thread_main(thread_state: &mut State) {
     }
 }
 
-#[tokio::main(flavor = "current_thread")]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let listener = TcpListener::bind("127.0.0.1:8080").await?;
-    println!("listening on {}", listener.local_addr()?);
-
-    let le_state = State::default();
-
-    // send event from user io thread, cannot be managed by tokio, because
-    // reading from stdin blocks. Due to that the runtime will not shutdown
-    // without user input. But with a normal os thread the application
-    // terminates as expected.
-    let mut thread_state = le_state.clone();
-    std::thread::spawn(move || {
-        io_thread_main(&mut thread_state);
-    });
-
-    let handle_new_connection = move |mut socket| {
+fn create_new_connection_handler<Socket>(le_state: State) -> impl Fn(Socket)
+where
+    Socket: AsyncReadExt + AsyncWriteExt + Unpin + Send + 'static,
+{
+    move |mut socket| {
         println!("new connection {}", l(&le_state).inc_counter());
         let mut task_state = le_state.clone();
 
@@ -185,7 +173,26 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 }
             }
         });
-    };
+    }
+}
+
+#[tokio::main(flavor = "current_thread")]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let listener = TcpListener::bind("127.0.0.1:8080").await?;
+    println!("listening on {}", listener.local_addr()?);
+
+    let le_state = State::default();
+
+    // send event from user io thread, cannot be managed by tokio, because
+    // reading from stdin blocks. Due to that the runtime will not shutdown
+    // without user input. But with a normal os thread the application
+    // terminates as expected.
+    let mut thread_state = le_state.clone();
+    std::thread::spawn(move || {
+        io_thread_main(&mut thread_state);
+    });
+
+    let handle_new_connection = create_new_connection_handler(le_state);
 
     tokio::spawn(async move {
         loop {
@@ -204,7 +211,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 mod test {
     use std::io::ErrorKind;
 
-    use crate::{l, read_x_and_y_and_reply_with_sum, State};
+    use crate::{create_new_connection_handler, l, read_x_and_y_and_reply_with_sum, State};
     use tokio_test::io::Builder;
 
     #[tokio::test]
@@ -269,5 +276,12 @@ mod test {
         assert!(r.is_err());
         let error = r.unwrap_err();
         assert_eq!(ErrorKind::ConnectionAborted, error.kind());
+    }
+
+    #[tokio::test]
+    async fn test_create_new_connection_handler() {
+        let task_state = State::default();
+        let socket = Builder::new().write(b"< x = ").build();
+        create_new_connection_handler(task_state)(socket);
     }
 }
