@@ -226,4 +226,28 @@ mod test {
         .await;
         assert!(r.is_ok());
     }
+
+    #[tokio::test]
+    async fn test_send_event() {
+        let mut task_state = State::default();
+        let mut buf = vec![0; 10];
+        let mut event_receiver = l(&task_state).get_event_update_receiver();
+        assert!(l(&task_state).send_event("blub").is_ok());
+        let mut socket = Builder::new()
+            .write(b"< x = ")
+            .write(b"\n got event: blub\n")
+            .read(b"3")
+            .write(b"< y = ")
+            .read(b"4")
+            .write(b"> z = 7\n")
+            .build();
+        let r = read_x_and_y_and_reply_with_sum(
+            &mut socket,
+            &mut buf,
+            &mut task_state,
+            &mut event_receiver,
+        )
+        .await;
+        assert!(r.is_ok());
+    }
 }
