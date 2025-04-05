@@ -2,7 +2,7 @@ use std::io::{stdin, stdout, ErrorKind, Write};
 use std::sync::{Arc, Mutex};
 
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
-use tokio::net::{TcpListener, TcpStream};
+use tokio::net::TcpListener;
 use tokio::signal;
 use tokio::sync::watch as Channel_type;
 
@@ -60,7 +60,10 @@ impl LeSharedState {
 
 type State = Arc<Mutex<LeSharedState>>;
 
-async fn read_int(socket: &mut TcpStream, buf: &mut [u8]) -> Result<usize, std::io::Error> {
+async fn read_int<Reader>(socket: &mut Reader, buf: &mut [u8]) -> Result<usize, std::io::Error>
+where
+    Reader: AsyncReadExt + Unpin,
+{
     let n = socket.read(buf).await?;
     if 0 == n {
         return Err(std::io::Error::from(ErrorKind::ConnectionAborted));
@@ -73,11 +76,14 @@ async fn read_int(socket: &mut TcpStream, buf: &mut [u8]) -> Result<usize, std::
     Ok(x)
 }
 
-async fn read_int_and_watch_for_event(
-    socket: &mut TcpStream,
+async fn read_int_and_watch_for_event<Socket>(
+    socket: &mut Socket,
     buf: &mut [u8],
     event_receiver: &mut Channel_type::Receiver<String>,
-) -> Result<usize, std::io::Error> {
+) -> Result<usize, std::io::Error>
+where
+    Socket: AsyncReadExt + AsyncWriteExt + Unpin,
+{
     let n;
     loop {
         tokio::select! {
@@ -92,12 +98,15 @@ async fn read_int_and_watch_for_event(
     Ok(n)
 }
 
-async fn read_x_and_y_and_reply_with_sum(
-    socket: &mut TcpStream,
+async fn read_x_and_y_and_reply_with_sum<Socket>(
+    socket: &mut Socket,
     buf: &mut [u8],
     task_state: &mut State,
     event_receiver: &mut Channel_type::Receiver<String>,
-) -> Result<(), std::io::Error> {
+) -> Result<(), std::io::Error>
+where
+    Socket: AsyncReadExt + AsyncWriteExt + Unpin,
+{
     {
         socket.write_all("< x = ".as_bytes()).await?;
         let x = read_int_and_watch_for_event(socket, buf, event_receiver).await?;
@@ -189,4 +198,32 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("terminating");
 
     Ok(())
+}
+
+#[cfg(test)]
+mod test {
+    use crate::{l, read_x_and_y_and_reply_with_sum, State};
+    use tokio_test::io::Builder;
+
+    #[tokio::test]
+    async fn test_read_x_and_y_and_reply_with_sum() {
+        let mut task_state = State::default();
+        let mut buf = vec![0; 10];
+        let mut event_receiver = l(&task_state).get_event_update_receiver();
+        let mut socket = Builder::new()
+            .write(b"< x = ")
+            .read(b"3")
+            .write(b"< y = ")
+            .read(b"4")
+            .write(b"> z = 7\n")
+            .build();
+        let r = read_x_and_y_and_reply_with_sum(
+            &mut socket,
+            &mut buf,
+            &mut task_state,
+            &mut event_receiver,
+        )
+        .await;
+        assert!(r.is_ok());
+    }
 }
