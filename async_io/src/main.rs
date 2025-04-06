@@ -7,6 +7,9 @@ use tokio::signal;
 use tokio::sync::watch as Channel_type;
 use tokio::task::JoinHandle;
 
+#[cfg(test)]
+use mockall::automock;
+
 struct LeSharedState {
     counter: usize,
     x: usize,
@@ -177,9 +180,24 @@ where
     }
 }
 
-#[tokio::main(flavor = "current_thread")]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let listener = TcpListener::bind("127.0.0.1:8080").await?;
+#[cfg_attr(test, automock)]
+trait CtrlCWaiter {
+    async fn ctrl_c_pressed(&self);
+}
+
+#[derive(Default)]
+struct CtrlCWaiterImpl {}
+
+impl CtrlCWaiter for CtrlCWaiterImpl {
+    async fn ctrl_c_pressed(&self) {
+        signal::ctrl_c().await.unwrap();
+    }
+}
+
+async fn main2(
+    listener: TcpListener,
+    ctrl_c_waiter: &impl CtrlCWaiter,
+) -> Result<(), Box<dyn std::error::Error>> {
     println!("listening on {}", listener.local_addr()?);
 
     let le_state = State::default();
@@ -202,17 +220,31 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     });
 
-    signal::ctrl_c().await.unwrap();
+    ctrl_c_waiter.ctrl_c_pressed().await;
     println!("terminating");
 
     Ok(())
 }
 
+#[tokio::main(flavor = "current_thread")]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let listener = TcpListener::bind("127.0.0.1:8080").await?;
+    main2(listener, &CtrlCWaiterImpl::default()).await
+}
+
 #[cfg(test)]
 mod test {
-    use std::io::ErrorKind;
+    use std::{io::ErrorKind, thread, time::Duration};
 
-    use crate::{create_new_connection_handler, l, read_x_and_y_and_reply_with_sum, State};
+    use crate::{
+        create_new_connection_handler, l, main2, read_x_and_y_and_reply_with_sum, MockCtrlCWaiter,
+        State,
+    };
+    use nix::{
+        sys::signal::{kill, Signal},
+        unistd::Pid,
+    };
+    use tokio::net::TcpListener;
     use tokio_test::io::Builder;
 
     #[tokio::test]
@@ -302,5 +334,22 @@ mod test {
         assert!(create_new_connection_handler(task_state)(socket)
             .await
             .is_ok());
+    }
+
+    fn nothing() {}
+
+    #[tokio::test]
+    async fn test_main_terminates_when_ctrl_pressed() {
+        let mut ctrl_c_mock = MockCtrlCWaiter::new();
+        ctrl_c_mock
+            .expect_ctrl_c_pressed()
+            .once()
+            .returning(nothing);
+        thread::spawn(|| {
+            thread::sleep(Duration::from_millis(100));
+            let _ = kill(Pid::this(), Signal::SIGINT);
+        });
+        let listener = TcpListener::bind("127.0.0.1:8080").await.unwrap();
+        let _mr = main2(listener, &ctrl_c_mock).await;
     }
 }
