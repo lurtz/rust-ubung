@@ -3,6 +3,7 @@ use std::sync::{Arc, Mutex};
 
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpListener;
+#[cfg(not(test))]
 use tokio::signal;
 use tokio::sync::watch as Channel_type;
 use tokio::task::JoinHandle;
@@ -185,9 +186,11 @@ trait CtrlCWaiter {
     async fn ctrl_c_pressed(&self);
 }
 
+#[cfg(not(test))]
 #[derive(Default)]
 struct CtrlCWaiterImpl {}
 
+#[cfg(not(test))]
 impl CtrlCWaiter for CtrlCWaiterImpl {
     async fn ctrl_c_pressed(&self) {
         signal::ctrl_c().await.unwrap();
@@ -226,6 +229,7 @@ async fn main2(
     Ok(())
 }
 
+#[cfg(not(test))]
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let listener = TcpListener::bind("127.0.0.1:8080").await?;
