@@ -9,7 +9,7 @@ use tokio::sync::watch as Channel_type;
 use tokio::task::JoinHandle;
 
 #[cfg(test)]
-use mockall::automock;
+use mockall::{automock, mock};
 
 struct LeSharedState {
     counter: usize,
@@ -197,6 +197,20 @@ impl CtrlCWaiter for CtrlCWaiterImpl {
     }
 }
 
+#[cfg(test)]
+mock! {
+    pub AsyncMockCtrlWaiter {}
+    impl Clone for AsyncMockCtrlWaiter {
+        fn clone(&self) -> Self;
+    }
+    impl CtrlCWaiter for AsyncMockCtrlWaiter {
+        // This implementation of the mock trait method is required to allow the mock methods to return a future.
+        fn ctrl_c_pressed(
+            &self,
+        )-> impl std::future::Future<Output=()> + Send;
+    }
+}
+
 async fn main2(
     listener: TcpListener,
     ctrl_c_waiter: &impl CtrlCWaiter,
@@ -238,18 +252,25 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 #[cfg(test)]
 mod test {
-    use std::{io::ErrorKind, thread, time::Duration};
+    use std::{
+        io::{ErrorKind, Read, Write},
+        net::TcpStream,
+        ops::DerefMut,
+        sync::Arc,
+        thread,
+    };
 
     use crate::{
-        create_new_connection_handler, l, main2, read_x_and_y_and_reply_with_sum, MockCtrlCWaiter,
-        State,
+        create_new_connection_handler, l, main2, read_x_and_y_and_reply_with_sum,
+        MockAsyncMockCtrlWaiter, MockCtrlCWaiter, State,
     };
-    use nix::{
-        sys::signal::{kill, Signal},
-        unistd::Pid,
+    use tokio::{
+        net::TcpListener,
+        sync::{oneshot, Mutex},
     };
-    use tokio::net::TcpListener;
     use tokio_test::io::Builder;
+
+    fn nothing() {}
 
     #[tokio::test]
     async fn test_read_x_and_y_and_reply_with_sum() {
@@ -340,8 +361,6 @@ mod test {
             .is_ok());
     }
 
-    fn nothing() {}
-
     #[tokio::test]
     async fn test_main_terminates_when_ctrl_pressed() {
         let mut ctrl_c_mock = MockCtrlCWaiter::new();
@@ -349,11 +368,43 @@ mod test {
             .expect_ctrl_c_pressed()
             .once()
             .returning(nothing);
-        thread::spawn(|| {
-            thread::sleep(Duration::from_millis(100));
-            let _ = kill(Pid::this(), Signal::SIGINT);
-        });
-        let listener = TcpListener::bind("127.0.0.1:8080").await.unwrap();
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
         let _mr = main2(listener, &ctrl_c_mock).await;
+    }
+
+    #[tokio::test]
+    async fn test_main_accepts_connection() {
+        let (tx, rx) = oneshot::channel();
+        let rx = Arc::new(Mutex::new(rx));
+        let mut ctrl_c_mock = MockAsyncMockCtrlWaiter::new();
+        ctrl_c_mock
+            .expect_ctrl_c_pressed()
+            .once()
+            .returning(move || {
+                let rxc = rx.clone();
+                Box::pin(async move {
+                    rxc.try_lock().unwrap().deref_mut().await.unwrap();
+                    ()
+                })
+            });
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let local_address = listener.local_addr().unwrap();
+        let response = thread::spawn(move || {
+            let mut to_server = TcpStream::connect(local_address).unwrap();
+            let mut buf = [0; 10];
+            to_server.read_exact(&mut buf[0..6]).unwrap();
+            assert_eq!("< x = ", str::from_utf8(&buf[0..6]).unwrap());
+            to_server.write_all(b"7\n").unwrap();
+            to_server.read_exact(&mut buf[0..6]).unwrap();
+            assert_eq!("< y = ", str::from_utf8(&buf[0..6]).unwrap());
+            to_server.write_all(b"3\n").unwrap();
+            to_server.read_exact(&mut buf[0..9]).unwrap();
+            tx.send(()).unwrap();
+            buf
+        });
+        let _mr = main2(listener, &ctrl_c_mock).await;
+        _mr.unwrap();
+        let result = response.join().unwrap();
+        assert_eq!("> z = 10\n", str::from_utf8(&result[0..9]).unwrap());
     }
 }
