@@ -393,10 +393,10 @@ mod test {
             let mut to_server = TcpStream::connect(local_address).unwrap();
             let mut buf = [0; 10];
             to_server.read_exact(&mut buf[0..6]).unwrap();
-            assert_eq!("< x = ", str::from_utf8(&buf[0..6]).unwrap());
+            assert_eq!("< x = ", std::str::from_utf8(&buf[0..6]).unwrap());
             to_server.write_all(b"7\n").unwrap();
             to_server.read_exact(&mut buf[0..6]).unwrap();
-            assert_eq!("< y = ", str::from_utf8(&buf[0..6]).unwrap());
+            assert_eq!("< y = ", std::str::from_utf8(&buf[0..6]).unwrap());
             to_server.write_all(b"3\n").unwrap();
             to_server.read_exact(&mut buf[0..9]).unwrap();
             tx.send(()).unwrap();
@@ -405,6 +405,6 @@ mod test {
         let _mr = main2(listener, &ctrl_c_mock).await;
         _mr.unwrap();
         let result = response.join().unwrap();
-        assert_eq!("> z = 10\n", str::from_utf8(&result[0..9]).unwrap());
+        assert_eq!("> z = 10\n", std::str::from_utf8(&result[0..9]).unwrap());
     }
 }
