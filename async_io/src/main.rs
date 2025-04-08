@@ -221,7 +221,7 @@ async fn main2(
 
     // send event from user io thread, cannot be managed by tokio, because
     // reading from stdin blocks. Due to that the runtime will not shutdown
-    // without user input. But with a normal os thread the application
+    // without user input. But with a normal OS thread the application
     // terminates as expected.
     let mut thread_state = le_state.clone();
     std::thread::spawn(move || {
