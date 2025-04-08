@@ -136,15 +136,40 @@ fn l(state: &State) -> std::sync::MutexGuard<'_, LeSharedState> {
     state.lock().unwrap()
 }
 
-fn io_thread_main(thread_state: &mut State) {
-    let mut buffer = String::new();
-    buffer.reserve(10);
-    loop {
-        print!("Enter event content: ");
+#[cfg_attr(test, automock)]
+// TODO make it clonable
+trait Stdio {
+    fn print(&self, line: &str);
+    fn flush(&self);
+    fn read_line(&self, buffer: &mut String);
+}
+
+#[derive(Default)]
+struct StdioImpl {}
+
+impl Stdio for StdioImpl {
+    fn print(&self, line: &str) {
+        let _ = stdout().write(line.as_bytes());
+    }
+
+    fn flush(&self) {
         stdout().flush().expect("flush failed");
+    }
+
+    fn read_line(&self, mut buffer: &mut String) {
         stdin()
             .read_line(&mut buffer)
             .expect("no proper string entered");
+    }
+}
+
+fn io_thread_main(thread_state: &mut State, stdio: &dyn Stdio) {
+    let mut buffer = String::new();
+    buffer.reserve(10);
+    loop {
+        stdio.print("Enter event content: ");
+        stdio.flush();
+        stdio.read_line(&mut buffer);
 
         let _ = l(thread_state).send_event(buffer.trim());
         buffer.clear();
@@ -214,6 +239,7 @@ mock! {
 async fn main2(
     listener: TcpListener,
     ctrl_c_waiter: &impl CtrlCWaiter,
+    stdio: Box<dyn Stdio + Send>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     println!("listening on {}", listener.local_addr()?);
 
@@ -225,7 +251,7 @@ async fn main2(
     // terminates as expected.
     let mut thread_state = le_state.clone();
     std::thread::spawn(move || {
-        io_thread_main(&mut thread_state);
+        io_thread_main(&mut thread_state, stdio.as_ref());
     });
 
     let handle_new_connection = create_new_connection_handler(le_state);
@@ -247,7 +273,12 @@ async fn main2(
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let listener = TcpListener::bind("127.0.0.1:8080").await?;
-    main2(listener, &CtrlCWaiterImpl::default()).await
+    main2(
+        listener,
+        &CtrlCWaiterImpl::default(),
+        Box::new(StdioImpl::default()),
+    )
+    .await
 }
 
 #[cfg(test)]
@@ -257,13 +288,15 @@ mod test {
         net::TcpStream,
         ops::DerefMut,
         sync::Arc,
-        thread,
+        thread::{self, sleep},
+        time::Duration,
     };
 
     use crate::{
         create_new_connection_handler, l, main2, read_x_and_y_and_reply_with_sum,
-        MockAsyncMockCtrlWaiter, MockCtrlCWaiter, State,
+        MockAsyncMockCtrlWaiter, MockCtrlCWaiter, MockStdio, State, StdioImpl,
     };
+    use mockall::predicate::eq;
     use tokio::{
         net::TcpListener,
         sync::{oneshot, Mutex},
@@ -368,8 +401,9 @@ mod test {
             .expect_ctrl_c_pressed()
             .once()
             .returning(nothing);
+        let stdio_mock = Box::new(StdioImpl::default());
         let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
-        let _mr = main2(listener, &ctrl_c_mock).await;
+        let _mr = main2(listener, &ctrl_c_mock, stdio_mock).await;
     }
 
     #[tokio::test]
@@ -402,7 +436,17 @@ mod test {
             tx.send(()).unwrap();
             buf
         });
-        let _mr = main2(listener, &ctrl_c_mock).await;
+        let mut stdio_mock = Box::new(MockStdio::new());
+        stdio_mock
+            .expect_print()
+            .with(eq("Enter event content: "))
+            .returning(|_a| {});
+        stdio_mock.expect_flush().once().returning(nothing);
+        stdio_mock
+            .expect_read_line()
+            .once()
+            .returning(|_| sleep(Duration::from_secs(10)));
+        let _mr = main2(listener, &ctrl_c_mock, stdio_mock).await;
         _mr.unwrap();
         let result = response.join().unwrap();
         assert_eq!("> z = 10\n", std::str::from_utf8(&result[0..9]).unwrap());
