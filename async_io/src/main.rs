@@ -156,10 +156,8 @@ impl Stdio for StdioImpl {
         stdout().flush().expect("flush failed");
     }
 
-    fn read_line(&self, mut buffer: &mut String) {
-        stdin()
-            .read_line(&mut buffer)
-            .expect("no proper string entered");
+    fn read_line(&self, buffer: &mut String) {
+        stdin().read_line(buffer).expect("no proper string entered");
     }
 }
 
