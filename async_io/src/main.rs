@@ -1,4 +1,6 @@
-use std::io::{self, stdin, stdout, ErrorKind, Write};
+use std::io::{self, ErrorKind};
+#[cfg(not(test))]
+use std::io::{stdin, stdout, Write};
 use std::sync::{Arc, Mutex};
 
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
@@ -144,9 +146,11 @@ trait Stdio {
     fn read_line(&self, buffer: &mut String) -> io::Result<usize>;
 }
 
+#[cfg(not(test))]
 #[derive(Default)]
 struct StdioImpl {}
 
+#[cfg(not(test))]
 impl Stdio for StdioImpl {
     fn print(&self, line: &str) -> io::Result<usize> {
         stdout().write(line.as_bytes())
@@ -291,7 +295,7 @@ mod test {
 
     use crate::{
         create_new_connection_handler, l, main2, read_x_and_y_and_reply_with_sum,
-        MockAsyncMockCtrlWaiter, MockCtrlCWaiter, MockStdio, State, StdioImpl,
+        MockAsyncMockCtrlWaiter, MockCtrlCWaiter, MockStdio, State,
     };
     use mockall::predicate::eq;
     use tokio::{
@@ -398,7 +402,12 @@ mod test {
             .expect_ctrl_c_pressed()
             .once()
             .returning(nothing);
-        let stdio_mock = Box::new(StdioImpl::default());
+        let mut stdio_mock = Box::new(MockStdio::default());
+        stdio_mock
+            .expect_print()
+            .once()
+            .returning(|_| Err(io::Error::new(ErrorKind::BrokenPipe, "")));
+
         let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
         let _mr = main2(listener, &ctrl_c_mock, stdio_mock).await;
     }
