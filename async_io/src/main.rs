@@ -1,4 +1,4 @@
-use std::io::{stdin, stdout, ErrorKind, Write};
+use std::io::{self, stdin, stdout, ErrorKind, Write};
 use std::sync::{Arc, Mutex};
 
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
@@ -139,35 +139,35 @@ fn l(state: &State) -> std::sync::MutexGuard<'_, LeSharedState> {
 #[cfg_attr(test, automock)]
 // TODO make it clonable
 trait Stdio {
-    fn print(&self, line: &str);
-    fn flush(&self);
-    fn read_line(&self, buffer: &mut String);
+    fn print(&self, line: &str) -> io::Result<usize>;
+    fn flush(&self) -> io::Result<usize>;
+    fn read_line(&self, buffer: &mut String) -> io::Result<usize>;
 }
 
 #[derive(Default)]
 struct StdioImpl {}
 
 impl Stdio for StdioImpl {
-    fn print(&self, line: &str) {
-        let _ = stdout().write(line.as_bytes());
+    fn print(&self, line: &str) -> io::Result<usize> {
+        stdout().write(line.as_bytes())
     }
 
-    fn flush(&self) {
-        stdout().flush().expect("flush failed");
+    fn flush(&self) -> io::Result<usize> {
+        stdout().flush().map(|_| 0)
     }
 
-    fn read_line(&self, buffer: &mut String) {
-        stdin().read_line(buffer).expect("no proper string entered");
+    fn read_line(&self, buffer: &mut String) -> io::Result<usize> {
+        stdin().read_line(buffer)
     }
 }
 
-fn io_thread_main(thread_state: &mut State, stdio: &dyn Stdio) {
+fn io_thread_main(thread_state: &mut State, stdio: &dyn Stdio) -> io::Result<()> {
     let mut buffer = String::new();
     buffer.reserve(10);
     loop {
-        stdio.print("Enter event content: ");
-        stdio.flush();
-        stdio.read_line(&mut buffer);
+        stdio.print("Enter event content: ")?;
+        stdio.flush()?;
+        stdio.read_line(&mut buffer)?;
 
         let _ = l(thread_state).send_event(buffer.trim());
         buffer.clear();
@@ -249,7 +249,7 @@ async fn main2(
     // terminates as expected.
     let mut thread_state = le_state.clone();
     std::thread::spawn(move || {
-        io_thread_main(&mut thread_state, stdio.as_ref());
+        let _ = io_thread_main(&mut thread_state, stdio.as_ref());
     });
 
     let handle_new_connection = create_new_connection_handler(le_state);
@@ -282,12 +282,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 #[cfg(test)]
 mod test {
     use std::{
-        io::{ErrorKind, Read, Write},
+        io::{self, ErrorKind, Read, Write},
         net::TcpStream,
         ops::DerefMut,
-        sync::Arc,
-        thread::{self, sleep},
-        time::Duration,
+        sync::{mpsc, Arc},
+        thread::{self},
     };
 
     use crate::{
@@ -438,13 +437,15 @@ mod test {
         stdio_mock
             .expect_print()
             .with(eq("Enter event content: "))
-            .returning(|_a| {});
-        stdio_mock.expect_flush().once().returning(nothing);
-        stdio_mock
-            .expect_read_line()
-            .once()
-            .returning(|_| sleep(Duration::from_secs(10)));
+            .returning(|_a| Ok(0));
+        stdio_mock.expect_flush().once().returning(|| Ok(0));
+        let (tx, rx) = mpsc::channel();
+        stdio_mock.expect_read_line().once().returning(move |_| {
+            rx.recv().unwrap();
+            Err(io::Error::new(io::ErrorKind::BrokenPipe, ""))
+        });
         let _mr = main2(listener, &ctrl_c_mock, stdio_mock).await;
+        tx.send(()).unwrap();
         _mr.unwrap();
         let result = response.join().unwrap();
         assert_eq!("> z = 10\n", std::str::from_utf8(&result[0..9]).unwrap());
