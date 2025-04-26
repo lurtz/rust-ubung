@@ -483,16 +483,8 @@ mod test {
             let mut buf = [0; 20];
             to_server.read_exact(&mut buf[0..6]).unwrap();
             set_connected.send(()).unwrap();
-            println!(
-                "read_exact returned: {}",
-                std::str::from_utf8(&buf).unwrap()
-            );
             assert_eq!("< x = ", std::str::from_utf8(&buf[0..6]).unwrap());
             to_server.read_exact(&mut buf[0..18]).unwrap();
-            println!(
-                "read_exact returned: {}",
-                std::str::from_utf8(&buf).unwrap()
-            );
             tx.send(()).unwrap();
             buf
         });
@@ -508,7 +500,6 @@ mod test {
             .expect_read_line()
             .once()
             .returning(move |buf: &mut String| {
-                println!("setting event content");
                 is_connected.lock().unwrap().recv().unwrap();
                 buf.clear();
                 buf.reserve(4);
@@ -521,14 +512,10 @@ mod test {
             .once()
             .with(eq("Enter event content: "))
             .returning(move |_| {
-                println!("waiting for next event content");
                 rx.recv().unwrap();
-                println!("aborting io thread");
                 Err(io::Error::new(io::ErrorKind::BrokenPipe, ""))
             });
-        println!("main2 started");
         let _mr = main2(listener, &ctrl_c_mock, stdio_mock).await;
-        println!("main2 returned");
         tx.send(()).unwrap();
         _mr.unwrap();
         let result = response.join().unwrap();
