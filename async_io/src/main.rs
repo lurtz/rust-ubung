@@ -495,12 +495,11 @@ mod test {
             .with(eq("Enter event content: "))
             .returning(|_a| Ok(0));
         stdio_mock.expect_flush().once().returning(|| Ok(0));
-        let is_connected = Arc::new(std::sync::Mutex::new(is_connected));
         stdio_mock
             .expect_read_line()
             .once()
             .returning(move |buf: &mut String| {
-                is_connected.lock().unwrap().recv().unwrap();
+                is_connected.recv().unwrap();
                 buf.clear();
                 buf.reserve(4);
                 buf.push_str("blub");
