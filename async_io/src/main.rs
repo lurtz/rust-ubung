@@ -459,4 +459,82 @@ mod test {
         let result = response.join().unwrap();
         assert_eq!("> z = 10\n", std::str::from_utf8(&result[0..9]).unwrap());
     }
+
+    #[tokio::test]
+    async fn test_main_sends_event() {
+        let (tx, rx) = oneshot::channel();
+        let rx = Arc::new(Mutex::new(rx));
+        let mut ctrl_c_mock = MockAsyncMockCtrlWaiter::new();
+        ctrl_c_mock
+            .expect_ctrl_c_pressed()
+            .once()
+            .returning(move || {
+                let rxc = rx.clone();
+                Box::pin(async move {
+                    rxc.try_lock().unwrap().deref_mut().await.unwrap();
+                    ()
+                })
+            });
+        let (set_connected, is_connected) = mpsc::channel();
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let local_address = listener.local_addr().unwrap();
+        let response = thread::spawn(move || {
+            let mut to_server = TcpStream::connect(local_address).unwrap();
+            let mut buf = [0; 20];
+            to_server.read_exact(&mut buf[0..6]).unwrap();
+            set_connected.send(()).unwrap();
+            println!(
+                "read_exact returned: {}",
+                std::str::from_utf8(&buf).unwrap()
+            );
+            assert_eq!("< x = ", std::str::from_utf8(&buf[0..6]).unwrap());
+            to_server.read_exact(&mut buf[0..18]).unwrap();
+            println!(
+                "read_exact returned: {}",
+                std::str::from_utf8(&buf).unwrap()
+            );
+            tx.send(()).unwrap();
+            buf
+        });
+        let mut stdio_mock = Box::new(MockStdio::new());
+        stdio_mock
+            .expect_print()
+            .once()
+            .with(eq("Enter event content: "))
+            .returning(|_a| Ok(0));
+        stdio_mock.expect_flush().once().returning(|| Ok(0));
+        let is_connected = Arc::new(std::sync::Mutex::new(is_connected));
+        stdio_mock
+            .expect_read_line()
+            .once()
+            .returning(move |buf: &mut String| {
+                println!("setting event content");
+                is_connected.lock().unwrap().recv().unwrap();
+                buf.clear();
+                buf.reserve(4);
+                buf.push_str("blub");
+                Ok(buf.len())
+            });
+        let (tx, rx) = mpsc::channel();
+        stdio_mock
+            .expect_print()
+            .once()
+            .with(eq("Enter event content: "))
+            .returning(move |_| {
+                println!("waiting for next event content");
+                rx.recv().unwrap();
+                println!("aborting io thread");
+                Err(io::Error::new(io::ErrorKind::BrokenPipe, ""))
+            });
+        println!("main2 started");
+        let _mr = main2(listener, &ctrl_c_mock, stdio_mock).await;
+        println!("main2 returned");
+        tx.send(()).unwrap();
+        _mr.unwrap();
+        let result = response.join().unwrap();
+        assert_eq!(
+            "\n got event: blub\n",
+            std::str::from_utf8(&result[0..18]).unwrap()
+        );
+    }
 }
