@@ -1,71 +1,17 @@
 use std::io::{self, ErrorKind};
-#[cfg(not(test))]
-use std::io::{stdin, stdout, Write};
-use std::sync::{Arc, Mutex};
 
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpListener;
-#[cfg(not(test))]
-use tokio::signal;
 use tokio::sync::watch as Channel_type;
 use tokio::task::JoinHandle;
 
-#[cfg(test)]
-use mockall::{automock, mock};
+mod ctrl_c_waiter;
+mod state;
+mod stdio;
 
-struct LeSharedState {
-    counter: usize,
-    x: usize,
-    y: usize,
-    sender: Channel_type::Sender<String>,
-}
-
-impl Default for LeSharedState {
-    fn default() -> Self {
-        let sender = Channel_type::Sender::<String>::new("".to_string());
-        Self {
-            counter: Default::default(),
-            x: Default::default(),
-            y: Default::default(),
-            sender,
-        }
-    }
-}
-
-fn exchange(current: &mut usize, new: &usize) -> usize {
-    let old_current = *current;
-    *current = *new;
-    old_current
-}
-
-impl LeSharedState {
-    fn inc_counter(&mut self) -> usize {
-        self.counter += 1;
-        self.counter
-    }
-
-    fn set_x(&mut self, x: usize) -> usize {
-        exchange(&mut self.x, &x)
-    }
-
-    fn set_y(&mut self, y: usize) -> usize {
-        exchange(&mut self.y, &y)
-    }
-
-    fn get_z(&self) -> usize {
-        self.x + self.y
-    }
-
-    fn send_event(&self, event: &str) -> Result<(), Channel_type::error::SendError<String>> {
-        self.sender.send(event.to_string())
-    }
-
-    fn get_event_update_receiver(&self) -> Channel_type::Receiver<String> {
-        self.sender.subscribe()
-    }
-}
-
-type State = Arc<Mutex<LeSharedState>>;
+use ctrl_c_waiter::CtrlCWaiter;
+use state::{l, State};
+use stdio::Stdio;
 
 async fn read_int<Reader>(socket: &mut Reader, buf: &mut [u8]) -> Result<usize, std::io::Error>
 where
@@ -134,37 +80,6 @@ where
     Ok(())
 }
 
-fn l(state: &State) -> std::sync::MutexGuard<'_, LeSharedState> {
-    state.lock().unwrap()
-}
-
-#[cfg_attr(test, automock)]
-// TODO make it clonable
-trait Stdio {
-    fn print(&self, line: &str) -> io::Result<usize>;
-    fn flush(&self) -> io::Result<usize>;
-    fn read_line(&self, buffer: &mut String) -> io::Result<usize>;
-}
-
-#[cfg(not(test))]
-#[derive(Default)]
-struct StdioImpl {}
-
-#[cfg(not(test))]
-impl Stdio for StdioImpl {
-    fn print(&self, line: &str) -> io::Result<usize> {
-        stdout().write(line.as_bytes())
-    }
-
-    fn flush(&self) -> io::Result<usize> {
-        stdout().flush().map(|_| 0)
-    }
-
-    fn read_line(&self, buffer: &mut String) -> io::Result<usize> {
-        stdin().read_line(buffer)
-    }
-}
-
 fn io_thread_main(thread_state: &mut State, stdio: &dyn Stdio) -> io::Result<()> {
     let mut buffer = String::new();
     buffer.reserve(10);
@@ -208,36 +123,6 @@ where
     }
 }
 
-#[cfg_attr(test, automock)]
-trait CtrlCWaiter {
-    async fn ctrl_c_pressed(&self);
-}
-
-#[cfg(not(test))]
-#[derive(Default)]
-struct CtrlCWaiterImpl {}
-
-#[cfg(not(test))]
-impl CtrlCWaiter for CtrlCWaiterImpl {
-    async fn ctrl_c_pressed(&self) {
-        signal::ctrl_c().await.unwrap();
-    }
-}
-
-#[cfg(test)]
-mock! {
-    pub AsyncMockCtrlWaiter {}
-    impl Clone for AsyncMockCtrlWaiter {
-        fn clone(&self) -> Self;
-    }
-    impl CtrlCWaiter for AsyncMockCtrlWaiter {
-        // This implementation of the mock trait method is required to allow the mock methods to return a future.
-        fn ctrl_c_pressed(
-            &self,
-        )-> impl std::future::Future<Output=()> + Send;
-    }
-}
-
 async fn main2(
     listener: TcpListener,
     ctrl_c_waiter: &impl CtrlCWaiter,
@@ -277,8 +162,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let listener = TcpListener::bind("127.0.0.1:8080").await?;
     main2(
         listener,
-        &CtrlCWaiterImpl::default(),
-        Box::new(StdioImpl::default()),
+        &ctrl_c_waiter::CtrlCWaiterImpl::default(),
+        Box::new(stdio::StdioImpl::default()),
     )
     .await
 }
@@ -293,10 +178,9 @@ mod test {
         thread::{self},
     };
 
-    use crate::{
-        create_new_connection_handler, l, main2, read_x_and_y_and_reply_with_sum,
-        MockAsyncMockCtrlWaiter, MockCtrlCWaiter, MockStdio, State,
-    };
+    use crate::ctrl_c_waiter::{MockAsyncMockCtrlWaiter, MockCtrlCWaiter};
+    use crate::stdio::MockStdio;
+    use crate::{create_new_connection_handler, l, main2, read_x_and_y_and_reply_with_sum, State};
     use mockall::predicate::eq;
     use tokio::{
         net::TcpListener,
