@@ -306,6 +306,23 @@ mod test {
 
     fn nothing() {}
 
+    fn create_ctrl_c_mock() -> (MockAsyncMockCtrlWaiter, tokio::sync::oneshot::Sender<()>) {
+        let (tx, rx) = oneshot::channel();
+        let rx = Arc::new(Mutex::new(rx));
+        let mut ctrl_c_mock = MockAsyncMockCtrlWaiter::new();
+        ctrl_c_mock
+            .expect_ctrl_c_pressed()
+            .once()
+            .returning(move || {
+                let rxc = rx.clone();
+                Box::pin(async move {
+                    rxc.try_lock().unwrap().deref_mut().await.unwrap();
+                    ()
+                })
+            });
+        (ctrl_c_mock, tx)
+    }
+
     #[tokio::test]
     async fn test_read_x_and_y_and_reply_with_sum() {
         let mut task_state = State::default();
@@ -414,19 +431,7 @@ mod test {
 
     #[tokio::test]
     async fn test_main_accepts_connection() {
-        let (tx, rx) = oneshot::channel();
-        let rx = Arc::new(Mutex::new(rx));
-        let mut ctrl_c_mock = MockAsyncMockCtrlWaiter::new();
-        ctrl_c_mock
-            .expect_ctrl_c_pressed()
-            .once()
-            .returning(move || {
-                let rxc = rx.clone();
-                Box::pin(async move {
-                    rxc.try_lock().unwrap().deref_mut().await.unwrap();
-                    ()
-                })
-            });
+        let (mut ctrl_c_mock, tx) = create_ctrl_c_mock();
         let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
         let local_address = listener.local_addr().unwrap();
         let response = thread::spawn(move || {
@@ -462,19 +467,7 @@ mod test {
 
     #[tokio::test]
     async fn test_main_sends_event() {
-        let (tx, rx) = oneshot::channel();
-        let rx = Arc::new(Mutex::new(rx));
-        let mut ctrl_c_mock = MockAsyncMockCtrlWaiter::new();
-        ctrl_c_mock
-            .expect_ctrl_c_pressed()
-            .once()
-            .returning(move || {
-                let rxc = rx.clone();
-                Box::pin(async move {
-                    rxc.try_lock().unwrap().deref_mut().await.unwrap();
-                    ()
-                })
-            });
+        let (mut ctrl_c_mock, tx) = create_ctrl_c_mock();
         let (set_connected, is_connected) = mpsc::channel();
         let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
         let local_address = listener.local_addr().unwrap();
