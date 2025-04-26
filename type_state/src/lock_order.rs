@@ -68,16 +68,21 @@ mod test {
     }
 
     // from https://cs.opensource.google/fuchsia/fuchsia/+/main:src/connectivity/network/netstack3/core/lock-order/src/relation.rs;l=107;drc=e2e00bc897e7362f33b25a7d98d9d7ba5ff07f69
+    // dead code warnings are suppressed, because these types are only used
+    // by the borrow checker and will never land in a binary. Maybe the warning
+    // also would go away if the full test of fuchsia would be copied
     // forward in graph
+    #[allow(dead_code)]
     pub trait LockAfterF<A> {}
 
     // backward in graph
+    #[allow(dead_code)]
     pub trait LockBefore<X> {}
 
     // automatic backward implementation
     impl<B: LockAfterF<A>, A> LockBefore<B> for A {}
 
-    // creates a graph with edges von A to B and all predecessors of A to B
+    // creates a graph with edges from A to B and all predecessors of A to B
     #[macro_export]
     macro_rules! impl_lock_after {
         ($A:ty => $B:ty) => {
@@ -87,17 +92,23 @@ mod test {
         };
     }
 
+    #[allow(dead_code)]
     enum A {}
+    #[allow(dead_code)]
     enum B {}
+    #[allow(dead_code)]
     enum C {}
+    #[allow(dead_code)]
     enum D {}
+
+    impl_lock_after!(A => B);
+    // impl_lock_after!(B => A);
+    impl_lock_after!(B => C);
+    impl_lock_after!(C => D);
+    // impl_lock_after!(D => A); // this will create a compile error
 
     #[test]
     fn impl_lock_after_test() {
-        impl_lock_after!(A => B);
-        // impl_lock_after!(B => A);
-        impl_lock_after!(B => C);
-        impl_lock_after!(C => D);
-        // impl_lock_after!(D => A); // this will create a compile error
+        // let _ = A {};
     }
 }
