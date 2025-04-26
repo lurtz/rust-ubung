@@ -431,7 +431,7 @@ mod test {
 
     #[tokio::test]
     async fn test_main_accepts_connection() {
-        let (mut ctrl_c_mock, tx) = create_ctrl_c_mock();
+        let (ctrl_c_mock, tx) = create_ctrl_c_mock();
         let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
         let local_address = listener.local_addr().unwrap();
         let response = thread::spawn(move || {
@@ -467,7 +467,7 @@ mod test {
 
     #[tokio::test]
     async fn test_main_sends_event() {
-        let (mut ctrl_c_mock, tx) = create_ctrl_c_mock();
+        let (ctrl_c_mock, tx) = create_ctrl_c_mock();
         let (set_connected, is_connected) = mpsc::channel();
         let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
         let local_address = listener.local_addr().unwrap();
