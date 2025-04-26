@@ -106,9 +106,4 @@ mod test {
     impl_lock_after!(B => C);
     impl_lock_after!(C => D);
     // impl_lock_after!(D => A); // this will create a compile error
-
-    #[test]
-    fn impl_lock_after_test() {
-        // let _ = A {};
-    }
 }
