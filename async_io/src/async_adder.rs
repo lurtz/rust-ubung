@@ -119,11 +119,38 @@ where
     }
 }
 
-pub async fn main2(
-    listener: TcpListener,
+pub trait MyTcpListener {
+    type Stream: Unpin + Send + AsyncReadExt + AsyncWriteExt;
+
+    fn local_addr(&self) -> io::Result<std::net::SocketAddr>;
+    fn accept(
+        &self,
+    ) -> impl std::future::Future<Output = io::Result<(Self::Stream, std::net::SocketAddr)>> + Send;
+}
+
+impl MyTcpListener for TcpListener {
+    type Stream = tokio::net::TcpStream;
+
+    fn local_addr(&self) -> io::Result<std::net::SocketAddr> {
+        self.local_addr()
+    }
+
+    fn accept(
+        &self,
+    ) -> impl std::future::Future<Output = io::Result<(tokio::net::TcpStream, std::net::SocketAddr)>>
+           + Send {
+        self.accept()
+    }
+}
+
+pub async fn main2<Listener>(
+    listener: Listener,
     ctrl_c_waiter: &impl CtrlCWaiter,
     stdio: Box<dyn Stdio + Send>,
-) -> Result<(), Box<dyn std::error::Error>> {
+) -> Result<(), Box<dyn std::error::Error>>
+where
+    Listener: MyTcpListener + Send + 'static,
+{
     println!("listening on {}", listener.local_addr()?);
 
     let le_state = State::default();
