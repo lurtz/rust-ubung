@@ -9,6 +9,9 @@ use crate::ctrl_c_waiter::CtrlCWaiter;
 use crate::state::{l, State};
 use crate::stdio::Stdio;
 
+#[cfg(test)]
+use mockall::mock;
+
 async fn read_int<Reader>(socket: &mut Reader, buf: &mut [u8]) -> Result<usize, std::io::Error>
 where
     Reader: AsyncReadExt + Unpin,
@@ -137,9 +140,23 @@ impl MyTcpListener for TcpListener {
 
     fn accept(
         &self,
-    ) -> impl std::future::Future<Output = io::Result<(tokio::net::TcpStream, std::net::SocketAddr)>>
-           + Send {
+    ) -> impl std::future::Future<Output = io::Result<(Self::Stream, std::net::SocketAddr)>> + Send
+    {
         self.accept()
+    }
+}
+
+#[cfg(test)]
+mock! {
+    pub MyTcpListenerMock {}
+
+    impl MyTcpListener for MyTcpListenerMock {
+        type Stream = tokio_test::io::Mock;
+        // This implementation of the mock trait method is required to allow the mock methods to return a future.
+        fn local_addr(&self) -> io::Result<std::net::SocketAddr>;
+        fn accept(
+            &self,
+        ) -> impl std::future::Future<Output = io::Result<(tokio_test::io::Mock, std::net::SocketAddr)>> + Send;
     }
 }
 
