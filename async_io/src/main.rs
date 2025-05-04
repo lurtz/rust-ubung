@@ -1,6 +1,6 @@
 use std::io::{self, ErrorKind};
 #[cfg(not(test))]
-use std::io::{stdin, stdout, Write};
+use std::io::{Write, stdin, stdout};
 use std::sync::{Arc, Mutex};
 
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
@@ -289,18 +289,18 @@ mod test {
         io::{self, ErrorKind, Read, Write},
         net::TcpStream,
         ops::DerefMut,
-        sync::{mpsc, Arc},
+        sync::{Arc, mpsc},
         thread::{self},
     };
 
     use crate::{
-        create_new_connection_handler, l, main2, read_x_and_y_and_reply_with_sum,
-        MockAsyncMockCtrlWaiter, MockCtrlCWaiter, MockStdio, State,
+        MockAsyncMockCtrlWaiter, MockCtrlCWaiter, MockStdio, State, create_new_connection_handler,
+        l, main2, read_x_and_y_and_reply_with_sum,
     };
     use mockall::predicate::eq;
     use tokio::{
         net::TcpListener,
-        sync::{oneshot, Mutex},
+        sync::{Mutex, oneshot},
     };
     use tokio_test::io::Builder;
 
@@ -398,18 +398,22 @@ mod test {
             .write(b"> z = 7\n")
             .write(b"< x = ")
             .build();
-        assert!(create_new_connection_handler(task_state)(socket)
-            .await
-            .is_ok());
+        assert!(
+            create_new_connection_handler(task_state)(socket)
+                .await
+                .is_ok()
+        );
     }
 
     #[tokio::test]
     async fn test_create_new_connection_handler_aborts_connection() {
         let task_state = State::default();
         let socket = Builder::new().write(b"< x = ").build();
-        assert!(create_new_connection_handler(task_state)(socket)
-            .await
-            .is_ok());
+        assert!(
+            create_new_connection_handler(task_state)(socket)
+                .await
+                .is_ok()
+        );
     }
 
     #[tokio::test]

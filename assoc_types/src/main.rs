@@ -92,7 +92,7 @@ fn main() {
 
 #[cfg(test)]
 mod test {
-    use crate::{main, TestStruct, TestStruct2, TraitWithAssocType};
+    use crate::{TestStruct, TestStruct2, TraitWithAssocType, main};
 
     #[test]
     fn display_returns_expected_strings() {

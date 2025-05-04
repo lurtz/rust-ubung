@@ -1,9 +1,11 @@
 [package]
 name = "type_state"
 version = "0.1.0"
-edition = "2021"
+edition = "2024"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-lock_ordering = {git = 'https://github.com/akonradi/lock-ordering.git', rev = '706ef91eb403c39e46e4ab0a9292ce95edd9ed10', default-features = false, features=["std"]}
+lock_ordering = { git = 'https://github.com/akonradi/lock-ordering.git', rev = '706ef91eb403c39e46e4ab0a9292ce95edd9ed10', default-features = false, features = [
+    "std",
+] }
