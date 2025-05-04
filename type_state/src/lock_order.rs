@@ -2,7 +2,7 @@
 mod test {
 
     use lock_ordering::{
-        lock::MutexLockLevel, relation::LockAfter, LockLevel, LockedAt, MutualExclusion, Unlocked,
+        LockLevel, LockedAt, MutualExclusion, Unlocked, lock::MutexLockLevel, relation::LockAfter,
     };
 
     struct FirstLock;
