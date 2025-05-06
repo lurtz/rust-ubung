@@ -40,7 +40,7 @@ pub fn use_priority<'a, 'b, V, const PREVIOUS_PRIORITY: usize>(
 mod test {
     use std::{marker::PhantomData, sync::Mutex};
 
-    use super::{use_priority, PriorityMutex, TakenLockPriority};
+    use super::{PriorityMutex, TakenLockPriority, use_priority};
 
     #[test]
     fn main() {

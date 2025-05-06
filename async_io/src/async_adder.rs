@@ -6,7 +6,7 @@ use tokio::sync::watch as Channel_type;
 use tokio::task::JoinHandle;
 
 use crate::ctrl_c_waiter::CtrlCWaiter;
-use crate::state::{l, State};
+use crate::state::{State, l};
 use crate::stdio::Stdio;
 
 #[cfg(test)]
@@ -202,19 +202,19 @@ mod test {
         io::{self, ErrorKind, Read, Write},
         net::TcpStream,
         ops::DerefMut,
-        sync::{mpsc, Arc},
+        sync::{Arc, mpsc},
         thread::{self},
     };
 
     use crate::async_adder::{
-        create_new_connection_handler, l, main2, read_x_and_y_and_reply_with_sum, State,
+        State, create_new_connection_handler, l, main2, read_x_and_y_and_reply_with_sum,
     };
     use crate::ctrl_c_waiter::{MockAsyncMockCtrlWaiter, MockCtrlCWaiter};
     use crate::stdio::MockStdio;
     use mockall::predicate::eq;
     use tokio::{
         net::TcpListener,
-        sync::{oneshot, Mutex},
+        sync::{Mutex, oneshot},
     };
     use tokio_test::io::Builder;
 
@@ -312,18 +312,22 @@ mod test {
             .write(b"> z = 7\n")
             .write(b"< x = ")
             .build();
-        assert!(create_new_connection_handler(task_state)(socket)
-            .await
-            .is_ok());
+        assert!(
+            create_new_connection_handler(task_state)(socket)
+                .await
+                .is_ok()
+        );
     }
 
     #[tokio::test]
     async fn test_create_new_connection_handler_aborts_connection() {
         let task_state = State::default();
         let socket = Builder::new().write(b"< x = ").build();
-        assert!(create_new_connection_handler(task_state)(socket)
-            .await
-            .is_ok());
+        assert!(
+            create_new_connection_handler(task_state)(socket)
+                .await
+                .is_ok()
+        );
     }
 
     #[tokio::test]

@@ -35,7 +35,7 @@ impl AddrTracker {
 #[cfg(test)]
 mod test {
     use std::borrow::Borrow;
-    use std::pin::{pin, Pin};
+    use std::pin::{Pin, pin};
 
     use crate::AddrTracker;
 
