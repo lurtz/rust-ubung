@@ -73,7 +73,7 @@ where
     // Write the data back
     let z = l(task_state).get_z();
     socket
-        .write_all(format!("> z = {}\n", z).as_bytes())
+        .write_all(format!("> z = {z}\n").as_bytes())
         .await?;
 
     Ok(())
@@ -114,7 +114,7 @@ where
                 )
                 .await
                 {
-                    eprintln!("socket failure; err = {:?}", e);
+                    eprintln!("socket failure; err = {e:?}");
                     break;
                 }
             }
@@ -231,7 +231,7 @@ mod test {
                 let rxc = rx.clone();
                 Box::pin(async move {
                     rxc.try_lock().unwrap().deref_mut().await.unwrap();
-                    ()
+                    
                 })
             });
         (ctrl_c_mock, tx)
