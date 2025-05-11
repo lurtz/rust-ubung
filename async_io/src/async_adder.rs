@@ -199,7 +199,7 @@ where
 #[cfg(test)]
 mod test {
     use std::{
-        io::{self, ErrorKind, Read, Write},
+        io::{self, ErrorKind, Read},
         mem::swap,
         net::{SocketAddr, TcpStream},
         ops::DerefMut,
@@ -391,42 +391,6 @@ mod test {
 
     #[tokio::test]
     async fn test_main_accepts_connection() {
-        let (ctrl_c_mock, tx) = create_ctrl_c_mock();
-        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
-        let local_address = listener.local_addr().unwrap();
-        let response = thread::spawn(move || {
-            let mut to_server = TcpStream::connect(local_address).unwrap();
-            let mut buf = [0; 10];
-            to_server.read_exact(&mut buf[0..6]).unwrap();
-            assert_eq!("< x = ", std::str::from_utf8(&buf[0..6]).unwrap());
-            to_server.write_all(b"7\n").unwrap();
-            to_server.read_exact(&mut buf[0..6]).unwrap();
-            assert_eq!("< y = ", std::str::from_utf8(&buf[0..6]).unwrap());
-            to_server.write_all(b"3\n").unwrap();
-            to_server.read_exact(&mut buf[0..9]).unwrap();
-            tx.send(()).unwrap();
-            buf
-        });
-        let mut stdio_mock = Box::new(MockStdio::new());
-        stdio_mock
-            .expect_print()
-            .with(eq("Enter event content: "))
-            .returning(|_a| Ok(0));
-        stdio_mock.expect_flush().once().returning(|| Ok(0));
-        let (tx, rx) = mpsc::channel();
-        stdio_mock.expect_read_line().once().returning(move |_| {
-            rx.recv().unwrap();
-            Err(io::Error::new(io::ErrorKind::BrokenPipe, ""))
-        });
-        let _mr = main2(listener, &ctrl_c_mock, stdio_mock).await;
-        tx.send(()).unwrap();
-        _mr.unwrap();
-        let result = response.join().unwrap();
-        assert_eq!("> z = 10\n", std::str::from_utf8(&result[0..9]).unwrap());
-    }
-
-    #[tokio::test]
-    async fn test_main_accepts_connection2() {
         let (ctrl_c_mock, terminate_main2) = create_ctrl_c_mock();
         let mut listener_mock = create_listener_mock();
 
