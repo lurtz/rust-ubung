@@ -182,9 +182,11 @@ where
     let handle_new_connection = create_new_connection_handler(le_state);
 
     tokio::spawn(async move {
-        // TODO fix test later and always accept new connections
-        while let Ok((socket, _)) = listener.accept().await {
-            handle_new_connection(socket);
+        loop {
+            let accept_result = listener.accept().await;
+            if let Ok((socket, _)) = accept_result {
+                handle_new_connection(socket);
+            }
         }
     });
 
