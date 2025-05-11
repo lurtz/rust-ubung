@@ -182,12 +182,9 @@ where
     let handle_new_connection = create_new_connection_handler(le_state);
 
     tokio::spawn(async move {
-        loop {
-            match listener.accept().await {
-                Ok((socket, _)) => handle_new_connection(socket),
-                // TODO fix test later and always accept new connections
-                Err(_) => break,
-            };
+        // TODO fix test later and always accept new connections
+        while let Ok((socket, _)) = listener.accept().await {
+            handle_new_connection(socket);
         }
     });
 
@@ -203,8 +200,7 @@ mod test {
         io::{self, ErrorKind, Read, Write},
         mem::swap,
         net::{SocketAddr, TcpStream},
-        ops::{Deref, DerefMut},
-        rc::Rc,
+        ops::DerefMut,
         str::FromStr,
         sync::{Arc, mpsc},
         thread::{self},
