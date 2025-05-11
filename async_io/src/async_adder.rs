@@ -385,7 +385,7 @@ mod test {
 
     #[tokio::test]
     async fn test_main_accepts_connection2() {
-        let (ctrl_c_mock, tx) = create_ctrl_c_mock();
+        let (ctrl_c_mock, terminate_main2) = create_ctrl_c_mock();
         let mut listener_mock = MockMyTcpListenerMock::new();
         listener_mock
             .expect_local_addr()
@@ -405,15 +405,16 @@ mod test {
             })
         });
 
-        let tx = Arc::new(Mutex::new(tx));
+        let terminate_main2 = Arc::new(Mutex::new(terminate_main2));
         listener_mock.expect_accept().once().returning(move || {
-            // later block accept by returning future, which returns Poll::Pendig
-            let txx = tx.clone();
+            let txx = terminate_main2.clone();
             Box::pin(async move {
-                let (mut tx2, _) = oneshot::channel::<()>();
+                let (mut tx2, rx) = oneshot::channel::<()>();
                 swap(&mut tx2, txx.lock().await.deref_mut());
                 tx2.send(()).unwrap();
-
+                _ = rx.await;
+                // rx will never return
+                assert!(false);
                 Err(io::Error::new(io::ErrorKind::BrokenPipe, ""))
             })
         });
@@ -430,8 +431,6 @@ mod test {
             Err(io::Error::new(io::ErrorKind::BrokenPipe, ""))
         });
         let _mr = main2(listener_mock, &ctrl_c_mock, stdio_mock).await;
-        println!("main2 returned");
-        // tx.send(()).unwrap(); // do not know if this is the right place
         tx2.send(()).unwrap();
         _mr.unwrap();
     }
