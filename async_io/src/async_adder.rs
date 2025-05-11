@@ -239,6 +239,46 @@ mod test {
         (ctrl_c_mock, tx)
     }
 
+    fn create_listener_mock() -> MockMyTcpListenerMock {
+        let mut listener_mock = MockMyTcpListenerMock::new();
+        listener_mock
+            .expect_local_addr()
+            .returning(|| Ok(SocketAddr::from_str("127.0.0.1:1234").unwrap()));
+        listener_mock
+    }
+
+    fn setup_last_accept(
+        listener_mock: &mut MockMyTcpListenerMock,
+        terminate_main2: oneshot::Sender<()>,
+    ) {
+        let terminate_main2 = Arc::new(Mutex::new(terminate_main2));
+        listener_mock.expect_accept().once().returning(move || {
+            let txx = terminate_main2.clone();
+            Box::pin(async move {
+                let (mut tx2, rx) = oneshot::channel::<()>();
+                swap(&mut tx2, txx.lock().await.deref_mut());
+                tx2.send(()).unwrap();
+                _ = rx.await;
+                // rx will never return
+                assert!(false);
+                Err(io::Error::new(io::ErrorKind::BrokenPipe, ""))
+            })
+        });
+    }
+
+    fn create_blocked_io_mock() -> (Box<MockStdio>, mpsc::Sender<()>) {
+        let (tx2, rx) = mpsc::channel();
+        let mut stdio_mock = Box::new(MockStdio::new());
+        stdio_mock
+            .expect_print()
+            .with(eq("Enter event content: "))
+            .returning(move |_| {
+                rx.recv().unwrap();
+                Err(io::Error::new(io::ErrorKind::BrokenPipe, ""))
+            });
+        (stdio_mock, tx2)
+    }
+
     #[tokio::test]
     async fn test_read_x_and_y_and_reply_with_sum() {
         let mut task_state = State::default();
@@ -388,10 +428,7 @@ mod test {
     #[tokio::test]
     async fn test_main_accepts_connection2() {
         let (ctrl_c_mock, terminate_main2) = create_ctrl_c_mock();
-        let mut listener_mock = MockMyTcpListenerMock::new();
-        listener_mock
-            .expect_local_addr()
-            .returning(|| Ok(SocketAddr::from_str("127.0.0.1:1234").unwrap()));
+        let mut listener_mock = create_listener_mock();
 
         listener_mock.expect_accept().once().returning(move || {
             Box::pin(async move {
@@ -407,31 +444,8 @@ mod test {
             })
         });
 
-        let terminate_main2 = Arc::new(Mutex::new(terminate_main2));
-        listener_mock.expect_accept().once().returning(move || {
-            let txx = terminate_main2.clone();
-            Box::pin(async move {
-                let (mut tx2, rx) = oneshot::channel::<()>();
-                swap(&mut tx2, txx.lock().await.deref_mut());
-                tx2.send(()).unwrap();
-                _ = rx.await;
-                // rx will never return
-                assert!(false);
-                Err(io::Error::new(io::ErrorKind::BrokenPipe, ""))
-            })
-        });
-
-        let mut stdio_mock = Box::new(MockStdio::new());
-        stdio_mock
-            .expect_print()
-            .with(eq("Enter event content: "))
-            .returning(|_a| Ok(0));
-        stdio_mock.expect_flush().once().returning(|| Ok(0));
-        let (tx2, rx) = mpsc::channel();
-        stdio_mock.expect_read_line().once().returning(move |_| {
-            rx.recv().unwrap();
-            Err(io::Error::new(io::ErrorKind::BrokenPipe, ""))
-        });
+        setup_last_accept(&mut listener_mock, terminate_main2);
+        let (stdio_mock, tx2) = create_blocked_io_mock();
         let _mr = main2(listener_mock, &ctrl_c_mock, stdio_mock).await;
         tx2.send(()).unwrap();
         _mr.unwrap();
@@ -440,40 +454,14 @@ mod test {
     #[tokio::test]
     async fn test_main_ignores_accept_error() {
         let (ctrl_c_mock, terminate_main2) = create_ctrl_c_mock();
-        let mut listener_mock = MockMyTcpListenerMock::new();
-        listener_mock
-            .expect_local_addr()
-            .returning(|| Ok(SocketAddr::from_str("127.0.0.1:1234").unwrap()));
+        let mut listener_mock = create_listener_mock();
 
         listener_mock.expect_accept().once().returning(move || {
             Box::pin(async move { Err(io::Error::new(io::ErrorKind::BrokenPipe, "")) })
         });
 
-        let terminate_main2 = Arc::new(Mutex::new(terminate_main2));
-        listener_mock.expect_accept().once().returning(move || {
-            let txx = terminate_main2.clone();
-            Box::pin(async move {
-                let (mut tx2, rx) = oneshot::channel::<()>();
-                swap(&mut tx2, txx.lock().await.deref_mut());
-                tx2.send(()).unwrap();
-                _ = rx.await;
-                // rx will never return
-                assert!(false);
-                Err(io::Error::new(io::ErrorKind::BrokenPipe, ""))
-            })
-        });
-
-        let mut stdio_mock = Box::new(MockStdio::new());
-        stdio_mock
-            .expect_print()
-            .with(eq("Enter event content: "))
-            .returning(|_a| Ok(0));
-        stdio_mock.expect_flush().once().returning(|| Ok(0));
-        let (tx2, rx) = mpsc::channel();
-        stdio_mock.expect_read_line().once().returning(move |_| {
-            rx.recv().unwrap();
-            Err(io::Error::new(io::ErrorKind::BrokenPipe, ""))
-        });
+        setup_last_accept(&mut listener_mock, terminate_main2);
+        let (stdio_mock, tx2) = create_blocked_io_mock();
         let _mr = main2(listener_mock, &ctrl_c_mock, stdio_mock).await;
         tx2.send(()).unwrap();
         _mr.unwrap();
