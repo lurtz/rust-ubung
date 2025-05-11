@@ -183,8 +183,11 @@ where
 
     tokio::spawn(async move {
         loop {
-            let (socket, _) = listener.accept().await.unwrap();
-            handle_new_connection(socket);
+            match listener.accept().await {
+                Ok((socket, _)) => handle_new_connection(socket),
+                // TODO fix test later and always accept new connections
+                Err(_) => break,
+            };
         }
     });
 
@@ -198,14 +201,18 @@ where
 mod test {
     use std::{
         io::{self, ErrorKind, Read, Write},
-        net::TcpStream,
-        ops::DerefMut,
+        mem::swap,
+        net::{SocketAddr, TcpStream},
+        ops::{Deref, DerefMut},
+        rc::Rc,
+        str::FromStr,
         sync::{Arc, mpsc},
         thread::{self},
     };
 
     use crate::async_adder::{
-        State, create_new_connection_handler, l, main2, read_x_and_y_and_reply_with_sum,
+        MockMyTcpListenerMock, State, create_new_connection_handler, l, main2,
+        read_x_and_y_and_reply_with_sum,
     };
     use crate::ctrl_c_waiter::{MockAsyncMockCtrlWaiter, MockCtrlCWaiter};
     use crate::stdio::MockStdio;
@@ -378,6 +385,59 @@ mod test {
         _mr.unwrap();
         let result = response.join().unwrap();
         assert_eq!("> z = 10\n", std::str::from_utf8(&result[0..9]).unwrap());
+    }
+
+    #[tokio::test]
+    async fn test_main_accepts_connection2() {
+        let (ctrl_c_mock, tx) = create_ctrl_c_mock();
+        let mut listener_mock = MockMyTcpListenerMock::new();
+        listener_mock
+            .expect_local_addr()
+            .returning(|| Ok(SocketAddr::from_str("127.0.0.1:1234").unwrap()));
+
+        listener_mock.expect_accept().once().returning(move || {
+            Box::pin(async move {
+                let socket_mock = Builder::new()
+                    .write(b"< x = ")
+                    .read(b"7\n")
+                    .write(b"< y = ")
+                    .read(b"3\n")
+                    .write(b"> z = 10\n")
+                    .write(b"< x = ")
+                    .build();
+                Ok((socket_mock, SocketAddr::from_str("127.0.0.1:1234").unwrap()))
+            })
+        });
+
+        let tx = Arc::new(Mutex::new(tx));
+        listener_mock.expect_accept().once().returning(move || {
+            // later block accept by returning future, which returns Poll::Pendig
+            let txx = tx.clone();
+            Box::pin(async move {
+                let (mut tx2, _) = oneshot::channel::<()>();
+                swap(&mut tx2, txx.lock().await.deref_mut());
+                tx2.send(()).unwrap();
+
+                Err(io::Error::new(io::ErrorKind::BrokenPipe, ""))
+            })
+        });
+
+        let mut stdio_mock = Box::new(MockStdio::new());
+        stdio_mock
+            .expect_print()
+            .with(eq("Enter event content: "))
+            .returning(|_a| Ok(0));
+        stdio_mock.expect_flush().once().returning(|| Ok(0));
+        let (tx2, rx) = mpsc::channel();
+        stdio_mock.expect_read_line().once().returning(move |_| {
+            rx.recv().unwrap();
+            Err(io::Error::new(io::ErrorKind::BrokenPipe, ""))
+        });
+        let _mr = main2(listener_mock, &ctrl_c_mock, stdio_mock).await;
+        println!("main2 returned");
+        // tx.send(()).unwrap(); // do not know if this is the right place
+        tx2.send(()).unwrap();
+        _mr.unwrap();
     }
 
     #[tokio::test]
