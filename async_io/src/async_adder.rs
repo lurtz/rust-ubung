@@ -233,7 +233,7 @@ mod test {
             .returning(move || {
                 let rxc = rx.clone();
                 Box::pin(async move {
-                    rxc.try_lock().unwrap().deref_mut().await.unwrap();
+                    rxc.lock().await.deref_mut().await.unwrap();
                 })
             });
         (ctrl_c_mock, tx)
