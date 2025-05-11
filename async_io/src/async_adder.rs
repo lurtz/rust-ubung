@@ -385,8 +385,11 @@ mod test {
             .once()
             .returning(|_| Err(io::Error::new(ErrorKind::BrokenPipe, "")));
 
-        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
-        let _mr = main2(listener, &ctrl_c_mock, stdio_mock).await;
+        let mut listener_mock = create_listener_mock();
+        let (terminate_main2, _) = oneshot::channel();
+        setup_last_accept(&mut listener_mock, terminate_main2);
+        let _mr = main2(listener_mock, &ctrl_c_mock, stdio_mock).await;
+        assert!(_mr.is_ok());
     }
 
     #[tokio::test]
