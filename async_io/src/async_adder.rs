@@ -255,13 +255,13 @@ mod test {
         listener_mock.expect_accept().once().returning(move || {
             let txx = terminate_main2.clone();
             Box::pin(async move {
-                let (mut tx2, rx) = oneshot::channel::<()>();
+                let (mut tx2, _) = oneshot::channel::<()>();
                 swap(&mut tx2, txx.lock().await.deref_mut());
                 tx2.send(()).unwrap();
-                _ = rx.await;
+                let (_, rx) = oneshot::channel();
                 // rx will never return
-                assert!(false);
-                Err(io::Error::new(io::ErrorKind::BrokenPipe, ""))
+                rx.await
+                    .map_err(|_| io::Error::new(io::ErrorKind::BrokenPipe, ""))
             })
         });
     }
