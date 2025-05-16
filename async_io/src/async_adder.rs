@@ -260,8 +260,8 @@ mod test {
                 tx2.send(()).unwrap();
                 let (_keep_sender_alive, rx) = oneshot::channel();
                 // rx will never return
-                rx.await
-                    .map_err(|_| io::Error::new(io::ErrorKind::BrokenPipe, ""))
+                let le_error = io::Error::new(io::ErrorKind::BrokenPipe, "");
+                rx.await.map_err(|_| le_error)
             })
         });
     }
