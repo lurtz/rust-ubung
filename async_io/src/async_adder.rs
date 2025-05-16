@@ -502,7 +502,6 @@ mod test {
             })
         });
 
-        // setup better sync. only terminate when second accept is called
         let (set_connected, mut is_connected) = oneshot::channel();
         setup_last_accept(&mut listener_mock, set_connected);
 
@@ -520,13 +519,11 @@ mod test {
                 let (_, mut is_connected2) = oneshot::channel();
                 swap(&mut is_connected, &mut is_connected2);
                 is_connected2.blocking_recv().unwrap();
-                //is_connected.recv().unwrap();
                 buf.clear();
                 buf.reserve(4);
                 buf.push_str("blub");
                 Ok(buf.len())
             });
-        //let is_connected = Rc::new(is_connected);
         stdio_mock
             .expect_print()
             .once()
@@ -535,12 +532,9 @@ mod test {
                 let (mut terminate_main, _) = oneshot::channel();
                 swap(&mut terminate_main, &mut terminate_main2);
                 terminate_main.send(()).unwrap();
-                //rx.recv().unwrap();
-                // is_connected2.blocking_recv().unwrap();
                 Err(io::Error::new(io::ErrorKind::BrokenPipe, ""))
             });
 
-        //let (stdio_mock, tx2) = create_blocked_io_mock();
         let _mr = main2(listener_mock, &ctrl_c_mock, stdio_mock).await;
         _mr.unwrap();
     }
