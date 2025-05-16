@@ -258,7 +258,7 @@ mod test {
                 let (mut tx2, _) = oneshot::channel::<()>();
                 swap(&mut tx2, txx.lock().await.deref_mut());
                 tx2.send(()).unwrap();
-                let (_, rx) = oneshot::channel();
+                let (_keep_sender_alive, rx) = oneshot::channel();
                 // rx will never return
                 rx.await
                     .map_err(|_| io::Error::new(io::ErrorKind::BrokenPipe, ""))
