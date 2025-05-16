@@ -485,4 +485,63 @@ mod test {
             std::str::from_utf8(&result[0..18]).unwrap()
         );
     }
+
+    #[tokio::test]
+    async fn test_main_sends_event2() {
+        let (ctrl_c_mock, mut terminate_main2) = create_ctrl_c_mock();
+        let mut listener_mock = create_listener_mock();
+
+        listener_mock.expect_accept().once().returning(move || {
+            Box::pin(async move {
+                println!("expected accept called");
+                let socket_mock = Builder::new()
+                    .write(b"< x = ")
+                    .write(b"\n got event: blub\n")
+                    .build();
+                Ok((socket_mock, SocketAddr::from_str("127.0.0.1:1234").unwrap()))
+            })
+        });
+
+        // setup better sync. only terminate when second accept is called
+        let (set_connected, mut is_connected) = oneshot::channel();
+        setup_last_accept(&mut listener_mock, set_connected);
+
+        let mut stdio_mock = Box::new(MockStdio::new());
+        stdio_mock
+            .expect_print()
+            .once()
+            .with(eq("Enter event content: "))
+            .returning(|_a| Ok(0));
+        stdio_mock.expect_flush().once().returning(|| Ok(0));
+        stdio_mock
+            .expect_read_line()
+            .once()
+            .returning(move |buf: &mut String| {
+                let (_, mut is_connected2) = oneshot::channel();
+                swap(&mut is_connected, &mut is_connected2);
+                is_connected2.blocking_recv().unwrap();
+                //is_connected.recv().unwrap();
+                buf.clear();
+                buf.reserve(4);
+                buf.push_str("blub");
+                Ok(buf.len())
+            });
+        //let is_connected = Rc::new(is_connected);
+        stdio_mock
+            .expect_print()
+            .once()
+            .with(eq("Enter event content: "))
+            .returning(move |_| {
+                let (mut terminate_main, _) = oneshot::channel();
+                swap(&mut terminate_main, &mut terminate_main2);
+                terminate_main.send(()).unwrap();
+                //rx.recv().unwrap();
+                // is_connected2.blocking_recv().unwrap();
+                Err(io::Error::new(io::ErrorKind::BrokenPipe, ""))
+            });
+
+        //let (stdio_mock, tx2) = create_blocked_io_mock();
+        let _mr = main2(listener_mock, &ctrl_c_mock, stdio_mock).await;
+        _mr.unwrap();
+    }
 }
