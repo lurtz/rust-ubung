@@ -14,15 +14,7 @@ pub extern "C" fn process() -> u64 {
         })
         .collect();
 
-    let mut ret_val = 0;
-
-    for h in handles {
-        if let Ok(val) = h.join() {
-            ret_val += val;
-        }
-    }
-
-    ret_val
+    handles.into_iter().filter_map(|r| r.join().ok()).sum()
 }
 
 #[cfg(test)]
