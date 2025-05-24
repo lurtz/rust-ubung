@@ -17,9 +17,8 @@ pub extern "C" fn process() -> u64 {
     let mut ret_val = 0;
 
     for h in handles {
-        let jr = h.join();
-        if jr.is_ok() {
-            ret_val += jr.unwrap();
+        if let Ok(val) = h.join() {
+            ret_val += val;
         }
     }
 
