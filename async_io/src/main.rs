@@ -127,9 +127,7 @@ where
 
     // Write the data back
     let z = l(task_state).get_z();
-    socket
-        .write_all(format!("> z = {z}\n").as_bytes())
-        .await?;
+    socket.write_all(format!("> z = {z}\n").as_bytes()).await?;
 
     Ok(())
 }
