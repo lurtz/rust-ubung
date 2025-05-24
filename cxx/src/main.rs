@@ -57,7 +57,7 @@ fn main_impl(logger: &mut dyn Write) -> Result<()> {
     let chunks = vec![b"fearless".to_vec(), b"concurrency".to_vec()];
     let mut buf = MultiBuf { chunks, pos: 0 };
     let blobid = client.pin_mut().put(&mut buf);
-    writeln!(logger, "blobid = {}", blobid)?;
+    writeln!(logger, "blobid = {blobid}")?;
 
     // Add a tag.
     client.pin_mut().tag(blobid, "rust");
