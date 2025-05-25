@@ -57,11 +57,13 @@ mod test {
 
         let (mut _locked, mut third_guard) = locked_third.with_lock::<ThirdLock>(&third).unwrap();
         *third_guard = 4u32;
-        // let (mut locked, mut third_guard) = locked.with_lock::<SecondLock>(&second).unwrap();
+        // let (mut locked, mut third_guard) =
+        // locked.with_lock::<SecondLock>(&second).unwrap();
 
         // This is problematic: the first lock can't be acquired while the second is
         // held.
-        // let (mut locked, mut first_guard) = locked.with_lock::<FirstLock>(&first).unwrap();
+        // let (mut locked, mut first_guard) =
+        // locked.with_lock::<FirstLock>(&first).unwrap();
         let mut locked = LockedAt::new();
         let (mut _locked, mut first_guard) = locked.with_lock::<FirstLock>(&first).unwrap();
         *first_guard = 666;
@@ -87,7 +89,8 @@ mod test {
     macro_rules! impl_lock_after {
         ($A:ty => $B:ty) => {
             impl LockAfterF<$A> for $B {}
-            // in case of circular dependency this will create a second trait LockAfterF<$A> implementation and cause compile error
+            // in case of circular dependency this will create a second trait LockAfterF<$A>
+            // implementation and cause compile error
             impl<X: LockBefore<$A>> LockAfterF<X> for $B {}
         };
     }
