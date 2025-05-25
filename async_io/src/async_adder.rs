@@ -1,6 +1,6 @@
 use std::io::{self, ErrorKind};
 
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use tokio::io::{AsyncReadExt, AsyncWriteExt, BufStream};
 use tokio::net::TcpListener;
 use tokio::sync::watch as Channel_type;
 use tokio::task::JoinHandle;
@@ -44,6 +44,7 @@ where
                 socket
                     .write_all(format!("\n got event: {}\n", *event_receiver.borrow_and_update()).as_bytes())
                     .await?;
+                socket.flush().await?;
             }
         };
     }
@@ -61,11 +62,13 @@ where
 {
     {
         socket.write_all("< x = ".as_bytes()).await?;
+        socket.flush().await?;
         let x = read_int_and_watch_for_event(socket, buf, event_receiver).await?;
         l(task_state).set_x(x);
     }
     {
         socket.write_all("< y = ".as_bytes()).await?;
+        socket.flush().await?;
         let y = read_int_and_watch_for_event(socket, buf, event_receiver).await?;
         l(task_state).set_y(y);
     }
@@ -73,6 +76,7 @@ where
     // Write the data back
     let z = l(task_state).get_z();
     socket.write_all(format!("> z = {z}\n").as_bytes()).await?;
+    socket.flush().await?;
 
     Ok(())
 }
@@ -94,18 +98,19 @@ fn create_new_connection_handler<Socket>(le_state: State) -> impl Fn(Socket) -> 
 where
     Socket: AsyncReadExt + AsyncWriteExt + Unpin + Send + 'static,
 {
-    move |mut socket| {
+    move |socket| {
         println!("new connection {}", l(&le_state).inc_counter());
         let mut task_state = le_state.clone();
 
         tokio::spawn(async move {
             let mut buf = vec![0; 10];
             let mut event_receiver = l(&task_state).get_event_update_receiver();
+            let mut buf_socket = BufStream::new(socket);
 
             // In a loop, read data from the socket and write the data back.
             loop {
                 if let Err(e) = read_x_and_y_and_reply_with_sum(
-                    &mut socket,
+                    &mut buf_socket,
                     &mut buf,
                     &mut task_state,
                     &mut event_receiver,
