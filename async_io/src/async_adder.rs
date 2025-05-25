@@ -213,7 +213,7 @@ mod test {
         MockMyTcpListenerMock, State, create_new_connection_handler, l, main2,
         read_x_and_y_and_reply_with_sum,
     };
-    use crate::ctrl_c_waiter::{MockAsyncMockCtrlWaiter, MockCtrlCWaiter};
+    use crate::ctrl_c_waiter::MockAsyncMockCtrlWaiter;
     use crate::stdio::MockStdio;
     use mockall::predicate::eq;
     use tokio::{
@@ -221,8 +221,6 @@ mod test {
         sync::{Mutex, oneshot},
     };
     use tokio_test::io::Builder;
-
-    fn nothing() {}
 
     fn create_ctrl_c_mock() -> (MockAsyncMockCtrlWaiter, tokio::sync::oneshot::Sender<()>) {
         let (tx, rx) = oneshot::channel();
@@ -375,11 +373,7 @@ mod test {
 
     #[tokio::test]
     async fn test_main_terminates_when_ctrl_pressed() {
-        let mut ctrl_c_mock = MockCtrlCWaiter::new();
-        ctrl_c_mock
-            .expect_ctrl_c_pressed()
-            .once()
-            .returning(nothing);
+        let (ctrl_c_mock, terminate_main2) = create_ctrl_c_mock();
         let mut stdio_mock = Box::new(MockStdio::default());
         stdio_mock
             .expect_print()
@@ -387,7 +381,6 @@ mod test {
             .returning(|_| Err(io::Error::new(ErrorKind::BrokenPipe, "")));
 
         let mut listener_mock = create_listener_mock();
-        let (terminate_main2, _) = oneshot::channel();
         setup_last_accept(&mut listener_mock, terminate_main2);
         let _mr = main2(listener_mock, &ctrl_c_mock, stdio_mock).await;
         assert!(_mr.is_ok());

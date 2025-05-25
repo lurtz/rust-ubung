@@ -2,9 +2,8 @@
 use tokio::signal;
 
 #[cfg(test)]
-use mockall::{automock, mock};
+use mockall::mock;
 
-#[cfg_attr(test, automock)]
 pub trait CtrlCWaiter {
     async fn ctrl_c_pressed(&self);
 }
