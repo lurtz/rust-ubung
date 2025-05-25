@@ -205,7 +205,8 @@ mod test {
         ops::DerefMut,
         str::FromStr,
         sync::{Arc, mpsc},
-        thread::{self},
+        thread::{self, sleep},
+        time::Duration,
     };
 
     use crate::async_adder::{
@@ -487,7 +488,7 @@ mod test {
     }
 
     #[tokio::test]
-    async fn test_main_sends_event2() {
+    async fn test_main_sends_event_with_more_mocks_but_unstable() {
         let (ctrl_c_mock, mut terminate_main2) = create_ctrl_c_mock();
         let mut listener_mock = create_listener_mock();
 
@@ -531,6 +532,11 @@ mod test {
             .returning(move |_| {
                 let (mut terminate_main, _) = oneshot::channel();
                 swap(&mut terminate_main, &mut terminate_main2);
+                // this sleep makes the test unstable compare to the previous
+                // test. There is no API to check if the mock created in the
+                // first mocked accept() had all its expectations fullfilled or
+                // place some action when all its expectations are fulfilled.
+                sleep(Duration::from_millis(100));
                 terminate_main.send(()).unwrap();
                 Err(io::Error::new(io::ErrorKind::BrokenPipe, ""))
             });
