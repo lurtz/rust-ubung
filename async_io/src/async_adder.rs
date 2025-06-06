@@ -1,5 +1,6 @@
 use std::io::{self, ErrorKind};
 
+use bytes::{Buf, BufMut, BytesMut};
 use tokio::io::{AsyncReadExt, AsyncWriteExt, BufStream};
 use tokio::net::TcpListener;
 use tokio::sync::watch as Channel_type;
@@ -12,35 +13,42 @@ use crate::stdio::Stdio;
 #[cfg(test)]
 use mockall::mock;
 
-async fn read_int<Reader>(socket: &mut Reader, buf: &mut [u8]) -> Result<usize, std::io::Error>
+async fn read_int<Reader, Buff>(
+    socket: &mut Reader,
+    buf: &mut Buff,
+) -> Result<usize, std::io::Error>
 where
     Reader: AsyncReadExt + Unpin,
+    Buff: BufMut + Buf + Send,
 {
-    let n = socket.read(buf).await?;
+    let n = socket.read_buf(buf).await?;
     if 0 == n {
         return Err(std::io::Error::from(ErrorKind::ConnectionAborted));
     }
-    let x: usize = std::str::from_utf8(&buf[0..n])
+    let x: usize = std::str::from_utf8(buf.chunk())
         .unwrap()
         .trim()
         .parse()
         .unwrap();
+    buf.advance(buf.chunk().len());
     Ok(x)
 }
 
-async fn read_int_and_watch_for_event<Socket>(
+async fn read_int_and_watch_for_event<Socket, Buff>(
     socket: &mut Socket,
-    buf: &mut [u8],
+    buf: &mut Buff,
     event_receiver: &mut Channel_type::Receiver<String>,
 ) -> Result<usize, std::io::Error>
 where
     Socket: AsyncReadExt + AsyncWriteExt + Unpin,
+    Buff: BufMut + Buf + Send,
 {
     let n;
     loop {
         tokio::select! {
             x = read_int(socket, buf) => {n=x?; break;},
             _ = event_receiver.changed() => {
+                // TODO write_all is not cancellation safe
                 socket
                     .write_all(format!("\n got event: {}\n", *event_receiver.borrow_and_update()).as_bytes())
                     .await?;
@@ -51,14 +59,15 @@ where
     Ok(n)
 }
 
-async fn read_x_and_y_and_reply_with_sum<Socket>(
+async fn read_x_and_y_and_reply_with_sum<Socket, Buff>(
     socket: &mut Socket,
-    buf: &mut [u8],
+    buf: &mut Buff,
     task_state: &mut State,
     event_receiver: &mut Channel_type::Receiver<String>,
 ) -> Result<(), std::io::Error>
 where
     Socket: AsyncReadExt + AsyncWriteExt + Unpin,
+    Buff: BufMut + Buf + Send,
 {
     {
         socket.write_all("< x = ".as_bytes()).await?;
@@ -94,29 +103,57 @@ fn io_thread_main(thread_state: &mut State, stdio: &dyn Stdio) -> io::Result<()>
     }
 }
 
+struct Connection<Socket>
+where
+    Socket: AsyncReadExt + AsyncWriteExt + Unpin + Send + 'static,
+{
+    // TODO use buffer with cursor
+    buf: BytesMut,
+    task_state: State,
+    event_receiver: Channel_type::Receiver<String>,
+    socket: BufStream<Socket>,
+}
+
+impl<Socket> Connection<Socket>
+where
+    Socket: AsyncReadExt + AsyncWriteExt + Unpin + Send + 'static,
+{
+    fn new(task_state: State, socket: Socket) -> Connection<Socket> {
+        let event_receiver = l(&task_state).get_event_update_receiver();
+        Connection {
+            buf: BytesMut::with_capacity(10),
+            task_state,
+            event_receiver,
+            socket: BufStream::new(socket),
+        }
+    }
+
+    async fn read_x_and_y_and_reply_with_sum(&mut self) -> Result<(), std::io::Error> {
+        // TODO still broken, does not read into hte buffer
+        read_x_and_y_and_reply_with_sum(
+            &mut self.socket,
+            &mut self.buf,
+            &mut self.task_state,
+            &mut self.event_receiver,
+        )
+        .await
+    }
+}
+
 fn create_new_connection_handler<Socket>(le_state: State) -> impl Fn(Socket) -> JoinHandle<()>
 where
     Socket: AsyncReadExt + AsyncWriteExt + Unpin + Send + 'static,
 {
     move |socket| {
         println!("new connection {}", l(&le_state).inc_counter());
-        let mut task_state = le_state.clone();
+        let task_state = le_state.clone();
 
         tokio::spawn(async move {
-            let mut buf = vec![0; 10];
-            let mut event_receiver = l(&task_state).get_event_update_receiver();
-            let mut buf_socket = BufStream::new(socket);
+            let mut connection = Connection::new(task_state, socket);
 
             // In a loop, read data from the socket and write the data back.
             loop {
-                if let Err(e) = read_x_and_y_and_reply_with_sum(
-                    &mut buf_socket,
-                    &mut buf,
-                    &mut task_state,
-                    &mut event_receiver,
-                )
-                .await
-                {
+                if let Err(e) = connection.read_x_and_y_and_reply_with_sum().await {
                     eprintln!("socket failure; err = {e:?}");
                     break;
                 }
