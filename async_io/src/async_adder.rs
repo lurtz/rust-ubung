@@ -257,6 +257,7 @@ mod test {
     };
     use crate::ctrl_c_waiter::MockAsyncMockCtrlWaiter;
     use crate::stdio::MockStdio;
+    use bytes::BytesMut;
     use mockall::predicate::eq;
     use tokio::{
         net::TcpListener,
@@ -323,7 +324,7 @@ mod test {
     #[tokio::test]
     async fn test_read_x_and_y_and_reply_with_sum() {
         let mut task_state = State::default();
-        let mut buf = vec![0; 10];
+        let mut buf = BytesMut::new();
         let mut event_receiver = l(&task_state).get_event_update_receiver();
         let mut socket = Builder::new()
             .write(b"< x = ")
@@ -345,7 +346,7 @@ mod test {
     #[tokio::test]
     async fn test_send_event() {
         let mut task_state = State::default();
-        let mut buf = vec![0; 10];
+        let mut buf = BytesMut::new();
         let mut event_receiver = l(&task_state).get_event_update_receiver();
         assert!(l(&task_state).send_event("blub").is_ok());
         let mut socket = Builder::new()
@@ -369,7 +370,7 @@ mod test {
     #[tokio::test]
     async fn test_return_connection_aborted() {
         let mut task_state = State::default();
-        let mut buf = vec![0; 10];
+        let mut buf = BytesMut::new();
         let mut event_receiver = l(&task_state).get_event_update_receiver();
         let mut socket = Builder::new().write(b"< x = ").build();
         let r = read_x_and_y_and_reply_with_sum(
