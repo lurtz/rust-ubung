@@ -21,17 +21,19 @@ where
     Reader: AsyncReadExt + Unpin,
     Buff: BufMut + Buf + Send,
 {
-    let n = socket.read_buf(buf).await?;
-    if 0 == n {
-        return Err(std::io::Error::from(ErrorKind::ConnectionAborted));
+    loop {
+        let n = socket.read_buf(buf).await?;
+        if 0 == n {
+            return Err(std::io::Error::from(ErrorKind::ConnectionAborted));
+        }
+        // check for \n character
+        let parsed_string = std::str::from_utf8(buf.chunk()).unwrap();
+        if let Some(pos) = parsed_string.find('\n') {
+            let x: usize = parsed_string[0..pos].trim().parse().unwrap();
+            buf.advance(pos + 1);
+            return Ok(x);
+        }
     }
-    let x: usize = std::str::from_utf8(buf.chunk())
-        .unwrap()
-        .trim()
-        .parse()
-        .unwrap();
-    buf.advance(buf.chunk().len());
-    Ok(x)
 }
 
 async fn read_int_and_watch_for_event<Socket, Buff>(
@@ -48,7 +50,6 @@ where
         tokio::select! {
             x = read_int(socket, buf) => {n=x?; break;},
             _ = event_receiver.changed() => {
-                // TODO write_all is not cancellation safe
                 socket
                     .write_all(format!("\n got event: {}\n", *event_receiver.borrow_and_update()).as_bytes())
                     .await?;
@@ -328,9 +329,9 @@ mod test {
         let mut event_receiver = l(&task_state).get_event_update_receiver();
         let mut socket = Builder::new()
             .write(b"< x = ")
-            .read(b"3")
+            .read(b"3\n")
             .write(b"< y = ")
-            .read(b"4")
+            .read(b"4\n")
             .write(b"> z = 7\n")
             .build();
         let r = read_x_and_y_and_reply_with_sum(
@@ -352,9 +353,9 @@ mod test {
         let mut socket = Builder::new()
             .write(b"< x = ")
             .write(b"\n got event: blub\n")
-            .read(b"3")
+            .read(b"3\n")
             .write(b"< y = ")
-            .read(b"4")
+            .read(b"4\n")
             .write(b"> z = 7\n")
             .build();
         let r = read_x_and_y_and_reply_with_sum(
@@ -390,9 +391,9 @@ mod test {
         let task_state = State::default();
         let socket = Builder::new()
             .write(b"< x = ")
-            .read(b"3")
+            .read(b"3\n")
             .write(b"< y = ")
-            .read(b"4")
+            .read(b"4\n")
             .write(b"> z = 7\n")
             .write(b"< x = ")
             .build();
