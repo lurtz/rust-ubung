@@ -114,10 +114,9 @@ where
     move |socket| {
         println!("new connection {}", l(&le_state).inc_counter());
         let task_state = le_state.clone();
+        let mut connection = Connection::new(task_state, socket);
 
         tokio::spawn(async move {
-            let mut connection = Connection::new(task_state, socket);
-
             // In a loop, read data from the socket and write the data back.
             loop {
                 if let Err(e) = connection.read_x_and_y_and_reply_with_sum().await {
