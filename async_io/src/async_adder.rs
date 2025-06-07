@@ -7,7 +7,7 @@ use tokio::sync::watch as Channel_type;
 use tokio::task::JoinHandle;
 
 use crate::ctrl_c_waiter::CtrlCWaiter;
-use crate::state::{State, l};
+use crate::state::State;
 use crate::stdio::Stdio;
 
 #[cfg(test)]
@@ -51,7 +51,7 @@ where
     Socket: AsyncReadExt + AsyncWriteExt + Unpin + Send + 'static,
 {
     fn new(task_state: State, socket: Socket) -> Connection<Socket> {
-        let event_receiver = l(&task_state).get_event_update_receiver();
+        let event_receiver = task_state.get_event_update_receiver();
         Connection {
             buf: BytesMut::with_capacity(10),
             task_state,
@@ -85,17 +85,17 @@ where
             self.socket.write_all("< x = ".as_bytes()).await?;
             self.socket.flush().await?;
             let x = self.read_int_and_watch_for_event().await?;
-            l(&self.task_state).set_x(x);
+            self.task_state.set_x(x);
         }
         {
             self.socket.write_all("< y = ".as_bytes()).await?;
             self.socket.flush().await?;
             let y = self.read_int_and_watch_for_event().await?;
-            l(&self.task_state).set_y(y);
+            self.task_state.set_y(y);
         }
 
         // Write the data back
-        let z = l(&self.task_state).get_z();
+        let z = self.task_state.get_z();
         self.socket
             .write_all(format!("> z = {z}\n").as_bytes())
             .await?;
@@ -112,8 +112,8 @@ where
     Socket: AsyncReadExt + AsyncWriteExt + Unpin + Send + 'static,
 {
     move |socket| {
-        println!("new connection {}", l(&le_state).inc_counter());
-        let task_state = le_state.clone();
+        let mut task_state = le_state.clone();
+        println!("new connection {}", task_state.inc_counter());
         let mut connection = Connection::new(task_state, socket);
 
         tokio::spawn(async move {
@@ -174,7 +174,7 @@ fn io_thread_main(thread_state: &mut State, stdio: &dyn Stdio) -> io::Result<()>
         stdio.flush()?;
         stdio.read_line(&mut buffer)?;
 
-        let _ = l(thread_state).send_event(buffer.trim());
+        let _ = thread_state.send_event(buffer.trim());
         buffer.clear();
     }
 }
