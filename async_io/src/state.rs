@@ -2,7 +2,7 @@ use std::sync::{Arc, Mutex};
 
 use tokio::sync::watch as Channel_type;
 
-pub struct LeSharedState {
+struct LeSharedState {
     counter: usize,
     x: usize,
     y: usize,
