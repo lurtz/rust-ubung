@@ -54,8 +54,37 @@ impl LeSharedState {
     }
 }
 
-pub type State = Arc<Mutex<LeSharedState>>;
+#[derive(Clone, Default)]
+pub struct State {
+    state: Arc<Mutex<LeSharedState>>,
+}
 
-pub fn l(state: &State) -> std::sync::MutexGuard<'_, LeSharedState> {
+impl State {
+    pub fn inc_counter(&mut self) -> usize {
+        l(&self.state).inc_counter()
+    }
+
+    pub fn set_x(&mut self, x: usize) -> usize {
+        l(&self.state).set_x(x)
+    }
+
+    pub fn set_y(&mut self, y: usize) -> usize {
+        l(&self.state).set_y(y)
+    }
+
+    pub fn get_z(&self) -> usize {
+        l(&self.state).get_z()
+    }
+
+    pub fn send_event(&self, event: &str) -> Result<(), Channel_type::error::SendError<String>> {
+        l(&self.state).send_event(event)
+    }
+
+    pub fn get_event_update_receiver(&self) -> Channel_type::Receiver<String> {
+        l(&self.state).get_event_update_receiver()
+    }
+}
+
+fn l(state: &Arc<Mutex<LeSharedState>>) -> std::sync::MutexGuard<'_, LeSharedState> {
     state.lock().unwrap()
 }
