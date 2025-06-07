@@ -1,6 +1,7 @@
 use std::io::{self, ErrorKind};
 
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use bytes::{Buf, BufMut, BytesMut};
+use tokio::io::{AsyncReadExt, AsyncWriteExt, BufStream};
 use tokio::net::TcpListener;
 use tokio::sync::watch as Channel_type;
 use tokio::task::JoinHandle;
@@ -12,108 +13,115 @@ use crate::stdio::Stdio;
 #[cfg(test)]
 use mockall::mock;
 
-async fn read_int<Reader>(socket: &mut Reader, buf: &mut [u8]) -> Result<usize, std::io::Error>
-where
-    Reader: AsyncReadExt + Unpin,
-{
-    let n = socket.read(buf).await?;
-    if 0 == n {
-        return Err(std::io::Error::from(ErrorKind::ConnectionAborted));
-    }
-    let x: usize = std::str::from_utf8(&buf[0..n])
-        .unwrap()
-        .trim()
-        .parse()
-        .unwrap();
-    Ok(x)
-}
-
-async fn read_int_and_watch_for_event<Socket>(
-    socket: &mut Socket,
-    buf: &mut [u8],
-    event_receiver: &mut Channel_type::Receiver<String>,
+async fn read_int<Reader, Buff>(
+    socket: &mut Reader,
+    buf: &mut Buff,
 ) -> Result<usize, std::io::Error>
 where
-    Socket: AsyncReadExt + AsyncWriteExt + Unpin,
+    Reader: AsyncReadExt + Unpin,
+    Buff: BufMut + Buf + Send,
 {
-    let n;
     loop {
-        tokio::select! {
-            x = read_int(socket, buf) => {n=x?; break;},
-            _ = event_receiver.changed() => {
-                socket
-                    .write_all(format!("\n got event: {}\n", *event_receiver.borrow_and_update()).as_bytes())
-                    .await?;
-            }
-        };
-    }
-    Ok(n)
-}
-
-async fn read_x_and_y_and_reply_with_sum<Socket>(
-    socket: &mut Socket,
-    buf: &mut [u8],
-    task_state: &mut State,
-    event_receiver: &mut Channel_type::Receiver<String>,
-) -> Result<(), std::io::Error>
-where
-    Socket: AsyncReadExt + AsyncWriteExt + Unpin,
-{
-    {
-        socket.write_all("< x = ".as_bytes()).await?;
-        let x = read_int_and_watch_for_event(socket, buf, event_receiver).await?;
-        l(task_state).set_x(x);
-    }
-    {
-        socket.write_all("< y = ".as_bytes()).await?;
-        let y = read_int_and_watch_for_event(socket, buf, event_receiver).await?;
-        l(task_state).set_y(y);
-    }
-
-    // Write the data back
-    let z = l(task_state).get_z();
-    socket.write_all(format!("> z = {z}\n").as_bytes()).await?;
-
-    Ok(())
-}
-
-fn io_thread_main(thread_state: &mut State, stdio: &dyn Stdio) -> io::Result<()> {
-    let mut buffer = String::new();
-    buffer.reserve(10);
-    loop {
-        stdio.print("Enter event content: ")?;
-        stdio.flush()?;
-        stdio.read_line(&mut buffer)?;
-
-        let _ = l(thread_state).send_event(buffer.trim());
-        buffer.clear();
+        let n = socket.read_buf(buf).await?;
+        if 0 == n {
+            return Err(std::io::Error::from(ErrorKind::ConnectionAborted));
+        }
+        // check for \n character
+        let parsed_string = std::str::from_utf8(buf.chunk()).unwrap();
+        if let Some(pos) = parsed_string.find('\n') {
+            let x: usize = parsed_string[0..pos].trim().parse().unwrap();
+            buf.advance(pos + 1);
+            return Ok(x);
+        }
     }
 }
 
-fn create_new_connection_handler<Socket>(le_state: State) -> impl Fn(Socket) -> JoinHandle<()>
+struct Connection<Socket>
 where
     Socket: AsyncReadExt + AsyncWriteExt + Unpin + Send + 'static,
 {
-    move |mut socket| {
+    buf: BytesMut,
+    task_state: State,
+    event_receiver: Channel_type::Receiver<String>,
+    socket: BufStream<Socket>,
+}
+
+impl<Socket> Connection<Socket>
+where
+    Socket: AsyncReadExt + AsyncWriteExt + Unpin + Send + 'static,
+{
+    fn new(task_state: State, socket: Socket) -> Connection<Socket> {
+        let event_receiver = l(&task_state).get_event_update_receiver();
+        Connection {
+            buf: BytesMut::with_capacity(10),
+            task_state,
+            event_receiver,
+            socket: BufStream::new(socket),
+        }
+    }
+
+    async fn read_int_and_watch_for_event(&mut self) -> Result<usize, std::io::Error> {
+        let n;
+        loop {
+            tokio::select! {
+                x = read_int(&mut self.socket, &mut self.buf) => {n=x?; break;},
+                _ = self.event_receiver.changed() => {
+                    let event_payload = format!(
+                        "\n got event: {}\n",
+                        *self.event_receiver.borrow_and_update()
+                    );
+                    self.socket
+                        .write_all(event_payload.as_bytes())
+                        .await?;
+                    self.socket.flush().await?;
+                }
+            };
+        }
+        Ok(n)
+    }
+
+    async fn read_x_and_y_and_reply_with_sum(&mut self) -> Result<(), std::io::Error> {
+        {
+            self.socket.write_all("< x = ".as_bytes()).await?;
+            self.socket.flush().await?;
+            let x = self.read_int_and_watch_for_event().await?;
+            l(&self.task_state).set_x(x);
+        }
+        {
+            self.socket.write_all("< y = ".as_bytes()).await?;
+            self.socket.flush().await?;
+            let y = self.read_int_and_watch_for_event().await?;
+            l(&self.task_state).set_y(y);
+        }
+
+        // Write the data back
+        let z = l(&self.task_state).get_z();
+        self.socket
+            .write_all(format!("> z = {z}\n").as_bytes())
+            .await?;
+        self.socket.flush().await?;
+
+        Ok(())
+    }
+}
+
+fn create_new_connection_handler<Socket>(
+    le_state: State,
+) -> impl Fn(Socket) -> JoinHandle<Result<(), std::io::Error>>
+where
+    Socket: AsyncReadExt + AsyncWriteExt + Unpin + Send + 'static,
+{
+    move |socket| {
         println!("new connection {}", l(&le_state).inc_counter());
-        let mut task_state = le_state.clone();
+        let task_state = le_state.clone();
+        let mut connection = Connection::new(task_state, socket);
 
         tokio::spawn(async move {
-            let mut buf = vec![0; 10];
-            let mut event_receiver = l(&task_state).get_event_update_receiver();
-
             // In a loop, read data from the socket and write the data back.
             loop {
-                if let Err(e) = read_x_and_y_and_reply_with_sum(
-                    &mut socket,
-                    &mut buf,
-                    &mut task_state,
-                    &mut event_receiver,
-                )
-                .await
-                {
+                if let Err(e) = connection.read_x_and_y_and_reply_with_sum().await {
                     eprintln!("socket failure; err = {e:?}");
-                    break;
+                    return Err(e);
                 }
             }
         })
@@ -158,6 +166,19 @@ mock! {
     }
 }
 
+fn io_thread_main(thread_state: &mut State, stdio: &dyn Stdio) -> io::Result<()> {
+    let mut buffer = String::new();
+    buffer.reserve(10);
+    loop {
+        stdio.print("Enter event content: ")?;
+        stdio.flush()?;
+        stdio.read_line(&mut buffer)?;
+
+        let _ = l(thread_state).send_event(buffer.trim());
+        buffer.clear();
+    }
+}
+
 pub async fn main2<Listener>(
     listener: Listener,
     ctrl_c_waiter: &impl CtrlCWaiter,
@@ -199,7 +220,7 @@ where
 #[cfg(test)]
 mod test {
     use std::{
-        io::{self, ErrorKind, Read},
+        io::{self, ErrorKind, Read, Write},
         mem::swap,
         net::{SocketAddr, TcpStream},
         ops::DerefMut,
@@ -209,10 +230,7 @@ mod test {
         time::Duration,
     };
 
-    use crate::async_adder::{
-        MockMyTcpListenerMock, State, create_new_connection_handler, l, main2,
-        read_x_and_y_and_reply_with_sum,
-    };
+    use crate::async_adder::{MockMyTcpListenerMock, State, create_new_connection_handler, main2};
     use crate::ctrl_c_waiter::MockAsyncMockCtrlWaiter;
     use crate::stdio::MockStdio;
     use mockall::predicate::eq;
@@ -279,91 +297,32 @@ mod test {
     }
 
     #[tokio::test]
-    async fn test_read_x_and_y_and_reply_with_sum() {
-        let mut task_state = State::default();
-        let mut buf = vec![0; 10];
-        let mut event_receiver = l(&task_state).get_event_update_receiver();
-        let mut socket = Builder::new()
-            .write(b"< x = ")
-            .read(b"3")
-            .write(b"< y = ")
-            .read(b"4")
-            .write(b"> z = 7\n")
-            .build();
-        let r = read_x_and_y_and_reply_with_sum(
-            &mut socket,
-            &mut buf,
-            &mut task_state,
-            &mut event_receiver,
-        )
-        .await;
-        assert!(r.is_ok());
-    }
-
-    #[tokio::test]
-    async fn test_send_event() {
-        let mut task_state = State::default();
-        let mut buf = vec![0; 10];
-        let mut event_receiver = l(&task_state).get_event_update_receiver();
-        assert!(l(&task_state).send_event("blub").is_ok());
-        let mut socket = Builder::new()
-            .write(b"< x = ")
-            .write(b"\n got event: blub\n")
-            .read(b"3")
-            .write(b"< y = ")
-            .read(b"4")
-            .write(b"> z = 7\n")
-            .build();
-        let r = read_x_and_y_and_reply_with_sum(
-            &mut socket,
-            &mut buf,
-            &mut task_state,
-            &mut event_receiver,
-        )
-        .await;
-        assert!(r.is_ok());
-    }
-
-    #[tokio::test]
     async fn test_return_connection_aborted() {
-        let mut task_state = State::default();
-        let mut buf = vec![0; 10];
-        let mut event_receiver = l(&task_state).get_event_update_receiver();
-        let mut socket = Builder::new().write(b"< x = ").build();
-        let r = read_x_and_y_and_reply_with_sum(
-            &mut socket,
-            &mut buf,
-            &mut task_state,
-            &mut event_receiver,
-        )
-        .await;
+        let task_state = State::default();
+        let socket = Builder::new().write(b"< x = ").build();
+        let join_result = create_new_connection_handler(task_state)(socket).await;
+        assert!(join_result.is_ok());
+        let r = join_result.unwrap();
         assert!(r.is_err());
         let error = r.unwrap_err();
         assert_eq!(ErrorKind::ConnectionAborted, error.kind());
     }
 
     #[tokio::test]
-    async fn test_create_new_connection_handler_computes_result() {
+    async fn test_newline_triggers_number_parsing() {
         let task_state = State::default();
         let socket = Builder::new()
             .write(b"< x = ")
             .read(b"3")
-            .write(b"< y = ")
             .read(b"4")
-            .write(b"> z = 7\n")
+            .read(b"5")
+            .read(b"6")
+            .read(b"\n")
+            .write(b"< y = ")
+            .read(b"4\n")
+            .write(b"> z = 3460\n")
             .write(b"< x = ")
             .build();
-        assert!(
-            create_new_connection_handler(task_state)(socket)
-                .await
-                .is_ok()
-        );
-    }
-
-    #[tokio::test]
-    async fn test_create_new_connection_handler_aborts_connection() {
-        let task_state = State::default();
-        let socket = Builder::new().write(b"< x = ").build();
         assert!(
             create_new_connection_handler(task_state)(socket)
                 .await
@@ -393,14 +352,7 @@ mod test {
 
         listener_mock.expect_accept().once().returning(move || {
             Box::pin(async move {
-                let socket_mock = Builder::new()
-                    .write(b"< x = ")
-                    .read(b"7\n")
-                    .write(b"< y = ")
-                    .read(b"3\n")
-                    .write(b"> z = 10\n")
-                    .write(b"< x = ")
-                    .build();
+                let socket_mock = Builder::new().write(b"< x = ").build();
                 Ok((socket_mock, SocketAddr::from_str("127.0.0.1:1234").unwrap()))
             })
         });
@@ -426,6 +378,43 @@ mod test {
         let _mr = main2(listener_mock, &ctrl_c_mock, stdio_mock).await;
         tx2.send(()).unwrap();
         _mr.unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_main_computes_result() {
+        let (ctrl_c_mock, tx) = create_ctrl_c_mock();
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let local_address = listener.local_addr().unwrap();
+        let response = thread::spawn(move || {
+            let mut to_server = TcpStream::connect(local_address).unwrap();
+            let mut buf = [0; 10];
+            to_server.read_exact(&mut buf[0..6]).unwrap();
+            assert_eq!("< x = ", std::str::from_utf8(&buf[0..6]).unwrap());
+            to_server.write_all(b"23\n").unwrap();
+            buf = [0; 10];
+            to_server.read_exact(&mut buf[0..6]).unwrap();
+            assert_eq!("< y = ", std::str::from_utf8(&buf[0..6]).unwrap());
+            to_server.write_all(b"2\n").unwrap();
+            buf = [0; 10];
+            to_server.read_exact(&mut buf[0..9]).unwrap();
+            tx.send(()).unwrap();
+            buf
+        });
+        let mut stdio_mock = Box::new(MockStdio::new());
+        let (tx, rx) = mpsc::channel();
+        stdio_mock
+            .expect_print()
+            .once()
+            .with(eq("Enter event content: "))
+            .returning(move |_| {
+                rx.recv().unwrap();
+                Err(io::Error::new(io::ErrorKind::BrokenPipe, ""))
+            });
+        let _mr = main2(listener, &ctrl_c_mock, stdio_mock).await;
+        tx.send(()).unwrap();
+        _mr.unwrap();
+        let result = response.join().unwrap();
+        assert_eq!("> z = 25\n", std::str::from_utf8(&result[0..9]).unwrap());
     }
 
     #[tokio::test]
