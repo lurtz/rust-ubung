@@ -141,7 +141,9 @@ where
     }
 }
 
-fn create_new_connection_handler<Socket>(le_state: State) -> impl Fn(Socket) -> JoinHandle<()>
+fn create_new_connection_handler<Socket>(
+    le_state: State,
+) -> impl Fn(Socket) -> JoinHandle<Result<(), std::io::Error>>
 where
     Socket: AsyncReadExt + AsyncWriteExt + Unpin + Send + 'static,
 {
@@ -156,7 +158,7 @@ where
             loop {
                 if let Err(e) = connection.read_x_and_y_and_reply_with_sum().await {
                     eprintln!("socket failure; err = {e:?}");
-                    break;
+                    return Err(e);
                 }
             }
         })
@@ -242,7 +244,7 @@ where
 #[cfg(test)]
 mod test {
     use std::{
-        io::{self, ErrorKind, Read},
+        io::{self, ErrorKind, Read, Write},
         mem::swap,
         net::{SocketAddr, TcpStream},
         ops::DerefMut,
@@ -348,17 +350,11 @@ mod test {
 
     #[tokio::test]
     async fn test_return_connection_aborted() {
-        let mut task_state = State::default();
-        let mut buf = BytesMut::new();
-        let mut event_receiver = l(&task_state).get_event_update_receiver();
-        let mut socket = Builder::new().write(b"< x = ").build();
-        let r = read_x_and_y_and_reply_with_sum(
-            &mut socket,
-            &mut buf,
-            &mut task_state,
-            &mut event_receiver,
-        )
-        .await;
+        let task_state = State::default();
+        let socket = Builder::new().write(b"< x = ").build();
+        let join_result = create_new_connection_handler(task_state)(socket).await;
+        assert!(join_result.is_ok());
+        let r = join_result.unwrap();
         assert!(r.is_err());
         let error = r.unwrap_err();
         assert_eq!(ErrorKind::ConnectionAborted, error.kind());
@@ -437,14 +433,7 @@ mod test {
 
         listener_mock.expect_accept().once().returning(move || {
             Box::pin(async move {
-                let socket_mock = Builder::new()
-                    .write(b"< x = ")
-                    .read(b"7\n")
-                    .write(b"< y = ")
-                    .read(b"3\n")
-                    .write(b"> z = 10\n")
-                    .write(b"< x = ")
-                    .build();
+                let socket_mock = Builder::new().write(b"< x = ").build();
                 Ok((socket_mock, SocketAddr::from_str("127.0.0.1:1234").unwrap()))
             })
         });
@@ -470,6 +459,43 @@ mod test {
         let _mr = main2(listener_mock, &ctrl_c_mock, stdio_mock).await;
         tx2.send(()).unwrap();
         _mr.unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_main_computes_result() {
+        let (ctrl_c_mock, tx) = create_ctrl_c_mock();
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let local_address = listener.local_addr().unwrap();
+        let response = thread::spawn(move || {
+            let mut to_server = TcpStream::connect(local_address).unwrap();
+            let mut buf = [0; 10];
+            to_server.read_exact(&mut buf[0..6]).unwrap();
+            assert_eq!("< x = ", std::str::from_utf8(&buf[0..6]).unwrap());
+            to_server.write_all(b"23\n").unwrap();
+            buf = [0; 10];
+            to_server.read_exact(&mut buf[0..6]).unwrap();
+            assert_eq!("< y = ", std::str::from_utf8(&buf[0..6]).unwrap());
+            to_server.write_all(b"2\n").unwrap();
+            buf = [0; 10];
+            to_server.read_exact(&mut buf[0..9]).unwrap();
+            tx.send(()).unwrap();
+            buf
+        });
+        let mut stdio_mock = Box::new(MockStdio::new());
+        let (tx, rx) = mpsc::channel();
+        stdio_mock
+            .expect_print()
+            .once()
+            .with(eq("Enter event content: "))
+            .returning(move |_| {
+                rx.recv().unwrap();
+                Err(io::Error::new(io::ErrorKind::BrokenPipe, ""))
+            });
+        let _mr = main2(listener, &ctrl_c_mock, stdio_mock).await;
+        tx.send(()).unwrap();
+        _mr.unwrap();
+        let result = response.join().unwrap();
+        assert_eq!("> z = 25\n", std::str::from_utf8(&result[0..9]).unwrap());
     }
 
     #[tokio::test]
