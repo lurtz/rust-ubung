@@ -323,28 +323,6 @@ mod test {
     }
 
     #[tokio::test]
-    async fn test_read_x_and_y_and_reply_with_sum() {
-        let mut task_state = State::default();
-        let mut buf = BytesMut::new();
-        let mut event_receiver = l(&task_state).get_event_update_receiver();
-        let mut socket = Builder::new()
-            .write(b"< x = ")
-            .read(b"3\n")
-            .write(b"< y = ")
-            .read(b"4\n")
-            .write(b"> z = 7\n")
-            .build();
-        let r = read_x_and_y_and_reply_with_sum(
-            &mut socket,
-            &mut buf,
-            &mut task_state,
-            &mut event_receiver,
-        )
-        .await;
-        assert!(r.is_ok());
-    }
-
-    #[tokio::test]
     async fn test_send_event() {
         let mut task_state = State::default();
         let mut buf = BytesMut::new();
@@ -395,6 +373,28 @@ mod test {
             .write(b"< y = ")
             .read(b"4\n")
             .write(b"> z = 7\n")
+            .write(b"< x = ")
+            .build();
+        assert!(
+            create_new_connection_handler(task_state)(socket)
+                .await
+                .is_ok()
+        );
+    }
+
+    #[tokio::test]
+    async fn test_newline_triggers_number_parsing() {
+        let task_state = State::default();
+        let socket = Builder::new()
+            .write(b"< x = ")
+            .read(b"3")
+            .read(b"4")
+            .read(b"5")
+            .read(b"6")
+            .read(b"\n")
+            .write(b"< y = ")
+            .read(b"4\n")
+            .write(b"> z = 3460\n")
             .write(b"< x = ")
             .build();
         assert!(
