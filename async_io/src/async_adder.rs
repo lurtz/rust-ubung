@@ -64,10 +64,14 @@ where
         let n;
         loop {
             tokio::select! {
-                x = read_int(&mut self.socket,&mut self.buf) => {n=x?; break;},
+                x = read_int(&mut self.socket, &mut self.buf) => {n=x?; break;},
                 _ = self.event_receiver.changed() => {
+                    let event_payload = format!(
+                        "\n got event: {}\n",
+                        *self.event_receiver.borrow_and_update()
+                    );
                     self.socket
-                        .write_all(format!("\n got event: {}\n", *self.event_receiver.borrow_and_update()).as_bytes())
+                        .write_all(event_payload.as_bytes())
                         .await?;
                     self.socket.flush().await?;
                 }
