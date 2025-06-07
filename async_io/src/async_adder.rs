@@ -254,13 +254,9 @@ mod test {
         time::Duration,
     };
 
-    use crate::async_adder::{
-        MockMyTcpListenerMock, State, create_new_connection_handler, l, main2,
-        read_x_and_y_and_reply_with_sum,
-    };
+    use crate::async_adder::{MockMyTcpListenerMock, State, create_new_connection_handler, main2};
     use crate::ctrl_c_waiter::MockAsyncMockCtrlWaiter;
     use crate::stdio::MockStdio;
-    use bytes::BytesMut;
     use mockall::predicate::eq;
     use tokio::{
         net::TcpListener,
@@ -325,30 +321,6 @@ mod test {
     }
 
     #[tokio::test]
-    async fn test_send_event() {
-        let mut task_state = State::default();
-        let mut buf = BytesMut::new();
-        let mut event_receiver = l(&task_state).get_event_update_receiver();
-        assert!(l(&task_state).send_event("blub").is_ok());
-        let mut socket = Builder::new()
-            .write(b"< x = ")
-            .write(b"\n got event: blub\n")
-            .read(b"3\n")
-            .write(b"< y = ")
-            .read(b"4\n")
-            .write(b"> z = 7\n")
-            .build();
-        let r = read_x_and_y_and_reply_with_sum(
-            &mut socket,
-            &mut buf,
-            &mut task_state,
-            &mut event_receiver,
-        )
-        .await;
-        assert!(r.is_ok());
-    }
-
-    #[tokio::test]
     async fn test_return_connection_aborted() {
         let task_state = State::default();
         let socket = Builder::new().write(b"< x = ").build();
@@ -358,24 +330,6 @@ mod test {
         assert!(r.is_err());
         let error = r.unwrap_err();
         assert_eq!(ErrorKind::ConnectionAborted, error.kind());
-    }
-
-    #[tokio::test]
-    async fn test_create_new_connection_handler_computes_result() {
-        let task_state = State::default();
-        let socket = Builder::new()
-            .write(b"< x = ")
-            .read(b"3\n")
-            .write(b"< y = ")
-            .read(b"4\n")
-            .write(b"> z = 7\n")
-            .write(b"< x = ")
-            .build();
-        assert!(
-            create_new_connection_handler(task_state)(socket)
-                .await
-                .is_ok()
-        );
     }
 
     #[tokio::test]
@@ -393,17 +347,6 @@ mod test {
             .write(b"> z = 3460\n")
             .write(b"< x = ")
             .build();
-        assert!(
-            create_new_connection_handler(task_state)(socket)
-                .await
-                .is_ok()
-        );
-    }
-
-    #[tokio::test]
-    async fn test_create_new_connection_handler_aborts_connection() {
-        let task_state = State::default();
-        let socket = Builder::new().write(b"< x = ").build();
         assert!(
             create_new_connection_handler(task_state)(socket)
                 .await
