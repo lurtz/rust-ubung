@@ -36,74 +36,6 @@ where
     }
 }
 
-async fn read_int_and_watch_for_event<Socket, Buff>(
-    socket: &mut Socket,
-    buf: &mut Buff,
-    event_receiver: &mut Channel_type::Receiver<String>,
-) -> Result<usize, std::io::Error>
-where
-    Socket: AsyncReadExt + AsyncWriteExt + Unpin,
-    Buff: BufMut + Buf + Send,
-{
-    let n;
-    loop {
-        tokio::select! {
-            x = read_int(socket, buf) => {n=x?; break;},
-            _ = event_receiver.changed() => {
-                socket
-                    .write_all(format!("\n got event: {}\n", *event_receiver.borrow_and_update()).as_bytes())
-                    .await?;
-                socket.flush().await?;
-            }
-        };
-    }
-    Ok(n)
-}
-
-async fn read_x_and_y_and_reply_with_sum<Socket, Buff>(
-    socket: &mut Socket,
-    buf: &mut Buff,
-    task_state: &mut State,
-    event_receiver: &mut Channel_type::Receiver<String>,
-) -> Result<(), std::io::Error>
-where
-    Socket: AsyncReadExt + AsyncWriteExt + Unpin,
-    Buff: BufMut + Buf + Send,
-{
-    {
-        socket.write_all("< x = ".as_bytes()).await?;
-        socket.flush().await?;
-        let x = read_int_and_watch_for_event(socket, buf, event_receiver).await?;
-        l(task_state).set_x(x);
-    }
-    {
-        socket.write_all("< y = ".as_bytes()).await?;
-        socket.flush().await?;
-        let y = read_int_and_watch_for_event(socket, buf, event_receiver).await?;
-        l(task_state).set_y(y);
-    }
-
-    // Write the data back
-    let z = l(task_state).get_z();
-    socket.write_all(format!("> z = {z}\n").as_bytes()).await?;
-    socket.flush().await?;
-
-    Ok(())
-}
-
-fn io_thread_main(thread_state: &mut State, stdio: &dyn Stdio) -> io::Result<()> {
-    let mut buffer = String::new();
-    buffer.reserve(10);
-    loop {
-        stdio.print("Enter event content: ")?;
-        stdio.flush()?;
-        stdio.read_line(&mut buffer)?;
-
-        let _ = l(thread_state).send_event(buffer.trim());
-        buffer.clear();
-    }
-}
-
 struct Connection<Socket>
 where
     Socket: AsyncReadExt + AsyncWriteExt + Unpin + Send + 'static,
@@ -128,14 +60,44 @@ where
         }
     }
 
+    async fn read_int_and_watch_for_event(&mut self) -> Result<usize, std::io::Error> {
+        let n;
+        loop {
+            tokio::select! {
+                x = read_int(&mut self.socket,&mut self.buf) => {n=x?; break;},
+                _ = self.event_receiver.changed() => {
+                    self.socket
+                        .write_all(format!("\n got event: {}\n", *self.event_receiver.borrow_and_update()).as_bytes())
+                        .await?;
+                    self.socket.flush().await?;
+                }
+            };
+        }
+        Ok(n)
+    }
+
     async fn read_x_and_y_and_reply_with_sum(&mut self) -> Result<(), std::io::Error> {
-        read_x_and_y_and_reply_with_sum(
-            &mut self.socket,
-            &mut self.buf,
-            &mut self.task_state,
-            &mut self.event_receiver,
-        )
-        .await
+        {
+            self.socket.write_all("< x = ".as_bytes()).await?;
+            self.socket.flush().await?;
+            let x = self.read_int_and_watch_for_event().await?;
+            l(&self.task_state).set_x(x);
+        }
+        {
+            self.socket.write_all("< y = ".as_bytes()).await?;
+            self.socket.flush().await?;
+            let y = self.read_int_and_watch_for_event().await?;
+            l(&self.task_state).set_y(y);
+        }
+
+        // Write the data back
+        let z = l(&self.task_state).get_z();
+        self.socket
+            .write_all(format!("> z = {z}\n").as_bytes())
+            .await?;
+        self.socket.flush().await?;
+
+        Ok(())
     }
 }
 
@@ -198,6 +160,19 @@ mock! {
         fn accept(
             &self,
         ) -> impl std::future::Future<Output = io::Result<(tokio_test::io::Mock, std::net::SocketAddr)>> + Send;
+    }
+}
+
+fn io_thread_main(thread_state: &mut State, stdio: &dyn Stdio) -> io::Result<()> {
+    let mut buffer = String::new();
+    buffer.reserve(10);
+    loop {
+        stdio.print("Enter event content: ")?;
+        stdio.flush()?;
+        stdio.read_line(&mut buffer)?;
+
+        let _ = l(thread_state).send_event(buffer.trim());
+        buffer.clear();
     }
 }
 
