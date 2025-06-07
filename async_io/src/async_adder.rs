@@ -108,7 +108,6 @@ struct Connection<Socket>
 where
     Socket: AsyncReadExt + AsyncWriteExt + Unpin + Send + 'static,
 {
-    // TODO use buffer with cursor
     buf: BytesMut,
     task_state: State,
     event_receiver: Channel_type::Receiver<String>,
@@ -130,7 +129,6 @@ where
     }
 
     async fn read_x_and_y_and_reply_with_sum(&mut self) -> Result<(), std::io::Error> {
-        // TODO still broken, does not read into hte buffer
         read_x_and_y_and_reply_with_sum(
             &mut self.socket,
             &mut self.buf,
