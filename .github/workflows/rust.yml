@@ -15,7 +15,7 @@ jobs:
       pull-requests: write
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v5
     - name: Install cargo-llvm-cov
       uses: taiki-e/install-action@cargo-llvm-cov
     - uses: r7kamura/rust-problem-matchers@v1
@@ -32,14 +32,14 @@ jobs:
   check-formatting:
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v5
     - name: Check formatting
       run: cargo fmt --check
 
   check-static-code-analysis:
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v5
     - uses: r7kamura/rust-problem-matchers@v1
     - name: Static code analysis
       run: cargo clippy -- -D warnings
