@@ -17,5 +17,5 @@ tokio = { version = "1.43", features = [
 ] }
 
 [dev-dependencies]
-mockall = "0.13.0"
+mockall = "0.14.0"
 tokio-test = "0.4.4"
